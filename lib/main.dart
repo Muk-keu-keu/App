@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 import 'app_flow.dart';
+import 'env.dart';
 import 'screens/analyze_screen.dart';
 import 'screens/combo_list_screen.dart';
 import 'screens/combo_result_screen.dart';
@@ -14,7 +15,10 @@ import 'screens/home_screen.dart';
 import 'screens/keyword_select_screen.dart';
 import 'theme.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Env.load();
+
   runApp(
     ChangeNotifierProvider(
       create: (_) => AppFlow(),

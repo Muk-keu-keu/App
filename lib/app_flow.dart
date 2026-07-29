@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'models/combo.dart';
 import 'models/preference.dart';
 import 'repository/combo_repository.dart';
-import 'secrets.dart';
+import 'env.dart';
 import 'services/gemini_extractor.dart';
 import 'services/metadata_fetcher.dart';
 
@@ -124,7 +124,7 @@ class AppFlow extends ChangeNotifier {
     ExtractionResult? extraction;
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
-        extraction = await GeminiExtractor(apiKey: Secrets.geminiApiKey).extract(text);
+        extraction = await GeminiExtractor(apiKey: Env.geminiApiKey).extract(text);
         break;
       } catch (_) {
         // 1회 자동 재시도
