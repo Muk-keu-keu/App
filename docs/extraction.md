@@ -104,7 +104,8 @@ LLM 에 넘기는 텍스트는 `siteName + title + description` 을 줄바꿈으
       예: ["순살", "매운맛", "중국당면 추가", "치즈 추가"]
 - keywords: 매칭·검색에 쓸 단어를 최대한 많이. 음식명, 재료, 조리법, 식감,
   먹는 상황("야식", "혼술", "해장")까지. 중복 없이 3~15개.
-- spiceLevel: none, mild, medium, hot, extreme 중 하나. 판단 불가면 빈 문자열.
+- spiceLevel: NONE, MILD, MEDIUM, HOT, EXTREME 중 하나. 대문자로 그대로 쓰세요.
+  판단 불가면 빈 문자열. (안 매운 음식은 NONE, 매운지 모르겠으면 빈 문자열)
 - servingCount: 몇 인분으로 보이는지 정수. 판단 불가면 0.
 - isFranchise: 프랜차이즈면 true.
 - summary: "이 영상을 이렇게 이해했다"를 한 문장으로. 사용자에게 그대로 보여줄 문장.
@@ -138,6 +139,7 @@ LLM 에 넘기는 텍스트는 `siteName + title + description` 을 줄바꿈으
       }
     },
     "keywords":     { "type": "ARRAY", "items": { "type": "STRING" } },
+    // NONE|MILD|MEDIUM|HOT|EXTREME. enum 으로 묶지 않는 이유는 아래 표 각주 참고
     "spiceLevel":   { "type": "STRING" },
     "servingCount": { "type": "INTEGER" },
     "isFranchise":  { "type": "BOOLEAN" },
@@ -166,11 +168,22 @@ LLM 에 넘기는 텍스트는 `siteName + title + description` 을 줄바꿈으
 | `dishes[].description` | string | 영상에서 묘사된 내용 |
 | **`dishes[].options[]`** | array | **주문 옵션. 요기요 메뉴 옵션과 대응** |
 | `keywords[]` | array | 매칭·검색용 단어 3~15개 |
-| `spiceLevel` | string | none / mild / medium / hot / extreme |
+| `spiceLevel` | string | `NONE` / `MILD` / `MEDIUM` / `HOT` / `EXTREME`, 판단 불가면 `""` ※ |
 | `servingCount` | int | 인분 수. 0이면 판단 불가 |
 | `isFranchise` | bool | 프랜차이즈 여부 |
 | `summary` | string | 한 줄 요약. 사용자에게 그대로 노출 |
 | `confidence` | number | 상호명 추출 확신도 0.0~1.0 |
+
+**※ `spiceLevel` 은 대문자다.** `api-yogijokbo.md` 의 공통 규칙("enum 은 대문자
+스네이크")에 맞춰 앱이 먼저 그 표기로 뽑는다. 서버는 값을 변환 없이 그대로 쓰면 된다.
+
+`responseSchema` 에서는 일부러 `enum` 으로 묶지 않았다. **판단 불가를 빈 문자열로
+두기로 했는데 빈 문자열은 enum 값에 넣을 수 없어**, 모델이 맵기를 못 정할 때 응답
+자체가 실패한다. 그래서 대문자 요구는 프롬프트로 하고, 어긴 응답은 앱이
+`ExtractionResult.normalizeSpiceLevel` 로 바로잡는다. 목록에 없는 값은 억지로
+매핑하지 않고 빈 문자열로 떨어뜨린다.
+
+`NONE` 과 `""` 는 다르다 — `NONE` 은 "안 매운 음식", `""` 는 "매운지 알 수 없음"이다.
 
 ### 실제 예시
 
@@ -204,7 +217,7 @@ Instagram
     }
   ],
   "keywords": ["치킨", "순살", "매운맛", "치즈", "강남", "야식"],
-  "spiceLevel": "hot",
+  "spiceLevel": "HOT",
   "servingCount": 2,
   "isFranchise": true,
   "summary": "교촌치킨 강남점 레드콤보를 순살로 시켜 치즈를 추가해 먹는 먹방",

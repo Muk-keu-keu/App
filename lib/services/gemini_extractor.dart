@@ -72,7 +72,11 @@ class ExtractionResult {
   /// 매칭·검색에 쓸 모든 키워드. 음식명, 재료, 조리법, 식감, 상황("야식", "혼술")까지.
   final List<String> keywords;
 
-  /// none | mild | medium | hot | extreme. 취향 설정 화면 기본값으로 쓴다.
+  /// NONE | MILD | MEDIUM | HOT | EXTREME. 취향 설정 화면 기본값으로 쓴다.
+  /// 판단 불가면 빈 문자열. (`NONE` 은 "안 매움"이라 판단 불가와 구분한다)
+  ///
+  /// 대문자인 이유는 `docs/api-yogijokbo.md` 의 공통 규칙 "enum 은 대문자 스네이크"다.
+  /// 서버와 값을 그대로 주고받으려면 앱이 먼저 그 표기를 지켜야 한다.
   final String spiceLevel;
 
   /// 영상에서 몇 인분으로 보이는지. 0이면 판단 불가.
@@ -90,6 +94,18 @@ class ExtractionResult {
   /// 메뉴 이름만 쉼표로 이어붙인 값.
   String get menu => dishes.map((d) => d.name).join(', ');
 
+  /// spiceLevel 을 대문자로 맞춘다.
+  ///
+  /// 프롬프트로 대문자를 요구하지만 LLM 이 늘 지킨다는 보장은 없다. 값이 그대로
+  /// 서버로 넘어가는 자리라 여기서 한 번 정규화해 계약을 지킨다.
+  /// 알 수 없는 값은 억지로 매핑하지 않고 빈 문자열(판단 불가)로 떨어뜨린다.
+  static const List<String> spiceLevels = ['NONE', 'MILD', 'MEDIUM', 'HOT', 'EXTREME'];
+
+  static String normalizeSpiceLevel(Object? raw) {
+    final value = '${raw ?? ''}'.trim().toUpperCase();
+    return spiceLevels.contains(value) ? value : '';
+  }
+
   factory ExtractionResult.fromJson(Map<String, dynamic> json) => ExtractionResult(
         restaurantName: (json['restaurantName'] ?? '') as String,
         brandName: (json['brandName'] ?? '') as String,
@@ -100,7 +116,7 @@ class ExtractionResult {
             .map((e) => ExtractedDish.fromJson(e as Map<String, dynamic>))
             .toList(),
         keywords: ((json['keywords'] ?? const []) as List).map((e) => '$e').toList(),
-        spiceLevel: (json['spiceLevel'] ?? '') as String,
+        spiceLevel: normalizeSpiceLevel(json['spiceLevel']),
         servingCount: ((json['servingCount'] ?? 0) as num).toInt(),
         isFranchise: (json['isFranchise'] ?? false) as bool,
         summary: (json['summary'] ?? '') as String,
@@ -150,6 +166,10 @@ class GeminiExtractor {
         'type': 'ARRAY',
         'items': {'type': 'STRING'},
       },
+      // NONE|MILD|MEDIUM|HOT|EXTREME 를 기대하지만 responseSchema 의 enum 으로는
+      // 묶지 않는다. 판단 불가를 빈 문자열로 두기로 했고, 빈 문자열은 enum 값에
+      // 넣을 수 없어 모델이 값을 못 정할 때 응답이 실패한다.
+      // 대문자 요구는 프롬프트로 하고, 어긴 응답은 normalizeSpiceLevel 이 바로잡는다.
       'spiceLevel': {'type': 'STRING'},
       'servingCount': {'type': 'INTEGER'},
       'isFranchise': {'type': 'BOOLEAN'},
@@ -180,7 +200,8 @@ class GeminiExtractor {
       예: ["순살", "매운맛", "중국당면 추가", "치즈 추가"]
 - keywords: 매칭·검색에 쓸 단어를 최대한 많이. 음식명, 재료, 조리법, 식감,
   먹는 상황("야식", "혼술", "해장")까지. 중복 없이 3~15개.
-- spiceLevel: none, mild, medium, hot, extreme 중 하나. 판단 불가면 빈 문자열.
+- spiceLevel: NONE, MILD, MEDIUM, HOT, EXTREME 중 하나. 대문자로 그대로 쓰세요.
+  판단 불가면 빈 문자열. (안 매운 음식은 NONE, 매운지 모르겠으면 빈 문자열)
 - servingCount: 몇 인분으로 보이는지 정수. 판단 불가면 0.
 - isFranchise: 프랜차이즈면 true.
 - summary: "이 영상을 이렇게 이해했다"를 한 문장으로. 사용자에게 그대로 보여줄 문장.

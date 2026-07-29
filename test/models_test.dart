@@ -75,7 +75,7 @@ void main() {
             ExtractedDish(name: '허니콤보', description: '달콤한 허니 소스'),
           ],
           keywords: ['치킨', '순살', '매운맛', '야식'],
-          spiceLevel: 'hot',
+          spiceLevel: 'HOT',
           servingCount: 2,
           isFranchise: true,
           confidence: 0.9,
@@ -177,6 +177,30 @@ void main() {
       for (var i = 1; i < combos.length; i++) {
         expect(combos[i].store.similarity, lessThan(combos.first.store.similarity));
       }
+    });
+  });
+
+  group('spiceLevel 은 대문자로 정규화된다', () {
+    test('대문자 값은 그대로 통과한다', () {
+      for (final level in ExtractionResult.spiceLevels) {
+        expect(ExtractionResult.normalizeSpiceLevel(level), level);
+      }
+    });
+
+    test('모델이 소문자로 답해도 대문자로 바로잡는다', () {
+      expect(ExtractionResult.normalizeSpiceLevel('hot'), 'HOT');
+      expect(ExtractionResult.normalizeSpiceLevel(' Medium '), 'MEDIUM');
+    });
+
+    test('판단 불가·누락·모르는 값은 빈 문자열이다', () {
+      expect(ExtractionResult.normalizeSpiceLevel(''), '');
+      expect(ExtractionResult.normalizeSpiceLevel(null), '');
+      expect(ExtractionResult.normalizeSpiceLevel('아주매움'), '');
+    });
+
+    test('fromJson 이 소문자 응답을 대문자로 담는다', () {
+      final result = GeminiExtractor.parseResponse('{"spiceLevel":"extreme"}');
+      expect(result.spiceLevel, 'EXTREME');
     });
   });
 

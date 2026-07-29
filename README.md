@@ -82,7 +82,7 @@ iOS 는 익스텐션이 본체 앱을 직접 실행할 수 없어, 응답자 체
     }
   ],
   "keywords":     ["치킨", "순살", "매운맛", "야식"],  // 매칭·검색용
-  "spiceLevel":   "hot",             // none|mild|medium|hot|extreme
+  "spiceLevel":   "HOT",             // NONE|MILD|MEDIUM|HOT|EXTREME, 판단 불가면 ""
   "servingCount": 2,                 // 몇 인분으로 보이는지. 0이면 판단 불가
   "isFranchise":  true,
   "summary":      "교촌치킨 레드콤보를 순살로 시켜 치즈를 추가해 먹는 야식 먹방",
