@@ -125,6 +125,4 @@ flutter test
 
 ## 알아둘 점
 
-- `.env` 는 `flutter_dotenv` 특성상 앱 번들 에셋으로 들어간다. 배포된 앱을 뜯으면
-  키가 보인다. 실제 서비스에서는 Gemini 호출을 백엔드로 옮겨야 한다.
 - 폰트는 Pretendard(SIL OFL). `assets/fonts/OFL.txt` 에 라이선스 원문이 있다.
