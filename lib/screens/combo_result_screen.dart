@@ -76,10 +76,7 @@ class _ComboResultScreenState extends State<ComboResultScreen> {
     );
   }
 
-  Widget _storeCard(BuildContext context, ComboRecommendation combo) => Stack(
-        clipBehavior: Clip.none,
-        children: [
-          FigmaCard(
+  Widget _storeCard(BuildContext context, ComboRecommendation combo) => FigmaCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -129,15 +126,13 @@ class _ComboResultScreenState extends State<ComboResultScreen> {
                             spacing: -0.35, color: AppColors.primary)),
                   ),
                 ),
-              ],
-            ),
-          ),
-          if (_showTooltip)
-            Positioned(left: 20, bottom: -30, child: _tooltip()),
         ],
-      );
+      ),
+    );
 
-  // 매장 카드 아래쪽에 걸치는 말풍선. Figma 에서 카드 경계를 넘어 배치돼 있다.
+  /// 매장 카드와 조합 카드 경계에 걸치는 말풍선.
+  /// 조합 카드 쪽 Stack 에 넣어 위로 밀어낸다. 매장 카드에 붙이면 나중에 그려지는
+  /// 조합 카드가 덮어버려 글자가 가려진다.
   Widget _tooltip() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -168,7 +163,16 @@ class _ComboResultScreenState extends State<ComboResultScreen> {
         ],
       );
 
-  Widget _comboCard(BuildContext context, ComboRecommendation combo, AppFlow flow) => FigmaCard(
+  Widget _comboCard(BuildContext context, ComboRecommendation combo, AppFlow flow) => Stack(
+        clipBehavior: Clip.none,
+        children: [
+          _comboCardBody(context, combo, flow),
+          if (_showTooltip) Positioned(left: 20, top: -32, child: _tooltip()),
+        ],
+      );
+
+  Widget _comboCardBody(BuildContext context, ComboRecommendation combo, AppFlow flow) =>
+      FigmaCard(
         child: Column(
           children: [
             for (final item in combo.items) ...[
