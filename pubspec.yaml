@@ -19,10 +19,12 @@ dependencies:
   # Gemini / 메타데이터 HTTP 호출
   http: ^1.2.2
 
-  # 공유 시트로 들어온 링크 수신.
-  # iOS 는 기존 Swift Share Extension 이, 안드로이드는 ACTION_SEND intent-filter 가
-  # 각각 처리하고 이 패키지가 양쪽을 Dart 로 넘겨준다.
-  receive_sharing_intent: ^1.8.1
+  # 안드로이드 공유 시트(ACTION_SEND) 수신
+  receive_sharing_intent: ^1.9.0
+
+  # iOS 공유 익스텐션이 mukbang:// 스킴으로 앱을 열 때 그 URL 을 받는다.
+  # iOS 는 App Group 없이 검증된 Swift 익스텐션을 그대로 쓰기 위해 이 경로를 택했다.
+  app_links: ^6.3.2
 
   # 요기요 앱 열기 (딥링크)
   url_launcher: ^6.3.1

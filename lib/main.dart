@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
@@ -41,32 +43,52 @@ class RootScreen extends StatefulWidget {
 }
 
 class _RootScreenState extends State<RootScreen> {
-  StreamSubscription<List<SharedMediaFile>>? _sub;
+  StreamSubscription<List<SharedMediaFile>>? _shareSub;
+  StreamSubscription<Uri>? _linkSub;
 
   @override
   void initState() {
     super.initState();
-    _listenForSharedLinks();
+    if (Platform.isAndroid) {
+      _listenForAndroidShare();
+    } else {
+      _listenForIosShareExtension();
+    }
   }
 
-  /// 공유 시트로 들어온 링크를 받는다.
-  /// iOS 는 Swift Share Extension 이, 안드로이드는 ACTION_SEND intent-filter 가
-  /// 각각 처리하고 이 패키지가 양쪽을 하나의 스트림으로 넘겨준다.
-  void _listenForSharedLinks() {
-    // 앱이 떠 있는 동안 들어오는 공유
-    _sub = ReceiveSharingIntent.instance.getMediaStream().listen(
-          _handleShared,
+  /// 안드로이드: ACTION_SEND intent-filter 로 들어온 공유를 그대로 받는다.
+  void _listenForAndroidShare() {
+    _shareSub = ReceiveSharingIntent.instance.getMediaStream().listen(
+          _handleSharedMedia,
           onError: (Object _) {},
         );
 
     // 공유로 앱이 처음 켜진 경우
     ReceiveSharingIntent.instance.getInitialMedia().then((value) {
-      _handleShared(value);
+      _handleSharedMedia(value);
       ReceiveSharingIntent.instance.reset();
     });
   }
 
-  void _handleShared(List<SharedMediaFile> files) {
+  /// iOS: Swift Share Extension 이 mukbang://analyze?u=<링크> 로 앱을 연다.
+  /// App Group 없이 URL 스킴만 쓰는 구조라 익스텐션 코드를 그대로 재사용한다.
+  void _listenForIosShareExtension() {
+    final links = AppLinks();
+    _linkSub = links.uriLinkStream.listen(_handleIncomingUri, onError: (Object _) {});
+    links.getInitialLink().then((uri) {
+      if (uri != null) _handleIncomingUri(uri);
+    });
+  }
+
+  void _handleIncomingUri(Uri uri) {
+    if (!mounted) return;
+    if (uri.scheme != 'mukbang' || uri.host != 'analyze') return;
+    final link = uri.queryParameters['u'];
+    if (link == null || link.isEmpty) return;
+    context.read<AppFlow>().start(link);
+  }
+
+  void _handleSharedMedia(List<SharedMediaFile> files) {
     if (files.isEmpty || !mounted) return;
 
     // 텍스트/URL 공유는 path 에 원문이 담겨 온다. 그 안에서 첫 http 링크를 찾는다.
@@ -81,7 +103,8 @@ class _RootScreenState extends State<RootScreen> {
 
   @override
   void dispose() {
-    _sub?.cancel();
+    _shareSub?.cancel();
+    _linkSub?.cancel();
     super.dispose();
   }
 
