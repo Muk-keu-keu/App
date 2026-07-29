@@ -59,6 +59,38 @@ iOS 는 익스텐션이 본체 앱을 직접 실행할 수 없어, 응답자 체
 `openURL:options:completionHandler:` 를 찾아 호출한다. 구형 `openURL:` 은 iOS 10 에서
 폐기돼 `respondsToSelector` 는 true 를 주지만 실제로는 아무 동작도 하지 않는다.
 
+## AI 추출 스키마 (백엔드와의 핵심 계약)
+
+링크에서 뽑아내는 값이다. 모델(Gemini)은 나중에 바꿀 수 있지만 **이 스키마는
+앱과 서버가 공유하는 계약**이라 바꾸려면 양쪽을 함께 고쳐야 한다.
+정의는 `lib/services/gemini_extractor.dart` 의 `ExtractionResult`.
+
+```jsonc
+{
+  "restaurantName": "교촌치킨 강남점",
+  "brandName":      "교촌치킨",      // 프랜차이즈면 이걸로 근처 지점 검색
+  "branchName":     "강남점",
+  "foodCategory":   "치킨",          // 한식|중식|일식|양식|분식|치킨|피자|아시안|카페·디저트
+  "area":           "강남",
+  "dishes": [                        // 영상에 나온 음식들, 등장 순서대로
+    {
+      "name":        "레드콤보",
+      "description": "매콤한 소스에 순살로 나온 반반 치킨",
+      "options":     ["순살", "매운맛", "치즈 추가"]   // ← 요기요 메뉴 옵션과 대응
+    }
+  ],
+  "keywords":     ["치킨", "순살", "매운맛", "야식"],  // 매칭·검색용
+  "spiceLevel":   "hot",             // none|mild|medium|hot|extreme
+  "servingCount": 2,                 // 몇 인분으로 보이는지. 0이면 판단 불가
+  "isFranchise":  true,
+  "summary":      "교촌치킨 레드콤보를 순살로 시켜 치즈를 추가해 먹는 야식 먹방",
+  "confidence":   0.9                // 상호명 추출 확신도
+}
+```
+
+`dishes[].options` 가 핵심이다. 이름만으로는 요기요 메뉴에 매칭할 수 없고,
+뼈/순살·맵기·사리 추가 같은 옵션까지 있어야 실제 주문을 구성할 수 있다.
+
 ## 백엔드 연동 지점
 
 현재 조합 추천은 `ComboBuilder` 가 AI 추출 결과로 만들어 낸다.
