@@ -6,7 +6,9 @@ plugins {
 
 android {
     namespace = "com.yunsu.mukbang_ttaradamgi"
-    compileSdk = flutter.compileSdkVersion
+    // receive_sharing_intent 가 SDK 37 을 요구해 flutter.compileSdkVersion(36)을 덮어쓴다.
+    // compileSdk 는 컴파일 대상일 뿐이라 minSdk/targetSdk 와 독립적이고 하위 호환된다.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
