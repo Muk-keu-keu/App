@@ -15,6 +15,7 @@ class StoreSummary {
     required this.distanceKm,
     required this.deliveryMinutes,
     required this.imagePath,
+    this.imageUrl,
     required this.minimumOrderAmount,
     required this.deliveryFee,
     required this.similarity,
@@ -27,6 +28,9 @@ class StoreSummary {
   final double distanceKm; // 3.2
   final int deliveryMinutes; // 40
   final String imagePath;
+
+  /// 원격 이미지. 지금은 공유된 게시물의 og:image 이고, API 연동 후엔 서버가 준 URL.
+  final String? imageUrl;
   final int minimumOrderAmount;
   final int deliveryFee;
 
@@ -54,6 +58,7 @@ class ComboItem {
     required this.unitPrice,
     required this.quantity,
     required this.imagePath,
+    this.imageUrl,
   });
 
   final String id;
@@ -62,6 +67,9 @@ class ComboItem {
   final int unitPrice;
   int quantity;
   final String imagePath;
+
+  /// 원격 이미지. 릴스 썸네일이 곧 영상에서 본 그 음식이라 첫 메뉴에 쓴다.
+  final String? imageUrl;
 
   int get lineTotal => unitPrice * quantity;
 
@@ -72,6 +80,7 @@ class ComboItem {
         unitPrice: unitPrice,
         quantity: quantity,
         imagePath: imagePath,
+        imageUrl: imageUrl,
       );
 }
 
@@ -84,6 +93,7 @@ class MenuItem {
     required this.options,
     required this.price,
     required this.imagePath,
+    this.imageUrl,
   });
 
   final String id;
@@ -91,6 +101,7 @@ class MenuItem {
   final String options;
   final int price;
   final String imagePath;
+  final String? imageUrl;
 
   ComboItem toComboItem({int quantity = 1}) => ComboItem(
         id: id,
@@ -99,6 +110,7 @@ class MenuItem {
         unitPrice: price,
         quantity: quantity,
         imagePath: imagePath,
+        imageUrl: imageUrl,
       );
 }
 

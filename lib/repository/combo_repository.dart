@@ -1,5 +1,7 @@
 import '../models/combo.dart';
 import '../models/preference.dart';
+import '../services/gemini_extractor.dart';
+import 'combo_builder.dart';
 
 /// 조합 추천 데이터 소스.
 ///
@@ -8,8 +10,10 @@ import '../models/preference.dart';
 /// iOS 앱의 ComboRepository 와 같은 계약이므로 API 명세는 한 벌만 쓴다.
 abstract class ComboRepository {
   /// 첫 번째 원소가 가장 유사한 조합이다.
+  /// thumbnailUrl 은 공유된 게시물의 og:image 로, 결과 카드 이미지에 쓴다.
   Future<List<ComboRecommendation>> recommend({
-    required String extractedText,
+    required ExtractionResult extraction,
+    required String? thumbnailUrl,
     required TastePreference preference,
   });
 
@@ -23,18 +27,23 @@ class MockComboRepository implements ComboRepository {
 
   @override
   Future<List<ComboRecommendation>> recommend({
-    required String extractedText,
+    required ExtractionResult extraction,
+    required String? thumbnailUrl,
     required TastePreference preference,
   }) async {
     // 네트워크 지연을 흉내내 로딩 화면이 보이도록 한다.
     await Future<void>.delayed(const Duration(milliseconds: 900));
 
-    final all = _samples().toList();
+    final built = ComboBuilder.build(
+      extraction: extraction,
+      thumbnailUrl: thumbnailUrl,
+      preference: preference,
+    );
     final filtered =
-        all.where((c) => c.store.deliveryMinutes <= preference.maxDeliveryMinutes).toList();
+        built.where((c) => c.store.deliveryMinutes <= preference.maxDeliveryMinutes).toList();
 
     // 도착 시간 조건에 맞는 게 없으면 전체를 유사도순으로 준다.
-    final result = filtered.isEmpty ? all : filtered;
+    final result = filtered.isEmpty ? built : filtered;
     result.sort((a, b) => b.store.similarity.compareTo(a.store.similarity));
     return result;
   }

@@ -4,6 +4,45 @@ import '../models/combo.dart';
 import '../models/preference.dart';
 import '../theme.dart';
 
+/// 매장·메뉴 썸네일. 원격 URL 이 있으면 그걸 쓰고, 없거나 실패하면 번들 이미지로 돌아간다.
+/// 지금 원격 URL 은 공유된 릴스의 og:image 라서 "영상에서 본 그 음식"이 그대로 보인다.
+class RemoteOrAssetImage extends StatelessWidget {
+  const RemoteOrAssetImage({
+    super.key,
+    required this.imageUrl,
+    required this.assetPath,
+    required this.size,
+    this.radius = 8,
+  });
+
+  final String? imageUrl;
+  final String assetPath;
+  final double size;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = imageUrl;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: url == null || url.isEmpty
+            ? Image.asset(assetPath, fit: BoxFit.cover)
+            : Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Image.asset(assetPath, fit: BoxFit.cover),
+                loadingBuilder: (context, child, progress) => progress == null
+                    ? child
+                    : Container(color: AppColors.gray100),
+              ),
+      ),
+    );
+  }
+}
+
 /// 흰 카드. Figma 의 radius 12 + 드롭섀도우.
 class FigmaCard extends StatelessWidget {
   const FigmaCard({
@@ -143,9 +182,10 @@ class ComboMenuRow extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.asset(item.imagePath, width: 80, height: 80, fit: BoxFit.cover),
+              RemoteOrAssetImage(
+                imageUrl: item.imageUrl,
+                assetPath: item.imagePath,
+                size: 80,
               ),
               const SizedBox(width: 16),
               Expanded(

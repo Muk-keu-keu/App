@@ -111,9 +111,11 @@ class AppFlow extends ChangeNotifier {
     }
 
     String text;
+    String? thumbnailUrl;
     try {
       final metadata = await const MetadataFetcher().fetch(uri);
       text = metadata.combinedText;
+      thumbnailUrl = metadata.imageUrl;
     } catch (_) {
       _fail('게시물 내용을 가져오지 못했어요.\n잠시 후 다시 시도해 주세요.');
       return;
@@ -134,7 +136,8 @@ class AppFlow extends ChangeNotifier {
     }
 
     final combos = await _repository.recommend(
-      extractedText: text,
+      extraction: extraction,
+      thumbnailUrl: thumbnailUrl,
       preference: preference,
     );
     if (combos.isEmpty) {

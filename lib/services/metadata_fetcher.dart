@@ -3,11 +3,14 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class PageMetadata {
-  const PageMetadata({this.title, this.description, this.siteName});
+  const PageMetadata({this.title, this.description, this.siteName, this.imageUrl});
 
   final String? title;
   final String? description;
   final String? siteName;
+
+  /// og:image. 릴스 썸네일이 곧 그 음식 사진이라 결과 카드에 그대로 쓴다.
+  final String? imageUrl;
 
   String get combinedText =>
       [siteName, title, description].where((e) => e != null && e.isNotEmpty).join('\n');
@@ -47,7 +50,11 @@ class MetadataFetcher {
     if (meta.isEmpty) {
       final handle = instagramHandle(html);
       if (handle != null) {
-        meta = PageMetadata(title: '인스타그램 @$handle 맛집 게시물', siteName: meta.siteName);
+        meta = PageMetadata(
+          title: '인스타그램 @$handle 맛집 게시물',
+          siteName: meta.siteName,
+          imageUrl: meta.imageUrl,
+        );
       }
     }
 
@@ -59,6 +66,7 @@ class MetadataFetcher {
         title: ogContent(html, 'og:title') ?? htmlTitle(html),
         description: ogContent(html, 'og:description'),
         siteName: ogContent(html, 'og:site_name'),
+        imageUrl: ogContent(html, 'og:image'),
       );
 
   static String? ogContent(String html, String property) {
@@ -129,6 +137,7 @@ class MetadataFetcher {
         title: title,
         description: json['author_name'] as String?,
         siteName: 'YouTube',
+        imageUrl: json['thumbnail_url'] as String?,
       );
     } catch (_) {
       return null;

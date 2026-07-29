@@ -176,10 +176,10 @@ class _ComboListScreenState extends State<ComboListScreen> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.asset(combo.store.imagePath,
-                    width: 44, height: 44, fit: BoxFit.cover),
+              RemoteOrAssetImage(
+                imageUrl: combo.store.imageUrl,
+                assetPath: combo.store.imagePath,
+                size: 44,
               ),
               const SizedBox(width: 16),
               Expanded(

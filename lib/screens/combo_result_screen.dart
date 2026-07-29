@@ -82,10 +82,10 @@ class _ComboResultScreenState extends State<ComboResultScreen> {
               children: [
                 Row(
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.asset(combo.store.imagePath,
-                          width: 80, height: 80, fit: BoxFit.cover),
+                    RemoteOrAssetImage(
+                      imageUrl: combo.store.imageUrl,
+                      assetPath: combo.store.imagePath,
+                      size: 80,
                     ),
                     const SizedBox(width: 16),
                     Expanded(
