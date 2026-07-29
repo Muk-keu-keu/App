@@ -49,7 +49,7 @@ final class ShareViewController: UIViewController {
             // openURL: 이 처리될 최소한의 틈만 주고 곧바로 시트를 닫는다.
             try? await Task.sleep(nanoseconds: 250_000_000)
         } else {
-            label.text = "링크를 담았어요 🍜\n먹방 따라담기 앱을 열어주세요"
+            label.text = "링크를 담았어요 🍜\n먹방요기 앱을 열어주세요"
             label.isHidden = false
             try? await Task.sleep(nanoseconds: 1_400_000_000)
         }

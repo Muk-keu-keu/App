@@ -8,7 +8,7 @@ enum ServingMode {
     imagePath: 'assets/images/mode_solo.png',
   ),
   healthy(
-    title: '헬시플레저 모드',
+    title: '비건모드',
     subtitle: '칼로리를 낮춘 대체 옵션을 추천받고 싶어요',
     imagePath: 'assets/images/mode_healthy.png',
   );

@@ -37,7 +37,7 @@ class HomeScreen extends StatelessWidget {
                         const SizedBox(height: 16),
                         _step(2, '‘공유 대상…’을 선택하세요'),
                         const SizedBox(height: 16),
-                        _step(3, '‘먹방 따라담기’를 누르면 분석이 시작돼요'),
+                        _step(3, '‘먹방요기’를 누르면 분석이 시작돼요'),
                       ],
                     ),
                   ),

@@ -33,7 +33,7 @@ class MukbangApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: '먹방 따라담기',
+        title: '먹방요기',
         debugShowCheckedModeBanner: false,
         theme: buildAppTheme(),
         home: const RootScreen(),
