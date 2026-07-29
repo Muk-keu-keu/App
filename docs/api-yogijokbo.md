@@ -6,169 +6,232 @@
 작성: 윤수 (프론트엔드) · 상태: **초안, 논의용**
 근거: Figma `수정됨` 섹션의 먹슐랭 플로우 4화면 + 3차 회의록
 
-> 이 문서는 프론트에서 화면을 보고 역산한 초안이다.
-> 실제 스키마·경로는 백엔드에서 확정해 주시면 그에 맞추겠다.
+> 프론트에서 화면을 보고 역산한 초안이다. 실제 스키마·경로는 백엔드에서 확정해 주시면 맞추겠다.
+> 노션 「API 명세서」 페이지의 데이터베이스 컬럼과 같은 형식으로 정리했다.
+> (상태 / 우선순위 / 권한 / Method / 기능 / End Point / Request / Request Example / Response / 비고)
 
 ---
 
-## 화면 → API 대응
+## 요약
 
-| Figma 화면 | 필요한 API |
+| 우선순위 | Method | 기능 | End Point | 권한 |
+|---|---|---|---|---|
+| 높음 | `GET` | 요기족보 홈 — 조합 목록 | `/api/v1/posts` | 비로그인 허용 |
+| 높음 | `GET` | 조합 상세 | `/api/v1/posts/{postId}` | 비로그인 허용 |
+| 높음 | `POST` | 나도 주문하기 | `/api/v1/posts/{postId}/reorder` | 로그인 |
+| 보통 | `POST` | 조합 공유 (작성) | `/api/v1/posts` | 로그인 |
+| 보통 | `POST` | 이미지 업로드 | `/api/v1/uploads/images` | 로그인 |
+| 보통 | `POST` | 좋아요 | `/api/v1/posts/{postId}/likes` | 로그인 |
+| 보통 | `DELETE` | 좋아요 취소 | `/api/v1/posts/{postId}/likes` | 로그인 |
+| 낮음 | `GET` | 댓글 목록 | `/api/v1/posts/{postId}/comments` | 비로그인 허용 |
+| 낮음 | `POST` | 댓글 작성 | `/api/v1/posts/{postId}/comments` | 로그인 |
+
+**우선순위 근거** — 높음 3개만 있어도 *"인기 조합 보고 → 그대로 주문"* 시연이 성립한다.
+
+---
+
+## 1. 요기족보 홈 — 조합 목록
+
+| 컬럼 | 값 |
 |---|---|
-| 요기족보 홈 (`55:249`) | 게시글 목록 조회 |
-| 조합 상세 (`63:1146`) | 게시글 상세, 댓글 목록, 좋아요, 나도 주문하기 |
-| 조합 공유 (`23:1224`) | 게시글 작성, 이미지 업로드 |
+| **Method** | `GET` |
+| **기능** | 요기족보 홈. 실시간 인기/최신 조합 목록 |
+| **End Point** | `/api/v1/posts` |
+| **권한** | 비로그인 허용 |
+| **우선순위** | 높음 |
 
----
+**Request** (Query)
 
-## 도메인 모델
+| 파라미터 | 타입 | 필수 | 설명 |
+|---|---|---|---|
+| `sort` | enum | | `LATEST` \| `POPULAR` (기본 `POPULAR`) |
+| `orderableOnly` | bool | | "내 위치에서 가능한 조합만" 체크박스 |
+| `lat` `lng` | number | 조건부 | `orderableOnly=true` 일 때 필수 |
+| `cursor` | string | | 페이지네이션 커서 |
+| `size` | int | | 기본 20 |
 
-### Post (조합 게시글)
-
-```jsonc
-{
-  "id": "post_01H8X...",
-  "title": "떵개 추천 두찜 로제 닭발",     // 최대 20자 (Figma: 0/20)
-  "body": "진짜 미쳤어요 꼭 드셔보세요",    // 최대 400자 (Figma: 0/400)
-  "imageUrls": ["https://.../1.jpg"],      // 첨부 사진
-  "author": {
-    "id": "user_01H8X...",
-    "nickname": "배고픈 요기요",
-    "profileImageUrl": "https://..."
-  },
-  "combo": { /* 아래 Combo */ },
-  "likeCount": 12,
-  "likedByMe": false,                      // 하트 채움 여부
-  "commentCount": 4,
-  "createdAt": "2026-07-07T12:30:00+09:00",
-  "orderableHere": true                    // 내 위치에서 주문 가능한지 (아래 참고)
-}
-```
-
-### Combo (게시글에 담긴 조합)
-
-**중요: 게시글의 조합은 작성 시점의 스냅샷으로 저장해 주세요.**
-매장이 메뉴를 바꾸거나 가격을 올려도 예전 게시글은 그때 모습 그대로 보여야 한다.
-"나도 주문하기"를 누를 때 현재 가격으로 다시 조회하면 된다.
-
-```jsonc
-{
-  "store": {
-    "id": "store_123",
-    "name": "두찜-잠실새내점",
-    "imageUrl": "https://...",
-    "rating": 4.2,
-    "reviewCount": 312
-  },
-  "items": [
-    {
-      "menuId": "menu_456",
-      "name": "[원조 K 로제] 로제 닭발",
-      "options": ["순살", "보통맛", "분모자로 변경", "치즈몽땅 추가"],
-      "description": "",
-      "unitPrice": 23000,
-      "quantity": 1,
-      "imageUrl": "https://..."
-    }
-  ],
-  "itemsTotal": 27000,
-  "deliveryFee": 1500,
-  "payableTotal": 28500        // Figma 조합 상세의 "결제 금액"
-}
-```
-
----
-
-## 엔드포인트
-
-### 1. 게시글 목록 — 요기족보 홈
+**Request Example**
 
 ```
-GET /api/v1/posts
+GET /api/v1/posts?sort=POPULAR&orderableOnly=true&lat=37.5445&lng=127.0557&size=20
 ```
-
-**Query**
-
-| 파라미터 | 타입 | 설명 |
-|---|---|---|
-| `sort` | enum | `LATEST` \| `POPULAR` — Figma 상단 "최신순" 드롭다운 |
-| `orderableOnly` | bool | "내 위치에서 가능한 조합만" 체크박스 |
-| `lat`, `lng` | number | `orderableOnly=true` 일 때 필수 |
-| `cursor` | string | 페이지네이션 |
-| `size` | int | 기본 20 |
 
 **Response**
 
 ```jsonc
 {
-  "items": [ /* Post 배열. 목록에서는 combo.items 를 생략해도 됨 */ ],
+  "items": [
+    {
+      "id": "post_01H8X",
+      "title": "떵개 추천 두찜 로제 닭발",
+      "thumbnailUrl": "https://cdn.../1.jpg",
+      "storeName": "두찜-잠실새내점",
+      "likeCount": 12,
+      "commentCount": 4,
+      "author": { "nickname": "배고픈 요기요", "profileImageUrl": "https://..." },
+      "orderableHere": true,
+      "createdAt": "2026-07-07T12:30:00+09:00"
+    }
+  ],
   "nextCursor": "eyJpZCI6..."
 }
 ```
 
-목록 화면에는 **제목·썸네일·좋아요 수**만 보이므로, 조합 전체를 내려주면 낭비다.
-목록용 축약 응답을 따로 두는 쪽을 제안한다.
-
-> **논의 필요** — "실시간 인기"의 기준이 무엇인가?
-> 전체 누적 좋아요인지, 최근 24시간 좋아요인지, 조회수를 섞는지.
+**비고**
+목록 화면에는 제목·썸네일·좋아요 수만 보이므로 조합 전체(`combo`)는 내리지 않는다.
+**"실시간 인기" 산정 기준 확정 필요** — 누적 좋아요 / 최근 24h / 조회수 반영 중 무엇인지.
 
 ---
 
-### 2. 게시글 상세
+## 2. 조합 상세
+
+| 컬럼 | 값 |
+|---|---|
+| **Method** | `GET` |
+| **기능** | 조합 게시글 상세 |
+| **End Point** | `/api/v1/posts/{postId}` |
+| **권한** | 비로그인 허용 |
+| **우선순위** | 높음 |
+
+**Request** — Path `postId`
+
+**Request Example**
 
 ```
-GET /api/v1/posts/{postId}
+GET /api/v1/posts/post_01H8X
 ```
 
-**Response**: `Post` 전체 (combo 포함)
+**Response**
+
+```jsonc
+{
+  "id": "post_01H8X",
+  "title": "떵개 추천 두찜 로제 닭발",
+  "body": "진짜 미쳤어요 꼭 드셔보세요",
+  "imageUrls": ["https://cdn.../1.jpg"],
+  "author": { "id": "user_01H", "nickname": "배고픈 요기요", "profileImageUrl": "https://..." },
+  "combo": {
+    "store": {
+      "id": "store_123", "name": "두찜-잠실새내점",
+      "imageUrl": "https://...", "rating": 4.2, "reviewCount": 312
+    },
+    "items": [
+      {
+        "menuId": "menu_456",
+        "name": "[원조 K 로제] 로제 닭발",
+        "options": ["순살", "보통맛", "분모자로 변경", "치즈몽땅 추가"],
+        "description": "",
+        "unitPrice": 23000,
+        "quantity": 1,
+        "imageUrl": "https://..."
+      }
+    ],
+    "itemsTotal": 27000,
+    "deliveryFee": 1500,
+    "payableTotal": 28500
+  },
+  "likeCount": 12,
+  "likedByMe": false,
+  "commentCount": 4,
+  "createdAt": "2026-07-07T12:30:00+09:00"
+}
+```
+
+**비고**
+**`combo` 는 작성 시점 스냅샷으로 저장한다.** 매장이 가격을 올리거나 메뉴를 바꿔도
+예전 게시글은 그때 모습 그대로 보여야 한다. 현재 주문 가능 여부는 9번에서 확인한다.
+`payableTotal` 이 Figma 조합 상세의 "결제 금액"에 해당한다.
 
 ---
 
-### 3. 게시글 작성 — 조합 공유
+## 3. 조합 공유 (작성)
 
-```
-POST /api/v1/posts
-```
+| 컬럼 | 값 |
+|---|---|
+| **Method** | `POST` |
+| **기능** | 내 조합을 요기족보에 공유 |
+| **End Point** | `/api/v1/posts` |
+| **권한** | 로그인 |
+| **우선순위** | 보통 |
 
-**Request**
+**Request** (Body)
+
+| 필드 | 타입 | 제약 |
+|---|---|---|
+| `title` | string | 최대 20자 (Figma `0/20`) |
+| `body` | string | 최대 400자 (Figma `0/400`) |
+| `imageUrls` | string[] | 4번으로 먼저 업로드한 URL |
+| `orderId` | string | 주문 이력에서 조합을 가져올 때 |
+
+**Request Example**
 
 ```jsonc
 {
   "title": "떵개 추천 두찜 로제 닭발",
   "body": "진짜 미쳤어요",
-  "imageUrls": ["https://..."],   // 업로드 API 로 먼저 올린 뒤 URL 만 전달
-  "orderId": "order_789"          // 주문 이력에서 조합을 가져올 때
+  "imageUrls": ["https://cdn.../1.jpg"],
+  "orderId": "order_789"
 }
 ```
 
-Figma의 "주문한 메뉴" 영역이 **주문 이력에서 고르는 UI** 로 보인다.
-그렇다면 `orderId` 만 보내고 서버가 조합 스냅샷을 만드는 쪽이 깔끔하다.
+**Response** — 생성된 Post 전체 (2번과 동일 구조)
 
-> **논의 필요** — 주문하지 않은 조합도 공유할 수 있어야 하나?
-> 그렇다면 `combo` 객체를 통째로 받는 형태도 필요하다.
-
-**Response**: 생성된 `Post`
+**비고**
+Figma 의 "주문한 메뉴" 영역이 주문 이력에서 고르는 UI 로 보여 `orderId` 로 잡았다.
+서버가 주문 이력에서 조합 스냅샷을 만드는 쪽이 깔끔하다.
+**주문 이력 없이도 공유 가능해야 하는지 확인 필요** — 필요하면 `combo` 객체를 직접 받는 형태도 추가.
 
 ---
 
-### 4. 이미지 업로드
+## 4. 이미지 업로드
+
+| 컬럼 | 값 |
+|---|---|
+| **Method** | `POST` |
+| **기능** | 게시글 첨부 사진 업로드 |
+| **End Point** | `/api/v1/uploads/images` |
+| **권한** | 로그인 |
+| **우선순위** | 보통 |
+
+**Request** — `multipart/form-data`, 필드 `file` (또는 presigned URL 발급 방식)
+
+**Request Example**
 
 ```
 POST /api/v1/uploads/images
+Content-Type: multipart/form-data
+
+file: <binary>
 ```
 
-멀티파트 업로드 또는 presigned URL 발급 중 서버 편한 쪽으로.
-프론트는 **최종 URL 문자열만** 받으면 된다.
+**Response**
 
-> **논의 필요** — 장수 제한, 용량 제한, 허용 포맷
+```jsonc
+{ "url": "https://cdn.../abc.jpg" }
+```
+
+**비고**
+프론트는 **최종 URL 문자열만** 필요하다. 멀티파트/presigned 중 서버 편한 쪽으로.
+**장수 제한·용량 제한·허용 포맷 확정 필요.**
 
 ---
 
-### 5. 좋아요
+## 5. 좋아요
+
+| 컬럼 | 값 |
+|---|---|
+| **Method** | `POST` |
+| **기능** | 조합 좋아요 |
+| **End Point** | `/api/v1/posts/{postId}/likes` |
+| **권한** | 로그인 |
+| **우선순위** | 보통 |
+
+**Request** — Path `postId` (body 없음)
+
+**Request Example**
 
 ```
-POST   /api/v1/posts/{postId}/likes     좋아요
-DELETE /api/v1/posts/{postId}/likes     취소
+POST /api/v1/posts/post_01H8X/likes
 ```
 
 **Response**
@@ -177,42 +240,116 @@ DELETE /api/v1/posts/{postId}/likes     취소
 { "likeCount": 13, "likedByMe": true }
 ```
 
+**비고**
 낙관적 업데이트를 위해 **변경 후 카운트를 응답에 포함**해 주면 좋다.
+이미 좋아요한 상태에서 다시 호출해도 에러 없이 현재 상태를 반환하는 편이 낫다(멱등).
 
 ---
 
-### 6. 댓글
+## 6. 좋아요 취소
+
+| 컬럼 | 값 |
+|---|---|
+| **Method** | `DELETE` |
+| **기능** | 좋아요 취소 |
+| **End Point** | `/api/v1/posts/{postId}/likes` |
+| **권한** | 로그인 |
+| **우선순위** | 보통 |
+
+**Request** — Path `postId`
+
+**Request Example**
 
 ```
-GET  /api/v1/posts/{postId}/comments?cursor=&size=
-POST /api/v1/posts/{postId}/comments   { "body": "저도 시켜봤어요" }
+DELETE /api/v1/posts/post_01H8X/likes
 ```
 
-**Comment**
+**Response**
+
+```jsonc
+{ "likeCount": 12, "likedByMe": false }
+```
+
+**비고** — 5번과 응답 형태 동일.
+
+---
+
+## 7. 댓글 목록
+
+| 컬럼 | 값 |
+|---|---|
+| **Method** | `GET` |
+| **기능** | 조합 댓글 목록 |
+| **End Point** | `/api/v1/posts/{postId}/comments` |
+| **권한** | 비로그인 허용 |
+| **우선순위** | 낮음 |
+
+**Request** — Path `postId` / Query `cursor`, `size`
+
+**Request Example**
+
+```
+GET /api/v1/posts/post_01H8X/comments?size=20
+```
+
+**Response**
 
 ```jsonc
 {
-  "id": "comment_01H...",
-  "author": { "id": "...", "nickname": "배고픈 요기요", "profileImageUrl": "..." },
-  "body": "저도 시켜봤어요",
-  "createdAt": "2026-07-07T12:35:00+09:00"
+  "items": [
+    {
+      "id": "comment_01H",
+      "author": { "id": "user_02", "nickname": "배고픈 요기요", "profileImageUrl": "https://..." },
+      "body": "저도 시켜봤어요",
+      "createdAt": "2026-07-07T12:35:00+09:00"
+    }
+  ],
+  "nextCursor": null
 }
 ```
 
-> **논의 필요** — 대댓글이 필요한가? Figma 에는 1단계 댓글만 보인다.
-> 삭제·수정은 이번 범위에 넣을 것인가?
+**비고**
+Figma 에는 1단계 댓글만 보인다. **대댓글·수정·삭제가 이번 범위에 포함되는지 확인 필요.**
 
 ---
 
-### 7. 나도 주문하기
+## 8. 댓글 작성
 
-조합 상세의 핵심 CTA. 남의 조합을 내 장바구니로 복사한다.
+| 컬럼 | 값 |
+|---|---|
+| **Method** | `POST` |
+| **기능** | 댓글 작성 |
+| **End Point** | `/api/v1/posts/{postId}/comments` |
+| **권한** | 로그인 |
+| **우선순위** | 낮음 |
 
+**Request** — Path `postId` / Body `body`: string
+
+**Request Example**
+
+```jsonc
+{ "body": "저도 시켜봤어요" }
 ```
-POST /api/v1/posts/{postId}/reorder
-```
 
-**Request**
+**Response** — 생성된 Comment 1건 (7번 `items` 원소와 동일 구조)
+
+**비고** — 글자수 제한 확정 필요.
+
+---
+
+## 9. 나도 주문하기
+
+| 컬럼 | 값 |
+|---|---|
+| **Method** | `POST` |
+| **기능** | 남의 조합을 내 장바구니로 복사 |
+| **End Point** | `/api/v1/posts/{postId}/reorder` |
+| **권한** | 로그인 |
+| **우선순위** | 높음 |
+
+**Request** — Path `postId` / Body `lat`, `lng`
+
+**Request Example**
 
 ```jsonc
 { "lat": 37.5445, "lng": 127.0557 }
@@ -223,41 +360,39 @@ POST /api/v1/posts/{postId}/reorder
 ```jsonc
 {
   "orderable": true,
-  "combo": { /* 현재 가격·재고로 다시 계산한 Combo */ },
-  "unavailableItems": []      // 품절·단종된 메뉴가 있으면 여기에
+  "combo": { /* 현재 가격·재고로 다시 계산한 Combo. 2번의 combo 와 같은 구조 */ },
+  "unavailableItems": [
+    { "menuId": "menu_456", "name": "[사이드] 치즈볼", "reason": "SOLD_OUT" }
+  ]
 }
 ```
 
-게시글의 조합은 **스냅샷**이므로 지금도 주문 가능한지는 알 수 없다.
-이 API 가 현재 시점으로 다시 확인해 준다.
-
-> **논의 필요** — 사용자 위치에 배달 불가한 매장이면 어떻게 하나?
-> 같은 브랜드의 다른 지점을 대신 제안할 것인가?
+**비고**
+게시글의 조합은 스냅샷이라 **지금도 주문 가능한지 알 수 없다.** 이 API 가 현재 시점으로 재확인한다.
+`reason` enum 후보: `SOLD_OUT` / `DISCONTINUED` / `OUT_OF_DELIVERY_AREA`
+**사용자 위치에 배달 불가한 매장이면 같은 브랜드 다른 지점을 제안할지 확인 필요.**
 
 ---
 
 ## 공통 규칙 — 확정 부탁드립니다
 
-전체 API 에 걸치는 항목이라 먼저 정하면 이후 작업이 빨라진다.
-
 | 항목 | 제안 |
 |---|---|
-| **인증** | `Authorization: Bearer <token>`. 목록·상세는 비로그인 허용, 작성·좋아요·댓글은 로그인 필요 |
+| **인증** | `Authorization: Bearer <token>`. 목록·상세·댓글목록은 비로그인 허용, 나머지는 로그인 필요 |
 | **에러 형식** | `{ "code": "POST_NOT_FOUND", "message": "..." }` + 적절한 HTTP 상태코드 |
 | **날짜** | ISO 8601 + 타임존 (`2026-07-07T12:30:00+09:00`) |
-| **페이지네이션** | 커서 방식. 실시간 피드라 오프셋은 중복·누락이 생긴다 |
+| **페이지네이션** | **커서 방식.** 실시간 피드라 오프셋은 중복·누락이 생긴다 |
 | **빈 값** | 배열은 `[]`, 객체는 `null`. **키 자체를 빼지 않기** (클라이언트가 터진다) |
 | **이미지 URL** | 항상 절대 경로 |
-| **enum** | 대문자 스네이크. `LATEST`, `POPULAR` |
+| **enum** | 대문자 스네이크. `LATEST`, `POPULAR`, `SOLD_OUT` |
 
 ---
 
 ## 미해결 항목
 
-1. **"실시간 인기" 산정 기준** — 좋아요 누적? 최근 24h? 조회수 반영?
-2. **주문 이력 없이도 공유 가능한가**
-3. **찜 연동** — 회의록의 "조합된 메뉴는 요기요 찜에 저장" 을 이 API 에 포함할지,
-   별도 찜 API 로 뺄지
+1. **"실시간 인기" 산정 기준** — 누적 좋아요 / 최근 24h / 조회수 반영
+2. **주문 이력 없이도 조합 공유 가능한가** — 가능하다면 `combo` 직접 전달 형태 추가 필요
+3. **찜 연동** — 3차 회의록의 *"조합된 메뉴는 요기요 찜에 저장"* 을 이 API 에 넣을지 별도 찜 API 로 뺄지
 4. **신고·차단** — 커뮤니티라 필요할 수 있으나 이번 범위에서는 제외 제안
-5. **위치** — `orderableOnly` 와 `reorder` 가 좌표를 요구한다.
-   앱에 위치 수집 기능을 추가하는 작업이 함께 필요하다
+5. **위치** — `orderableOnly`(1번)와 `reorder`(9번)가 좌표를 요구한다.
+   **앱에 위치 수집 기능이 아직 없어 별도 작업이 필요하다.**
