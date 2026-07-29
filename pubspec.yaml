@@ -1,0 +1,51 @@
+name: mukbang_ttaradamgi
+description: "먹방 따라담기 — 릴스 속 맛집을 요기요 주문으로 이어주는 앱"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # 상태관리. SwiftUI 의 @EnvironmentObject + ObservableObject 자리를 대신한다.
+  provider: ^6.1.2
+
+  # Gemini / 메타데이터 HTTP 호출
+  http: ^1.2.2
+
+  # 공유 시트로 들어온 링크 수신.
+  # iOS 는 기존 Swift Share Extension 이, 안드로이드는 ACTION_SEND intent-filter 가
+  # 각각 처리하고 이 패키지가 양쪽을 Dart 로 넘겨준다.
+  receive_sharing_intent: ^1.8.1
+
+  # 요기요 앱 열기 (딥링크)
+  url_launcher: ^6.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+
+  fonts:
+    # Figma 시안과 동일한 Pretendard (SIL OFL). iOS 앱과 같은 파일을 쓴다.
+    - family: Pretendard
+      fonts:
+        - asset: assets/fonts/Pretendard-Regular.otf
+          weight: 400
+        - asset: assets/fonts/Pretendard-Medium.otf
+          weight: 500
+        - asset: assets/fonts/Pretendard-SemiBold.otf
+          weight: 600
