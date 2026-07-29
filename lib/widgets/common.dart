@@ -4,6 +4,57 @@ import '../models/combo.dart';
 import '../models/preference.dart';
 import '../theme.dart';
 
+/// Figma 헤더 (node 480:1896). 좌측 뒤로가기, 중앙 타이틀, 우측 여백.
+/// onBack 이 null 이면 뒤로가기를 그리지 않는다.
+class AppHeader extends StatelessWidget {
+  const AppHeader({super.key, required this.title, this.onBack});
+
+  final String title;
+  final VoidCallback? onBack;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        color: Colors.white,
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+        child: SafeArea(
+          bottom: false,
+          child: SizedBox(
+            height: 32,
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 64,
+                  child: onBack == null
+                      ? null
+                      : Align(
+                          alignment: Alignment.centerLeft,
+                          child: GestureDetector(
+                            onTap: onBack,
+                            behavior: HitTestBehavior.opaque,
+                            child: const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: Icon(Icons.arrow_back_ios_new,
+                                  size: 18, color: Colors.black),
+                            ),
+                          ),
+                        ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: Text(title, style: AppText.semiBold(20, spacing: -0.5)),
+                  ),
+                ),
+                // 우측은 Figma 에서 아이콘이 hidden 이라 자리만 비워 균형을 맞춘다.
+                const SizedBox(width: 64),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
 /// 매장·메뉴 썸네일. 원격 URL 이 있으면 그걸 쓰고, 없거나 실패하면 번들 이미지로 돌아간다.
 /// 지금 원격 URL 은 공유된 릴스의 og:image 라서 "영상에서 본 그 음식"이 그대로 보인다.
 class RemoteOrAssetImage extends StatelessWidget {

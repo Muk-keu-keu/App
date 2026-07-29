@@ -8,6 +8,7 @@ import 'services/gemini_extractor.dart';
 import 'services/metadata_fetcher.dart';
 
 enum AppStage {
+  login, // 로그인 (앱 첫 진입)
   home, // 공유 안내
   keyword, // 취향 설정
   analyzing, // 분석 중
@@ -22,7 +23,7 @@ class AppFlow extends ChangeNotifier {
 
   final ComboRepository _repository;
 
-  AppStage _stage = AppStage.home;
+  AppStage _stage = AppStage.login;
   AppStage get stage => _stage;
 
   String _pendingLink = '';
@@ -50,6 +51,12 @@ class AppFlow extends ChangeNotifier {
     _pendingLink = link;
     _setStage(AppStage.keyword);
   }
+
+  /// 로그인 완료. 실제 인증이 붙기 전까지는 화면 흐름만 이어준다.
+  void completeLogin() => _setStage(AppStage.home);
+
+  /// 장바구니에서 결과 화면으로 돌아간다.
+  void backToCombo() => _setStage(AppStage.combo);
 
   void backToHome() {
     recommendations = [];

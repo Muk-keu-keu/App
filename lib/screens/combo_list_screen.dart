@@ -77,11 +77,13 @@ class _ComboListScreenState extends State<ComboListScreen> {
   Widget _header(BuildContext context, AppFlow flow) => Container(
         width: double.infinity,
         color: Colors.white,
-        child: SafeArea(
-          bottom: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+              AppHeader(
+                title: '먹방요기',
+                onBack: () => context.read<AppFlow>().backToCombo(),
+              ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                 child: Text('먹방 속 조합을 담았어요', style: AppText.screenTitle),
@@ -133,8 +135,7 @@ class _ComboListScreenState extends State<ComboListScreen> {
                   ],
                 ),
               ),
-            ],
-          ),
+          ],
         ),
       );
 
