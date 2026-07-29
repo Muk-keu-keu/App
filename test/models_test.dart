@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mukbang_ttaradamgi/models/analysis_source.dart';
 import 'package:mukbang_ttaradamgi/models/combo.dart';
 import 'package:mukbang_ttaradamgi/models/preference.dart';
 import 'package:mukbang_ttaradamgi/repository/combo_builder.dart';
@@ -188,6 +189,46 @@ void main() {
       expect(result.restaurantName, '교촌치킨 강남점');
       expect(result.foodCategory, '치킨');
       expect(result.confidence, 0.9);
+    });
+  });
+
+  group('AnalysisSource — 원문을 서버로 넘기기 위해 보관한다', () {
+    AnalysisSource source(String url, {String rawText = 'Instagram\n교촌치킨 강남점 먹방'}) =>
+        AnalysisSource.fromUrl(url: Uri.parse(url), rawText: rawText);
+
+    test('Gemini 에 넣은 원문을 그대로 들고 있는다', () {
+      expect(source('https://www.instagram.com/reel/abc/').rawText,
+          'Instagram\n교촌치킨 강남점 먹방');
+    });
+
+    test('호스트로 플랫폼을 판별한다', () {
+      expect(source('https://www.instagram.com/reel/abc/').platform,
+          SourcePlatform.instagram);
+      expect(source('https://www.youtube.com/shorts/abc').platform,
+          SourcePlatform.youtube);
+      expect(source('https://youtu.be/abc').platform, SourcePlatform.youtube);
+      expect(source('https://www.tiktok.com/@x/video/1').platform, SourcePlatform.other);
+    });
+
+    test('서버로 보내는 enum 값은 대문자다', () {
+      expect(SourcePlatform.instagram.wire, 'INSTAGRAM');
+      expect(SourcePlatform.youtube.wire, 'YOUTUBE');
+      expect(SourcePlatform.other.wire, 'OTHER');
+    });
+
+    test('toJson 이 source 계약 형태를 만든다', () {
+      expect(source('https://youtu.be/abc', rawText: '두찜 로제 닭발').toJson(), {
+        'url': 'https://youtu.be/abc',
+        'platform': 'YOUTUBE',
+        'rawText': '두찜 로제 닭발',
+      });
+    });
+
+    test('텍스트가 빈약하면 서버 재수집 신호를 준다', () {
+      // 인스타 캡션이 막혀 계정명 한 줄만 남은 상황
+      expect(source('https://www.instagram.com/reel/abc/', rawText: '인스타그램 @x').isThin,
+          isTrue);
+      expect(source('https://www.instagram.com/reel/abc/').isThin, isFalse);
     });
   });
 
