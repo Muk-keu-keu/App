@@ -3,9 +3,11 @@ import 'package:flutter/foundation.dart';
 import 'models/analysis_source.dart';
 import 'models/combo.dart';
 import 'models/preference.dart';
+import 'models/user_location.dart';
 import 'repository/combo_repository.dart';
 import 'env.dart';
 import 'services/gemini_extractor.dart';
+import 'services/location_service.dart';
 import 'services/metadata_fetcher.dart';
 
 enum AppStage {
@@ -20,9 +22,12 @@ enum AppStage {
 
 /// iOS 앱 AppFlowModel 을 Dart 로 옮긴 것. 화면 전환과 분석 파이프라인을 담당한다.
 class AppFlow extends ChangeNotifier {
-  AppFlow({ComboRepository? repository}) : _repository = repository ?? const MockComboRepository();
+  AppFlow({ComboRepository? repository, LocationService? locationService})
+      : _repository = repository ?? const MockComboRepository(),
+        _locationService = locationService ?? const GeolocatorLocationService();
 
   final ComboRepository _repository;
+  final LocationService _locationService;
 
   AppStage _stage = AppStage.login;
   AppStage get stage => _stage;
@@ -62,7 +67,72 @@ class AppFlow extends ChangeNotifier {
   }
 
   /// 로그인 완료. 실제 인증이 붙기 전까지는 화면 흐름만 이어준다.
-  void completeLogin() => _setStage(AppStage.home);
+  ///
+  /// 곧바로 위치를 1회 수집한다. 좌표를 쓰는 화면(요기족보 목록의 "내 위치에서 가능한
+  /// 조합만", 나도 주문하기)에 도달했을 때 이미 준비돼 있어야 흐름이 끊기지 않는다.
+  /// 화면 전환을 기다리게 하지 않으려고 await 하지 않고 넘긴다 — 권한 팝업은 홈 위에 뜬다.
+  void completeLogin() {
+    _setStage(AppStage.home);
+    refreshLocation();
+  }
+
+  UserLocation? location;
+
+  /// 마지막 위치 수집 실패 원인. 성공하면 null.
+  LocationFailure? locationFailure;
+
+  bool _isLocating = false;
+  bool get isLocating => _isLocating;
+
+  /// 다시 물어봐도 소용없어 주소 직접 입력이 필요한 상태인지.
+  bool get needsAddressInput =>
+      location == null &&
+      (locationFailure == LocationFailure.deniedForever ||
+          locationFailure == LocationFailure.serviceDisabled);
+
+  /// 기기 좌표를 가져온다. 실패해도 흐름을 막지 않는다 —
+  /// 위치는 보조 정보이고, 없으면 주소 직접 입력으로 메꾼다.
+  Future<void> refreshLocation() async {
+    if (_isLocating) return;
+    _isLocating = true;
+    notifyListeners();
+
+    final result = await _locationService.current();
+    if (result.isSuccess) {
+      location = result.location;
+      locationFailure = null;
+    } else {
+      locationFailure = result.failure;
+    }
+
+    _isLocating = false;
+    notifyListeners();
+  }
+
+  /// 권한 거부 시 사용자가 주소를 직접 입력한 경우.
+  ///
+  /// 좌표를 모르는 상태이므로 서버가 주소로 좌표를 찾아야 한다. 앱은 문자열만 들고
+  /// 있고 lat/lng 는 0 으로 둔다 — 아무 좌표나 지어내면 엉뚱한 매장이 걸린다.
+  void setManualAddress(String address) {
+    final trimmed = address.trim();
+    if (trimmed.isEmpty) return;
+    location = UserLocation(
+      lat: 0,
+      lng: 0,
+      origin: LocationOrigin.manual,
+      address: trimmed,
+    );
+    locationFailure = null;
+    notifyListeners();
+  }
+
+  /// 디버그 빌드의 좌표 override. 시연 더미가 강남·용산 기준이라
+  /// 리허설 장소가 달라도 화면이 맞게 나오도록 쓴다.
+  void applyDebugLocation(UserLocation preset) {
+    location = preset;
+    locationFailure = null;
+    notifyListeners();
+  }
 
   /// 장바구니에서 결과 화면으로 돌아간다.
   void backToCombo() => _setStage(AppStage.combo);

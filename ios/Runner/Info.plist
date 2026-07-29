@@ -81,5 +81,9 @@
 	<array>
 		<string>yogiyo</string>
 	</array>
+	<!-- 위치 권한. 배달 가능한 매장·조합을 걸러내는 데만 쓰고 백그라운드 추적은 하지 않으므로
+	     WhenInUse 만 선언한다(Always 를 넣으면 심사에서 사유를 요구받는다). -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>지금 위치로 배달 가능한 매장과 조합을 찾아드려요. 허용하지 않으면 주소를 직접 입력할 수 있어요.</string>
 </dict>
 </plist>

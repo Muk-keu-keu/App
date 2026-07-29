@@ -1,0 +1,155 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mukbang_ttaradamgi/app_flow.dart';
+import 'package:mukbang_ttaradamgi/models/user_location.dart';
+import 'package:mukbang_ttaradamgi/services/location_service.dart';
+
+/// 실제 GPS 없이 결과만 정해 주는 대역.
+class _FakeLocationService implements LocationService {
+  _FakeLocationService(this.result);
+
+  final LocationResult result;
+  int calls = 0;
+
+  @override
+  Future<LocationResult> current() async {
+    calls++;
+    return result;
+  }
+}
+
+const _seoul = UserLocation(lat: 37.5114, lng: 127.0863, origin: LocationOrigin.gps);
+
+void main() {
+  AppFlow flowWith(LocationResult result) =>
+      AppFlow(locationService: _FakeLocationService(result));
+
+  group('UserLocation', () {
+    test('GPS 로 얻은 위치는 주소가 비어 있다 — 변환은 서버가 한다', () {
+      expect(_seoul.hasAddress, isFalse);
+      expect(_seoul.toJson().containsKey('address'), isFalse);
+    });
+
+    test('주소가 있으면 toJson 에 함께 실린다', () {
+      const manual = UserLocation(
+        lat: 0,
+        lng: 0,
+        origin: LocationOrigin.manual,
+        address: '서울 송파구 잠실동 40-1',
+      );
+      expect(manual.toJson(), {'lat': 0.0, 'lng': 0.0, 'address': '서울 송파구 잠실동 40-1'});
+    });
+
+    test('주소가 없으면 좌표를 보여준다', () {
+      expect(_seoul.displayText, '37.5114, 127.0863');
+      expect(
+        _seoul.copyWith(address: '잠실동').displayText,
+        '잠실동',
+      );
+    });
+
+    test('디버그 프리셋은 시연 기준 동네를 담고 있다', () {
+      expect(UserLocation.debugPresets.keys, containsAll(['강남역', '용산역']));
+      for (final preset in UserLocation.debugPresets.values) {
+        expect(preset.origin, LocationOrigin.debugOverride);
+        expect(preset.lat, greaterThan(37));
+        expect(preset.lng, greaterThan(126));
+      }
+    });
+  });
+
+  group('AppFlow — 위치 수집', () {
+    test('로그인하면 위치를 1회 수집한다', () async {
+      final service = _FakeLocationService(const LocationResult.success(_seoul));
+      final flow = AppFlow(locationService: service);
+
+      flow.completeLogin();
+      await pumpEventQueue();
+
+      expect(service.calls, 1);
+      expect(flow.location?.lat, 37.5114);
+      expect(flow.locationFailure, isNull);
+      expect(flow.isLocating, isFalse);
+    });
+
+    test('수집에 실패해도 화면 흐름은 홈으로 넘어간다', () async {
+      final flow = flowWith(const LocationResult.failed(LocationFailure.unavailable));
+
+      flow.completeLogin();
+      await pumpEventQueue();
+
+      expect(flow.stage, AppStage.home);
+      expect(flow.location, isNull);
+      expect(flow.locationFailure, LocationFailure.unavailable);
+    });
+
+    test('영구 거부·서비스 꺼짐이면 주소 직접 입력이 필요하다', () async {
+      for (final failure in [
+        LocationFailure.deniedForever,
+        LocationFailure.serviceDisabled,
+      ]) {
+        final flow = flowWith(LocationResult.failed(failure));
+        await flow.refreshLocation();
+        expect(flow.needsAddressInput, isTrue, reason: '$failure');
+      }
+    });
+
+    test('일시 거부는 다시 물어볼 수 있어 주소 입력을 강요하지 않는다', () async {
+      final flow = flowWith(const LocationResult.failed(LocationFailure.denied));
+      await flow.refreshLocation();
+      expect(flow.needsAddressInput, isFalse);
+    });
+
+    test('수집 중에는 중복 요청하지 않는다', () async {
+      final service = _FakeLocationService(const LocationResult.success(_seoul));
+      final flow = AppFlow(locationService: service);
+
+      // await 하지 않고 연달아 호출
+      final first = flow.refreshLocation();
+      final second = flow.refreshLocation();
+      await Future.wait([first, second]);
+
+      expect(service.calls, 1);
+    });
+
+    test('주소를 직접 입력하면 좌표를 지어내지 않는다', () async {
+      final flow = flowWith(const LocationResult.failed(LocationFailure.deniedForever));
+      await flow.refreshLocation();
+
+      flow.setManualAddress('  서울 송파구 잠실동 40-1  ');
+
+      expect(flow.location?.origin, LocationOrigin.manual);
+      expect(flow.location?.address, '서울 송파구 잠실동 40-1'); // 앞뒤 공백 제거
+      expect(flow.location?.lat, 0); // 서버가 주소로 좌표를 찾는다
+      expect(flow.needsAddressInput, isFalse);
+    });
+
+    test('빈 주소는 무시한다', () async {
+      final flow = flowWith(const LocationResult.failed(LocationFailure.deniedForever));
+      await flow.refreshLocation();
+
+      flow.setManualAddress('   ');
+
+      expect(flow.location, isNull);
+    });
+
+    test('디버그 override 가 수집된 위치를 덮어쓴다', () async {
+      final flow = flowWith(const LocationResult.success(_seoul));
+      await flow.refreshLocation();
+
+      flow.applyDebugLocation(UserLocation.debugPresets['강남역']!);
+
+      expect(flow.location?.origin, LocationOrigin.debugOverride);
+      expect(flow.location?.lat, 37.4979);
+    });
+
+    test('위치 변경은 리스너에게 알린다', () async {
+      final flow = flowWith(const LocationResult.success(_seoul));
+      var notified = 0;
+      flow.addListener(() => notified++);
+
+      await flow.refreshLocation();
+
+      expect(notified, greaterThan(0));
+    });
+  });
+}

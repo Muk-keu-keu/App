@@ -1,4 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 위치 권한. 배달 가능한 매장·조합을 거르는 데 쓴다.
+         FINE 과 COARSE 를 함께 선언한다 — Android 12+ 는 권한 팝업에서 사용자가
+         "대략적인 위치"만 허용할 수 있고, 그때 COARSE 선언이 없으면 아무 좌표도 못 받는다.
+         동네 수준 정확도면 충분한 기능이라 대략적인 위치만 허용해도 정상 동작한다. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <application
         android:label="먹방요기"
         android:name="${applicationName}"
