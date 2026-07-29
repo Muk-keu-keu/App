@@ -61,6 +61,8 @@ iOS 는 익스텐션이 본체 앱을 직접 실행할 수 없어, 응답자 체
 
 ## AI 추출 스키마 (백엔드와의 핵심 계약)
 
+> 프롬프트 전문, 수집 경로, 알려진 한계까지 정리한 문서는 **[docs/extraction.md](docs/extraction.md)** 참고.
+
 링크에서 뽑아내는 값이다. 모델(Gemini)은 나중에 바꿀 수 있지만 **이 스키마는
 앱과 서버가 공유하는 계약**이라 바꾸려면 양쪽을 함께 고쳐야 한다.
 정의는 `lib/services/gemini_extractor.dart` 의 `ExtractionResult`.
