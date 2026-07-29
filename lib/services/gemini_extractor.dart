@@ -2,27 +2,108 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-/// AI 추출 결과. 알 수 없는 필드는 빈 문자열.
+/// 영상에 나온 음식 하나.
+/// 요기요 메뉴에 매칭하려면 이름만으론 부족하고 옵션(순살/뼈, 맵기, 사리 추가)이 필요하다.
+class ExtractedDish {
+  const ExtractedDish({
+    required this.name,
+    this.description = '',
+    this.options = const [],
+  });
+
+  /// 메뉴명. "레드콤보", "로제 닭발"
+  final String name;
+
+  /// 영상에서 묘사된 내용. "매콤한 소스에 순살로 나온 반반 치킨"
+  final String description;
+
+  /// 주문 시 골라야 하는 값들. ["순살", "매운맛", "치즈 추가"]
+  /// 요기요 메뉴 옵션과 그대로 대응시키는 것이 목표다.
+  final List<String> options;
+
+  factory ExtractedDish.fromJson(Map<String, dynamic> json) => ExtractedDish(
+        name: (json['name'] ?? '') as String,
+        description: (json['description'] ?? '') as String,
+        options: ((json['options'] ?? const []) as List).map((e) => '$e').toList(),
+      );
+
+  Map<String, dynamic> toJson() =>
+      {'name': name, 'description': description, 'options': options};
+}
+
+/// AI 추출 결과. 알 수 없는 필드는 빈 값.
+///
+/// **이 구조가 백엔드와 주고받을 계약이다.** 모델을 Gemini 에서 다른 것으로 바꾸더라도
+/// 스키마만 유지하면 앱과 서버는 손댈 필요가 없다.
 class ExtractionResult {
   const ExtractionResult({
     required this.restaurantName,
+    this.brandName = '',
+    this.branchName = '',
     required this.foodCategory,
     required this.area,
-    required this.menu,
+    this.dishes = const [],
+    this.keywords = const [],
+    this.spiceLevel = '',
+    this.servingCount = 0,
+    this.isFranchise = false,
+    this.summary = '',
     required this.confidence,
   });
 
+  /// 상호명 전체. "교촌치킨 강남점"
   final String restaurantName;
+
+  /// 브랜드만. "교촌치킨" — 프랜차이즈면 근처 지점 검색에 쓴다.
+  final String brandName;
+
+  /// 지점만. "강남점"
+  final String branchName;
+
+  /// 한식/중식/일식/양식/분식/치킨/피자/아시안/카페·디저트
   final String foodCategory;
+
+  /// 동네 이름. "성수동", "강남"
   final String area;
-  final String menu;
+
+  /// 영상에 나온 음식들. 등장 순서대로.
+  final List<ExtractedDish> dishes;
+
+  /// 매칭·검색에 쓸 모든 키워드. 음식명, 재료, 조리법, 식감, 상황("야식", "혼술")까지.
+  final List<String> keywords;
+
+  /// none | mild | medium | hot | extreme. 취향 설정 화면 기본값으로 쓴다.
+  final String spiceLevel;
+
+  /// 영상에서 몇 인분으로 보이는지. 0이면 판단 불가.
+  final int servingCount;
+
+  /// 프랜차이즈 여부. true 면 브랜드명으로 근처 지점을 찾으면 된다.
+  final bool isFranchise;
+
+  /// 한 줄 요약. "이 영상 이렇게 이해했어요"를 사용자에게 보여줄 때 쓴다.
+  final String summary;
+
+  /// 상호명 추출 확신도 0.0~1.0
   final double confidence;
+
+  /// 메뉴 이름만 쉼표로 이어붙인 값.
+  String get menu => dishes.map((d) => d.name).join(', ');
 
   factory ExtractionResult.fromJson(Map<String, dynamic> json) => ExtractionResult(
         restaurantName: (json['restaurantName'] ?? '') as String,
+        brandName: (json['brandName'] ?? '') as String,
+        branchName: (json['branchName'] ?? '') as String,
         foodCategory: (json['foodCategory'] ?? '') as String,
         area: (json['area'] ?? '') as String,
-        menu: (json['menu'] ?? '') as String,
+        dishes: ((json['dishes'] ?? const []) as List)
+            .map((e) => ExtractedDish.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        keywords: ((json['keywords'] ?? const []) as List).map((e) => '$e').toList(),
+        spiceLevel: (json['spiceLevel'] ?? '') as String,
+        servingCount: ((json['servingCount'] ?? 0) as num).toInt(),
+        isFranchise: (json['isFranchise'] ?? false) as bool,
+        summary: (json['summary'] ?? '') as String,
         confidence: ((json['confidence'] ?? 0) as num).toDouble(),
       );
 }
@@ -36,25 +117,73 @@ class GeminiExtractor {
   final String apiKey;
   final String model;
 
+  static const Map<String, dynamic> _dishSchema = {
+    'type': 'OBJECT',
+    'properties': {
+      'name': {'type': 'STRING'},
+      'description': {'type': 'STRING'},
+      'options': {
+        'type': 'ARRAY',
+        'items': {'type': 'STRING'},
+      },
+    },
+    'required': ['name', 'description', 'options'],
+    'propertyOrdering': ['name', 'description', 'options'],
+  };
+
+  static const List<String> _fields = [
+    'restaurantName', 'brandName', 'branchName', 'foodCategory', 'area',
+    'dishes', 'keywords', 'spiceLevel', 'servingCount', 'isFranchise',
+    'summary', 'confidence',
+  ];
+
   static const Map<String, dynamic> _responseSchema = {
     'type': 'OBJECT',
     'properties': {
       'restaurantName': {'type': 'STRING'},
+      'brandName': {'type': 'STRING'},
+      'branchName': {'type': 'STRING'},
       'foodCategory': {'type': 'STRING'},
       'area': {'type': 'STRING'},
-      'menu': {'type': 'STRING'},
+      'dishes': {'type': 'ARRAY', 'items': _dishSchema},
+      'keywords': {
+        'type': 'ARRAY',
+        'items': {'type': 'STRING'},
+      },
+      'spiceLevel': {'type': 'STRING'},
+      'servingCount': {'type': 'INTEGER'},
+      'isFranchise': {'type': 'BOOLEAN'},
+      'summary': {'type': 'STRING'},
       'confidence': {'type': 'NUMBER'},
     },
-    'required': ['restaurantName', 'foodCategory', 'area', 'menu', 'confidence'],
-    'propertyOrdering': ['restaurantName', 'foodCategory', 'area', 'menu', 'confidence'],
+    'required': _fields,
+    'propertyOrdering': _fields,
   };
 
   String _prompt(String text) => '''
-다음은 SNS 게시물(릴스/영상/카드뉴스)의 제목·설명·계정명 텍스트입니다. 여기서 음식점 정보를 최대한 구체적으로 추출하세요.
-- restaurantName: 음식점 상호명. 지점명이 있으면 지점까지 포함 (예: "청년다방 송도점"). 계정명이 음식점이면 그걸 상호명으로. 정말 모를 때만 빈 문자열.
-- foodCategory: 음식 종류. 다음 중 하나로만: 한식, 중식, 일식, 양식, 분식, 치킨, 피자, 아시안, 카페·디저트. 알 수 없으면 빈 문자열.
-- area: 동네/지역 이름 (예: "성수동", "송도", "강남"). 알 수 없으면 빈 문자열.
-- menu: 영상에 나오거나 그 음식점의 대표 메뉴 1~3개를 쉼표로 (예: "흑당버블티, 크로플"). 알 수 없으면 빈 문자열.
+아래는 SNS 게시물(릴스/영상/카드뉴스)의 제목·설명·계정명 텍스트입니다.
+이 사람이 먹은 음식을 요기요에서 그대로 주문할 수 있도록 정보를 빠짐없이 뽑아주세요.
+근거가 있으면 추론해도 되지만, 전혀 없으면 빈 값으로 두세요.
+
+- restaurantName: 상호명. 지점이 있으면 지점까지 (예: "청년다방 송도점").
+  계정명이 음식점이면 그걸 상호명으로. 정말 모를 때만 빈 문자열.
+- brandName: 브랜드/체인명만 (예: "청년다방"). 개인 가게면 상호명과 같게.
+- branchName: 지점명만 (예: "송도점"). 없으면 빈 문자열.
+- foodCategory: 다음 중 하나로만. 한식, 중식, 일식, 양식, 분식, 치킨, 피자, 아시안, 카페·디저트
+- area: 동네/지역 이름 (예: "성수동", "송도", "강남"). 모르면 빈 문자열.
+- dishes: 영상에 나온 음식들을 등장 순서대로. 각 항목은
+    · name: 메뉴 이름 (예: "레드콤보", "로제 닭발")
+    · description: 영상에서 묘사된 내용을 한 문장으로
+    · options: 주문할 때 골라야 하는 값들의 배열.
+      뼈/순살, 맵기 단계, 사리·토핑 추가, 양 선택처럼
+      요기요 메뉴 옵션에 해당하는 것을 모두 넣으세요.
+      예: ["순살", "매운맛", "중국당면 추가", "치즈 추가"]
+- keywords: 매칭·검색에 쓸 단어를 최대한 많이. 음식명, 재료, 조리법, 식감,
+  먹는 상황("야식", "혼술", "해장")까지. 중복 없이 3~15개.
+- spiceLevel: none, mild, medium, hot, extreme 중 하나. 판단 불가면 빈 문자열.
+- servingCount: 몇 인분으로 보이는지 정수. 판단 불가면 0.
+- isFranchise: 프랜차이즈면 true.
+- summary: "이 영상을 이렇게 이해했다"를 한 문장으로. 사용자에게 그대로 보여줄 문장.
 - confidence: 상호명 추출 확신도 0.0~1.0.
 
 텍스트:
@@ -92,8 +221,8 @@ $text
     }
 
     final json = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-    final answer = (((json['candidates'] as List).first as Map)['content']
-            as Map)['parts'] as List;
+    final answer =
+        (((json['candidates'] as List).first as Map)['content'] as Map)['parts'] as List;
     final raw = (answer.first as Map)['text'] as String;
 
     return parseResponse(raw);

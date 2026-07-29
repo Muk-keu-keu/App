@@ -58,7 +58,7 @@ class ComboBuilder {
       _make(
         storeName: _storeName(extraction, category, area),
         category: category,
-        menuText: extraction.menu,
+        dishes: extraction.dishes,
         thumbnailUrl: thumbnailUrl,
         similarity: extraction.confidence.clamp(0.72, 0.98),
         preference: preference,
@@ -74,7 +74,7 @@ class ComboBuilder {
         _make(
           storeName: alternatives[i],
           category: category,
-          menuText: extraction.menu,
+          dishes: extraction.dishes,
           thumbnailUrl: thumbnailUrl,
           // 유사도는 첫 번째가 가장 높고 뒤로 갈수록 낮아지게 고정한다.
           similarity:
@@ -96,7 +96,7 @@ class ComboBuilder {
   static ComboRecommendation _make({
     required String storeName,
     required String category,
-    required String menuText,
+    required List<ExtractedDish> dishes,
     required String? thumbnailUrl,
     required double similarity,
     required TastePreference preference,
@@ -118,7 +118,7 @@ class ComboBuilder {
     );
 
     var items = _mainItems(
-      menuText: menuText,
+      dishes: dishes,
       category: category,
       spice: preference.spice,
       thumbnailUrl: thumbnailUrl,
@@ -147,32 +147,39 @@ class ComboBuilder {
     return ComboRecommendation(store: store, items: items);
   }
 
-  /// extraction.menu 는 "레드콤보, 허니콤보" 처럼 쉼표로 온다.
-  /// 영상에서 뽑은 메뉴는 전부 메인 취급이다. 사이드는 별도로 붙는다.
+  /// 영상에서 뽑은 음식은 전부 메인 취급이다. 사이드는 별도로 붙는다.
+  /// AI 가 뽑은 옵션(순살, 매운맛, 치즈 추가…)을 그대로 메뉴 설명으로 쓴다.
+  /// 옵션이 없으면 영상 묘사를, 그것도 없으면 맵기만 적는다.
   static List<ComboItem> _mainItems({
-    required String menuText,
+    required List<ExtractedDish> dishes,
     required String category,
     required SpiceLevel spice,
     required String? thumbnailUrl,
     required int seed,
   }) {
-    final names = menuText
-        .split(',')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
-
     final base = _basePrice[category] ?? 14000;
-    final sources = names.isEmpty
-        ? [category.isEmpty ? '대표 메뉴' : '$category 대표 메뉴']
-        : names.take(2).toList();
+    final sources = dishes.where((d) => d.name.isNotEmpty).take(2).toList();
+
+    if (sources.isEmpty) {
+      return [
+        ComboItem(
+          id: 'main-$seed-0',
+          name: category.isEmpty ? '대표 메뉴' : '$category 대표 메뉴',
+          options: spice.title,
+          unitPrice: _roundedPrice(base + (seed % 6) * 1000),
+          quantity: 1,
+          imagePath: _placeholder,
+          imageUrl: thumbnailUrl,
+        ),
+      ];
+    }
 
     return [
       for (var i = 0; i < sources.length; i++)
         ComboItem(
           id: 'main-$seed-$i',
-          name: sources[i],
-          options: '${spice.title}, 기본 구성',
+          name: sources[i].name,
+          options: _optionText(sources[i], spice),
           unitPrice: _roundedPrice(base + ((seed ~/ (i + 1)) % 6) * 1000),
           quantity: 1,
           imagePath: _placeholder,
@@ -180,6 +187,12 @@ class ComboBuilder {
           imageUrl: i == 0 ? thumbnailUrl : null,
         ),
     ];
+  }
+
+  static String _optionText(ExtractedDish dish, SpiceLevel spice) {
+    if (dish.options.isNotEmpty) return dish.options.join(', ');
+    if (dish.description.isNotEmpty) return dish.description;
+    return spice.title;
   }
 
   /// 500원 단위로 끊는다. 20000/3 = 6666 같은 값이 화면에 나오면 안 된다.

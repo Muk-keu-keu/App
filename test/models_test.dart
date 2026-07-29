@@ -61,9 +61,22 @@ void main() {
   group('ComboBuilder — 추출 결과가 화면에 반영된다', () {
     ExtractionResult chicken() => const ExtractionResult(
           restaurantName: '교촌치킨 강남점',
+          brandName: '교촌치킨',
+          branchName: '강남점',
           foodCategory: '치킨',
           area: '강남',
-          menu: '레드콤보, 허니콤보',
+          dishes: [
+            ExtractedDish(
+              name: '레드콤보',
+              description: '매콤한 소스에 순살로 나온 반반 치킨',
+              options: ['순살', '매운맛', '치즈 추가'],
+            ),
+            ExtractedDish(name: '허니콤보', description: '달콤한 허니 소스'),
+          ],
+          keywords: ['치킨', '순살', '매운맛', '야식'],
+          spiceLevel: 'hot',
+          servingCount: 2,
+          isFranchise: true,
           confidence: 0.9,
         );
 
@@ -88,6 +101,17 @@ void main() {
       expect(names, contains('허니콤보'));
     });
 
+    test('AI가 뽑은 옵션이 메뉴 설명으로 들어간다', () {
+      final first = build().first.items.first;
+      expect(first.options, contains('순살'));
+      expect(first.options, contains('치즈 추가'));
+    });
+
+    test('옵션이 없으면 영상 묘사를 쓴다', () {
+      final second = build().first.items[1];
+      expect(second.options, '달콤한 허니 소스');
+    });
+
     test('음식 종류별 사이드가 붙는다', () {
       final names = build().first.items.map((e) => e.name).toList();
       expect(names.any((n) => n.contains('감자튀김')), isTrue);
@@ -99,7 +123,7 @@ void main() {
           restaurantName: '홍콩반점 성수점',
           foodCategory: '중식',
           area: '성수동',
-          menu: '짜장면, 탕수육',
+          dishes: [ExtractedDish(name: '짜장면'), ExtractedDish(name: '탕수육')],
           confidence: 0.9,
         ),
       );
@@ -126,7 +150,6 @@ void main() {
           restaurantName: '',
           foodCategory: '치킨',
           area: '강남',
-          menu: '',
           confidence: 0.4,
         ),
       );
