@@ -155,10 +155,14 @@ class _FailedScreen extends StatelessWidget {
           children: [
             Image.asset('assets/images/platter.png', width: 160, height: 160),
             const SizedBox(height: 24),
-            Text(
-              flow.failureMessage,
-              textAlign: TextAlign.center,
-              style: AppText.regular(16, color: AppColors.gray700),
+            // 좌우 여백이 없으면 긴 문구가 화면 끝에 붙어 잘려 보인다.
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                flow.failureMessage,
+                textAlign: TextAlign.center,
+                style: AppText.regular(16, color: AppColors.gray700),
+              ),
             ),
             const SizedBox(height: 24),
             TextButton(

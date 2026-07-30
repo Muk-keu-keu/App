@@ -227,13 +227,24 @@ class AppFlow extends ChangeNotifier {
     // 추출 결과만으로는 부족하고 원문이 함께 필요하다.
     source = AnalysisSource.fromUrl(url: uri, rawText: text);
 
+    // 호출 전에 키를 확인한다. 없거나 템플릿 값이면 네트워크를 태울 필요가 없고,
+    // "잠시 후 다시 시도"는 거짓말이 된다 — 키 문제는 재시도로 낫지 않는다.
+    if (!Env.hasGeminiKey) {
+      _fail(_keyProblemMessage);
+      return;
+    }
+
     ExtractionResult? result;
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
         result = await GeminiExtractor(apiKey: Env.geminiApiKey).extract(text);
         break;
+      } on GeminiAuthException {
+        // 키가 거부됐다. 재시도해도 같은 결과라 즉시 포기한다.
+        _fail(_keyProblemMessage);
+        return;
       } catch (_) {
-        // 1회 자동 재시도
+        // 그 밖의 실패(네트워크·타임아웃)는 1회 자동 재시도
       }
     }
     if (result == null) {
@@ -440,6 +451,16 @@ class AppFlow extends ChangeNotifier {
     postComments = [];
     _setStage(AppStage.jokboDetail);
   }
+
+  /// 키 문제일 때 보여줄 문구.
+  ///
+  /// 개발·디버그 빌드에서는 원인을 그대로 알려준다. 이 화면이 "잠시 후 다시
+  /// 시도해 주세요"로 보이면 네트워크 문제로 오해해 시연 중에 원인을 못 찾는다.
+  /// 릴리즈 빌드에서는 사용자에게 `.env` 를 말할 수 없으니 담당자 확인을 안내한다.
+  static String get _keyProblemMessage => kDebugMode
+      ? 'Gemini API 키가 설정되지 않았어요.\n'
+          '.env 의 GEMINI_API_KEY 를 실제 키로 채우고 다시 빌드해 주세요.'
+      : '지금 AI 분석을 쓸 수 없어요.\n담당자에게 문의해 주세요.';
 
   void _fail(String message) {
     _failureMessage = message;

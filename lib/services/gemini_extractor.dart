@@ -124,6 +124,19 @@ class ExtractionResult {
       );
 }
 
+/// API 키가 잘못됐을 때. 재시도 대상이 아니다.
+///
+/// Gemini 는 키가 틀리면 `400 INVALID_ARGUMENT — API key not valid` 를 돌려준다.
+/// 401 이 아니라 400 이라 일반 오류와 섞이기 쉬워 따로 표시해 둔다.
+class GeminiAuthException implements Exception {
+  const GeminiAuthException(this.statusCode);
+
+  final int statusCode;
+
+  @override
+  String toString() => 'GeminiAuthException(HTTP $statusCode) — API 키를 확인하세요';
+}
+
 /// Google Gemini generateContent 를 raw HTTP 로 호출한다.
 /// responseMimeType + responseSchema 로 응답이 항상 스키마에 맞는 JSON 이 되도록 강제한다.
 /// iOS 앱 GeminiExtractor.swift 와 같은 프롬프트·스키마를 쓴다. 한쪽을 바꾸면 다른 쪽도 맞춘다.
@@ -238,6 +251,11 @@ $text
         .timeout(const Duration(seconds: 30));
 
     if (response.statusCode != 200) {
+      // 키 문제는 재시도해도 절대 안 된다. 호출한 쪽이 구분해서 바로 포기하도록
+      // 별도 예외로 던진다. 그냥 재시도하면 실패까지 걸리는 시간만 두 배가 된다.
+      if (_isAuthFailure(response.statusCode)) {
+        throw GeminiAuthException(response.statusCode);
+      }
       throw Exception('Gemini HTTP ${response.statusCode}');
     }
 
@@ -248,6 +266,10 @@ $text
 
     return parseResponse(raw);
   }
+
+  /// Gemini 는 키가 틀리면 400, 권한 문제면 401·403 을 준다.
+  static bool _isAuthFailure(int statusCode) =>
+      statusCode == 400 || statusCode == 401 || statusCode == 403;
 
   /// responseSchema 로 유효한 JSON 이 보장되지만, 방어적으로 앞뒤 잡음을 제거하고 파싱한다.
   static ExtractionResult parseResponse(String answer) {
