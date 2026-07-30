@@ -14,6 +14,10 @@ import 'screens/combo_result_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/keyword_select_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/yogijokbo/post_compose_screen.dart';
+import 'screens/yogijokbo/post_detail_screen.dart';
+import 'screens/yogijokbo/post_order_screen.dart';
+import 'screens/yogijokbo/yogijokbo_home_screen.dart';
 import 'theme.dart';
 
 Future<void> main() async {
@@ -127,6 +131,10 @@ class _RootScreenState extends State<RootScreen> {
         AppStage.combo => const ComboResultScreen(),
         AppStage.comboList => const ComboListScreen(),
         AppStage.failed => const _FailedScreen(),
+        AppStage.jokboHome => const YogijokboHomeScreen(),
+        AppStage.jokboDetail => const PostDetailScreen(),
+        AppStage.jokboOrder => const PostOrderScreen(),
+        AppStage.jokboCompose => const PostComposeScreen(),
       },
     );
   }

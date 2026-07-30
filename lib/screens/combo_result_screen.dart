@@ -66,9 +66,38 @@ class _ComboResultScreenState extends State<ComboResultScreen> {
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
           child: SafeArea(
             top: false,
-            child: PrimaryButton(
-              label: '이대로 주문하기',
-              onPressed: () => _openYogiyo(combo.store.name),
+            child: Row(
+              children: [
+                // 요기족보 공유 진입. 작성 화면의 영상 카드·"주문한 메뉴"를 채우려면
+                // 조합과 분석 출처가 있는 이 화면에서 들어가야 한다.
+                GestureDetector(
+                  onTap: () => context.read<AppFlow>().openCompose(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: AppColors.softPinkFill,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.menu_book_outlined,
+                            size: 18, color: AppColors.primary),
+                        const SizedBox(width: 6),
+                        Text('족보 공유',
+                            style: AppText.semiBold(15,
+                                spacing: -0.4, color: AppColors.primary)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: PrimaryButton(
+                    label: '이대로 주문하기',
+                    onPressed: () => _openYogiyo(combo.store.name),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

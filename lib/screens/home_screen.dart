@@ -46,6 +46,42 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(height: 24),
+                // 요기족보 진입. 시안의 하단 탭바가 요기족보 홈에만 있어서
+                // 앱 홈에서 들어갈 문을 따로 뒀다.
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: GestureDetector(
+                    onTap: () => context.read<AppFlow>().openJokbo(),
+                    child: FigmaCard(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.menu_book_outlined,
+                              size: 22, color: AppColors.primary),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('요기족보 보러 가기',
+                                    style: AppText.semiBold(15, spacing: -0.4)),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '다른 사람들이 공유한 먹방 조합을 그대로 주문해요',
+                                  style: AppText.regular(13,
+                                      spacing: -0.3, color: AppColors.gray600),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.keyboard_arrow_right,
+                              size: 20, color: AppColors.gray500),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 40),
               ],
             ),

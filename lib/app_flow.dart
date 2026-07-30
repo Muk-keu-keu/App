@@ -2,9 +2,11 @@ import 'package:flutter/foundation.dart';
 
 import 'models/analysis_source.dart';
 import 'models/combo.dart';
+import 'models/post.dart';
 import 'models/preference.dart';
 import 'models/user_location.dart';
 import 'repository/combo_repository.dart';
+import 'repository/post_repository.dart';
 import 'env.dart';
 import 'services/gemini_extractor.dart';
 import 'services/location_service.dart';
@@ -18,16 +20,25 @@ enum AppStage {
   combo, // 가장 유사한 조합 하나
   comboList, // 여러 매장 비교
   failed, // 실패 안내
+  jokboHome, // 요기족보 홈 (실시간 인기 + 목록)
+  jokboDetail, // 조합 상세
+  jokboOrder, // 나도 주문하기
+  jokboCompose, // 족보 작성 (조합 공유)
 }
 
 /// iOS 앱 AppFlowModel 을 Dart 로 옮긴 것. 화면 전환과 분석 파이프라인을 담당한다.
 class AppFlow extends ChangeNotifier {
-  AppFlow({ComboRepository? repository, LocationService? locationService})
-      : _repository = repository ?? const MockComboRepository(),
-        _locationService = locationService ?? const GeolocatorLocationService();
+  AppFlow({
+    ComboRepository? repository,
+    LocationService? locationService,
+    PostRepository? postRepository,
+  })  : _repository = repository ?? const MockComboRepository(),
+        _locationService = locationService ?? const GeolocatorLocationService(),
+        _postRepository = postRepository ?? MockPostRepository();
 
   final ComboRepository _repository;
   final LocationService _locationService;
+  final PostRepository _postRepository;
 
   AppStage _stage = AppStage.login;
   AppStage get stage => _stage;
@@ -247,6 +258,188 @@ class AppFlow extends ChangeNotifier {
   }
 
   Future<List<MenuItem>> storeMenu(String storeId) => _repository.menu(storeId);
+
+  // ── 요기족보 ───────────────────────────────────────────────────────────────
+
+  List<YogijokboPost> posts = [];
+  bool postsLoading = false;
+
+  PostSort postSort = PostSort.popular;
+
+  /// "내 위치에서 가능한 조합만" 체크박스.
+  bool orderableOnly = false;
+
+  YogijokboPost? selectedPost;
+  List<PostComment> postComments = [];
+
+  /// "나도 주문하기" 로 받은, 현재 시점으로 다시 계산한 조합.
+  /// 게시글 스냅샷과 별개다 — 여기서 수량을 바꿔도 게시글은 그대로여야 한다.
+  ComboRecommendation? orderCombo;
+
+  /// 지금 위치에서 주문할 수 없는 조합인지.
+  bool orderUnavailable = false;
+
+  /// 작성 화면이 공유할 조합. 분석 결과에서 넘어온다.
+  ComboRecommendation? composeCombo;
+
+  /// 작성 화면 상단 영상 카드에 쓸 출처. 분석에 쓴 링크를 그대로 재사용한다.
+  PostSource? composeSource;
+
+  /// 반환된 Future 는 목록 로딩이 끝날 때 완료된다. 화면은 기다리지 않아도 되지만
+  /// 테스트가 로딩 완료를 기다릴 수 있어야 한다.
+  Future<void> openJokbo() {
+    _setStage(AppStage.jokboHome);
+    return loadPosts();
+  }
+
+  Future<void> loadPosts() async {
+    postsLoading = true;
+    notifyListeners();
+
+    posts = await _postRepository.list(
+      sort: postSort,
+      orderableOnly: orderableOnly,
+      location: location,
+    );
+
+    postsLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> updatePostSort(PostSort next) async {
+    if (postSort == next) return;
+    postSort = next;
+    await loadPosts();
+  }
+
+  Future<void> toggleOrderableOnly() async {
+    orderableOnly = !orderableOnly;
+    await loadPosts();
+  }
+
+  Future<void> openPost(String postId) async {
+    final post = await _postRepository.detail(postId);
+    if (post == null) return;
+    selectedPost = post;
+    postComments = [];
+    _setStage(AppStage.jokboDetail);
+
+    // 댓글은 화면을 띄운 뒤 채운다. 목록 API 가 댓글을 내려주지 않아 별도 호출이다.
+    postComments = await _postRepository.comments(postId);
+    notifyListeners();
+  }
+
+  void backToJokboHome() {
+    selectedPost = null;
+    postComments = [];
+    _setStage(AppStage.jokboHome);
+  }
+
+  Future<void> toggleLike() async {
+    final post = selectedPost;
+    if (post == null) return;
+
+    // 낙관적 업데이트. 서버가 변경 후 카운트를 돌려주므로 응답으로 덮어쓴다.
+    post.likedByMe = !post.likedByMe;
+    post.likeCount += post.likedByMe ? 1 : -1;
+    notifyListeners();
+
+    final result = await _postRepository.toggleLike(post.id);
+    post.likeCount = result.likeCount;
+    post.likedByMe = result.likedByMe;
+    notifyListeners();
+  }
+
+  Future<void> submitComment(String body) async {
+    final post = selectedPost;
+    final trimmed = body.trim();
+    if (post == null || trimmed.isEmpty) return;
+
+    final comment = await _postRepository.addComment(post.id, trimmed);
+    postComments = [...postComments, comment];
+    post.commentCount = postComments.length;
+    notifyListeners();
+  }
+
+  /// "나도 주문하기". 스냅샷이 지금도 주문 가능한지 서버가 재확인한다.
+  Future<void> startReorder() async {
+    final post = selectedPost;
+    if (post == null) return;
+
+    final result = await _postRepository.reorder(postId: post.id, location: location);
+    orderCombo = result.combo;
+    orderUnavailable = !result.orderable;
+    _setStage(AppStage.jokboOrder);
+  }
+
+  void backToPostDetail() {
+    orderCombo = null;
+    orderUnavailable = false;
+    _setStage(AppStage.jokboDetail);
+  }
+
+  /// 주문 화면의 수량 변경. 게시글 스냅샷이 아니라 복사본을 고친다.
+  void changeOrderQuantity({required String itemId, required int delta}) {
+    final combo = orderCombo;
+    if (combo == null) return;
+    final i = combo.items.indexWhere((e) => e.id == itemId);
+    if (i < 0) return;
+
+    final next = combo.items[i].quantity + delta;
+    if (next <= 0) {
+      combo.items.removeAt(i);
+    } else {
+      combo.items[i].quantity = next;
+    }
+    notifyListeners();
+  }
+
+  /// 분석 결과를 요기족보에 공유하러 간다.
+  /// 영상 카드는 분석에 쓴 링크(`source`)를 그대로 재사용한다.
+  void openCompose() {
+    final combo = selectedCombo;
+    if (combo == null) return;
+    composeCombo = combo.copy();
+    composeSource = _composeSourceFromAnalysis();
+    _setStage(AppStage.jokboCompose);
+  }
+
+  PostSource? _composeSourceFromAnalysis() {
+    final src = source;
+    if (src == null) return null;
+    // 영상 제목이 없으면 AI 요약을 대신 쓴다. 링크만 있는 카드는 무엇인지 알 수 없다.
+    final title = extraction?.summary.isNotEmpty == true
+        ? extraction!.summary
+        : src.rawText.split('\n').last;
+    return PostSource(videoTitle: title, videoUrl: src.url);
+  }
+
+  void cancelCompose() {
+    composeCombo = null;
+    composeSource = null;
+    _setStage(AppStage.combo);
+  }
+
+  /// 작성 완료. 공유한 글을 바로 열어 결과를 확인시켜 준다.
+  Future<void> submitPost({required String title, required String body}) async {
+    final combo = composeCombo;
+    if (combo == null || title.trim().isEmpty) return;
+
+    final post = await _postRepository.create(
+      title: title.trim(),
+      body: body.trim(),
+      // 사진 첨부는 조합 이미지를 그대로 쓴다. 갤러리 연동은 이번 범위가 아니다.
+      imagePaths: combo.items.map((e) => e.imagePath).toList(),
+      combo: combo,
+      source: composeSource,
+    );
+
+    composeCombo = null;
+    composeSource = null;
+    selectedPost = post;
+    postComments = [];
+    _setStage(AppStage.jokboDetail);
+  }
 
   void _fail(String message) {
     _failureMessage = message;
