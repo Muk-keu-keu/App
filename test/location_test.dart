@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:mukbang_ttaradamgi/app_flow.dart';
 import 'package:mukbang_ttaradamgi/models/user_location.dart';
 import 'package:mukbang_ttaradamgi/services/location_service.dart';
@@ -39,12 +40,29 @@ void main() {
       expect(manual.toJson(), {'lat': 0.0, 'lng': 0.0, 'address': '서울 송파구 잠실동 40-1'});
     });
 
-    test('주소가 없으면 좌표를 보여준다', () {
-      expect(_seoul.displayText, '37.5114, 127.0863');
-      expect(
-        _seoul.copyWith(address: '잠실동').displayText,
-        '잠실동',
+    test('동네 이름이 있으면 좌표 대신 그걸 보여준다', () {
+      // 숫자 좌표만 보이면 위치가 잡혔는지 사용자가 알 수 없다.
+      expect(_seoul.copyWith(placeLabel: '송파구 잠실동').displayText, '송파구 잠실동');
+    });
+
+    test('직접 입력한 주소가 동네 이름보다 우선한다', () {
+      final both = _seoul.copyWith(
+        address: '서울 송파구 잠실동 40-1',
+        placeLabel: '송파구 잠실동',
       );
+      expect(both.displayText, '서울 송파구 잠실동 40-1');
+    });
+
+    test('둘 다 없으면 마지막 수단으로 좌표를 보여준다', () {
+      expect(_seoul.displayText, '37.5114, 127.0863');
+    });
+
+    test('표시용 동네 이름은 서버로 보내지 않는다', () {
+      // 좌표만 보내는 계약을 지킨다. placeLabel 은 화면 전용이다.
+      final json = _seoul.copyWith(placeLabel: '송파구 잠실동').toJson();
+      expect(json.containsKey('placeLabel'), isFalse);
+      expect(json.containsKey('address'), isFalse);
+      expect(json.keys, containsAll(['lat', 'lng']));
     });
 
     test('디버그 프리셋은 시연 기준 동네를 담고 있다', () {
@@ -53,7 +71,61 @@ void main() {
         expect(preset.origin, LocationOrigin.debugOverride);
         expect(preset.lat, greaterThan(37));
         expect(preset.lng, greaterThan(126));
+        // 이름은 표시용이라 서버 요청에 실리지 않아야 한다
+        expect(preset.hasPlaceLabel, isTrue);
+        expect(preset.hasAddress, isFalse);
       }
+    });
+  });
+
+  group('좌표 → 구·동 변환', () {
+    Placemark mark({String? locality, String? subLocality, String? administrativeArea}) =>
+        Placemark(
+          locality: locality,
+          subLocality: subLocality,
+          administrativeArea: administrativeArea,
+        );
+
+    test('구와 동을 이어붙인다', () {
+      expect(
+        GeolocatorLocationService.formatPlacemark(
+          mark(locality: '연수구', subLocality: '송도동'),
+        ),
+        '연수구 송도동',
+      );
+    });
+
+    test('동만 있으면 동만 보여준다', () {
+      expect(
+        GeolocatorLocationService.formatPlacemark(mark(subLocality: '잠실동')),
+        '잠실동',
+      );
+    });
+
+    test('구와 동이 같은 값으로 오면 한 번만 쓴다', () {
+      expect(
+        GeolocatorLocationService.formatPlacemark(
+          mark(locality: '연수구', subLocality: '연수구'),
+        ),
+        '연수구',
+      );
+    });
+
+    test('구·동을 못 얻으면 시·도라도 보여준다', () {
+      expect(
+        GeolocatorLocationService.formatPlacemark(mark(administrativeArea: '인천광역시')),
+        '인천광역시',
+      );
+    });
+
+    test('아무것도 없으면 빈 문자열 — 화면이 좌표로 되돌아간다', () {
+      expect(GeolocatorLocationService.formatPlacemark(mark()), '');
+      expect(
+        GeolocatorLocationService.formatPlacemark(
+          mark(locality: '  ', subLocality: ''),
+        ),
+        '',
+      );
     });
   });
 

@@ -1,3 +1,5 @@
+import 'package:flutter/widgets.dart' show Locale;
+import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../models/user_location.dart';
@@ -78,11 +80,57 @@ class GeolocatorLocationService implements LocationService {
           lat: position.latitude,
           lng: position.longitude,
           origin: LocationOrigin.gps,
+          // 좌표만 보여주면 위치가 잡혔는지 사용자가 알 수 없어 동네 이름을 함께 채운다.
+          placeLabel: await describePlace(position.latitude, position.longitude),
         ),
       );
     } catch (_) {
       // 타임아웃·실내 등. 권한은 있으니 다시 시도할 수 있다.
       return const LocationResult.failed(LocationFailure.unavailable);
     }
+  }
+
+  /// 좌표를 "구 동" 형태로 바꾼다. 실패하면 빈 문자열.
+  ///
+  /// **표시 전용이다.** 서버로는 좌표만 보낸다.
+  /// OS 지오코더를 쓰므로 API 키가 필요 없고, 대신 네트워크가 없거나 기기가
+  /// 지오코딩을 지원하지 않으면 실패한다. 그때는 화면이 좌표를 그대로 보여준다 —
+  /// 동네 이름 하나 때문에 위치 수집 전체를 실패로 만들 이유가 없다.
+  static Future<String> describePlace(double lat, double lng) async {
+    try {
+      // geocoding 5.x 는 최상위 함수가 아니라 Geocoding 인스턴스를 쓴다.
+      // 로케일을 한국어로 고정해 기기 언어와 무관하게 "연수구 송도동"으로 받는다.
+      final marks = await Geocoding(locale: const Locale('ko', 'KR'))
+          .placemarkFromCoordinates(lat, lng);
+      if (marks.isEmpty) return '';
+      return formatPlacemark(marks.first);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /// 한국 주소에서 사용자가 알아보는 단위만 골라낸다.
+  ///
+  /// 한국은 보통 `locality` 가 시·구, `subLocality` 가 동으로 온다.
+  /// "인천광역시 연수구 송도동 123-4" 전체를 상단 바에 넣으면 잘리므로
+  /// **구·동 두 조각만** 쓴다. 둘 다 없으면 광역시/도라도 보여준다.
+  static String formatPlacemark(Placemark mark) {
+    final parts = [
+      mark.locality, // 연수구
+      mark.subLocality, // 송도동
+    ].whereType<String>().map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+
+    if (parts.isEmpty) {
+      // 구·동을 못 얻은 경우. 시·도라도 있으면 그걸 쓴다.
+      final fallback = (mark.administrativeArea ?? '').trim();
+      return fallback;
+    }
+
+    // locality 와 subLocality 가 같은 값으로 올 수 있어 "연수구 연수구"가 되는 것을 막는다.
+    final unique = <String>[];
+    for (final part in parts) {
+      if (!unique.contains(part)) unique.add(part);
+    }
+    return unique.join(' ');
   }
 }

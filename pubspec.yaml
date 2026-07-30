@@ -35,6 +35,10 @@ dependencies:
   # 현재 좌표 수집. 승중님 API 의 orderableOnly(GET /posts)와 reorder 가 lat/lng 를 요구한다.
   geolocator: ^14.0.3
 
+  # 좌표를 "구·동"으로 바꿔 화면에 보여주기 위한 것. **표시 전용**이다.
+  # 서버로는 여전히 좌표만 보낸다. OS 지오코더를 쓰므로 API 키가 필요 없다.
+  geocoding: ^5.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
