@@ -7,26 +7,36 @@
 
 ## 공통 규칙
 
+Users 명세와 동일한 규칙을 따른다.
+
 | 항목 | 규칙 |
 |---|---|
 | **Base Path** | `v1/...` |
-| **인증** | `Authorization: Bearer <token>` |
+| **인증** | `Authorization: Bearer <accessToken>` |
 | **권한** | `ALL` 비로그인 허용 · `USER` 로그인 필요 |
 | **날짜** | ISO 8601 + 타임존 (`2026-07-07T12:30:00+09:00`) |
-| **페이지네이션** | 커서 방식. 다음 페이지 없으면 `nextCursor: null` |
+| **페이지네이션** | `page`, `size` 쿼리 · 응답에 `page`, `size`, `totalElements`, `hasNext` |
 | **빈 값** | 배열 `[]`, 객체·미지정 `null`. 키를 생략하지 않는다 |
-| **이미지 URL** | 절대 경로 |
+| **이미지 URL** | 절대 경로. OCI Object Storage |
 | **enum** | 대문자 스네이크 (`LATEST`, `POPULAR`, `SOLD_OUT`, `YOUTUBE`) |
 | **금액** | 원 단위 정수 |
+| **본문 없는 응답** | `204 No Content` |
 
-**에러 응답**
+**에러 응답** — 코드는 도메인 약어 + 3자리 (Users 명세의 `U001`, `A002` 형식)
 
 ```json
 {
-  "code": "POST_NOT_FOUND",
+  "code": "P001",
   "message": "게시글을 찾을 수 없습니다."
 }
 ```
+
+| 코드 | 상태 | 상황 |
+|---|---|---|
+| `P001` | 404 | 게시글 없음 |
+| `P002` | 400 | `orderId` 와 `combo` 가 모두 없음 |
+| `P003` | 403 | 본인 글이 아님 |
+| `C001` | 404 | 댓글 없음 |
 
 ---
 
@@ -60,13 +70,13 @@
 | `orderableOnly` | Boolean | | "내 위치에서 가능한 조합만" |
 | `lat` | Double | 조건부 | `orderableOnly=true` 일 때 필수 |
 | `lng` | Double | 조건부 | `orderableOnly=true` 일 때 필수 |
-| `cursor` | String | | 페이지네이션 커서 |
+| `page` | Integer | | 0부터 시작. 기본 0 |
 | `size` | Integer | | 기본 20 |
 
 **Request**
 
 ```
-GET v1/posts?sort=POPULAR&orderableOnly=true&lat=37.5445&lng=127.0557&size=20
+GET v1/posts?sort=POPULAR&orderableOnly=true&lat=37.5445&lng=127.0557&page=0&size=20
 ```
 
 **Response** `200 OK`
@@ -96,12 +106,16 @@ GET v1/posts?sort=POPULAR&orderableOnly=true&lat=37.5445&lng=127.0557&size=20
       "createdAt": "2026-07-07T12:30:00+09:00"
     }
   ],
-  "nextCursor": "eyJpZCI6IjU1MGU4NDAwIn0="
+  "page": 0,
+  "size": 20,
+  "totalElements": 37,
+  "hasNext": true
 }
 ```
 
 **비고**
 
+- `v1/users/me/posts` 의 `posts[]` 원소와 동일 구조를 사용한다.
 - 조합 전체(`combo`)는 목록에 내리지 않는다. 상세(2번)에서 받는다.
 - `body` 는 목록 카드의 2줄 미리보기에 쓴다.
 - `source` 는 목록 카드의 출처 영상 배지에 쓴다.
@@ -370,12 +384,12 @@ DELETE v1/posts/550e8400-e29b-41d4-a716-446655440000/likes
 
 **Path Variable** — `postId : UUID`
 
-**Query Parameter** — `cursor : String`, `size : Integer` (기본 20)
+**Query Parameter** — `page : Integer` (기본 0), `size : Integer` (기본 20)
 
 **Request**
 
 ```
-GET v1/posts/550e8400-e29b-41d4-a716-446655440000/comments?size=20
+GET v1/posts/550e8400-e29b-41d4-a716-446655440000/comments?page=0&size=20
 ```
 
 **Response** `200 OK`
@@ -394,7 +408,10 @@ GET v1/posts/550e8400-e29b-41d4-a716-446655440000/comments?size=20
       "createdAt": "2026-07-07T13:02:00+09:00"
     }
   ],
-  "nextCursor": null
+  "page": 0,
+  "size": 20,
+  "totalElements": 4,
+  "hasNext": false
 }
 ```
 
@@ -456,7 +473,7 @@ GET v1/posts/550e8400-e29b-41d4-a716-446655440000/comments?size=20
 |---|---|---|---|
 | `lat` | Double | ✓ | 사용자 위치 위도 |
 | `lng` | Double | ✓ | 사용자 위치 경도 |
-| `address` | String | | 좌표를 얻지 못한 경우에만 |
+| `addressId` | Long | | 등록 주소를 선택한 경우. `v1/users/me/addresses` 의 id |
 
 **Request**
 
@@ -531,12 +548,11 @@ GET v1/posts/550e8400-e29b-41d4-a716-446655440000/comments?size=20
 
 ---
 
-## 위치 — 클라이언트가 보내는 값
+## 위치 — 좌표 확보 경로
 
-1번의 `orderableOnly` 와 9번의 `reorder` 가 좌표를 요구한다.
-클라이언트는 로그인 직후 1회 좌표를 수집한다.
+1번의 `orderableOnly` 와 9번의 `reorder` 가 좌표를 요구한다. 좌표는 두 경로로 얻는다.
 
-좌표를 얻은 경우
+**A. GPS** — 로그인 직후 1회 수집
 
 ```json
 {
@@ -545,36 +561,63 @@ GET v1/posts/550e8400-e29b-41d4-a716-446655440000/comments?size=20
 }
 ```
 
-위치 권한을 거부해 좌표를 모르는 경우 — 사용자가 주소를 직접 입력한다
+**B. 등록 주소** — 위치 권한을 거부했거나 다른 주소로 주문할 때
+
+`v1/users/me/addresses` 에 등록된 주소의 `latitude` / `longitude` 를 그대로 쓴다.
+좌표는 주소 등록 시 카카오 주소 검색이 채워 준다.
 
 ```json
 {
-  "lat": 0,
-  "lng": 0,
-  "address": "서울 송파구 잠실동 40-1"
+  "lat": 37.5125,
+  "lng": 127.1025,
+  "addressId": 3
 }
 ```
 
 **비고**
 
-- 클라이언트는 입력받은 주소를 좌표로 변환하지 않는다. 임의 좌표를 채우면 잘못된 매장이
-  매칭되므로, 주소 문자열만 전달하고 `lat`/`lng` 는 `0` 으로 보낸다.
-- 위치 권한 거부는 정상 경로다. 좌표가 없으면 `orderableOnly` 필터만 사용할 수 없다.
+- 클라이언트는 주소 문자열을 좌표로 변환하지 않는다. 임의 좌표를 채우면 잘못된 매장이
+  매칭된다. 좌표가 필요한 요청은 GPS 또는 등록 주소 중 하나에서 좌표를 확보한 뒤 보낸다.
+- 위치 권한 거부는 정상 경로다. 등록 주소가 하나도 없고 GPS 도 없으면 `orderableOnly`
+  필터만 사용할 수 없다.
+
+---
+
+## 연관 API (Users 명세)
+
+요기족보 화면이 함께 호출하는 엔드포인트.
+
+| End Point | 용도 |
+|---|---|
+| `GET v1/users/me/posts` | 마이페이지 — 내가 쓴 요기족보 글. `posts[]` 는 1번 `items[]` 와 동일 구조 |
+| `GET v1/users/me/orders` | 족보 작성 진입점. `isPostedToJokbo` 로 이미 공유한 주문을 구분한다 |
+| `GET v1/users/me/addresses` | 좌표 확보 경로 B |
+| `GET v1/users/me/preferences` | 조건 선택 시트 기본값 |
+| `POST v1/uploads/images` | 게시글 첨부 사진 (본 문서 4번) |
 
 ---
 
 ## 확정 필요 항목
 
+### Users 명세와 맞춰야 하는 것
+
 | # | 항목 | 관련 |
 |---|---|---|
-| 1 | **주소 → 좌표 변환을 서버에서 처리 가능한지.** 불가하면 클라이언트에 지오코딩을 추가해야 한다 | 위치 |
-| 2 | `/api` 접두사 유무 — `v1/posts` vs `/api/v1/posts` | 전체 |
-| 3 | "실시간 인기" 산정 기준 — 누적 좋아요 / 최근 24h / 조회수 반영 | 1번 |
-| 4 | `source` 필드 추가 가능 여부 (목록·상세 응답, 작성 요청) | 1·2·3번 |
-| 5 | 목록 응답에 `body`, `author.id` 포함 가능 여부 | 1번 |
-| 6 | 주문 이력 없이 공유 — `combo` 직접 전달 허용 여부 | 3번 |
-| 7 | 댓글 작성 응답에 `commentCount` 포함 가능 여부 | 8번 |
-| 8 | 이미지 업로드 제한 — 장수·용량·허용 포맷 | 4번 |
-| 9 | 댓글 대댓글·수정·삭제 범위 포함 여부 | 7번 |
-| 10 | 배달 불가 시 같은 브랜드 다른 지점 제안 여부 | 9번 |
-| 11 | 찜 연동 — 조합을 요기요 찜에 저장하는 기능을 이 API 에 포함할지 별도 API 로 분리할지 | — |
+| 1 | **`spicyLevel` 값 범위 불일치.** `v1/users/me/preferences` 는 `MILD` / `MEDIUM` / `HOT` 3단계, 조합 분석 추출 스키마는 `NONE` / `MILD` / `MEDIUM` / `HOT` / `EXTREME` 5단계. 3단계로 통일하거나 매핑 규칙 확정 | preferences |
+| 2 | **`healthyPleasureDefault` 필드명.** 해당 모드 명칭이 '헬시플레저' → '비건모드' 로 변경됨(3차 회의). 필드명을 `veganModeDefault` 로 바꿀지 유지할지 | preferences |
+| 3 | **`sourceVideoTitle` 위치.** `v1/users/me/orders` 는 주문에 `sourceVideoTitle` 을 갖는다. 요기족보 게시글도 같은 정보가 필요하므로 `source` 객체로 통일할지, 주문에서 승계할지 | orders · 1·2·3번 |
+| 4 | **게시글 식별자 타입.** 본 문서는 `postId : UUID`, Users 명세의 주소는 `addressId : Long`. 도메인별로 달라도 되는지 | 전체 |
+
+### 요기족보 자체 항목
+
+| # | 항목 | 관련 |
+|---|---|---|
+| 5 | "실시간 인기" 산정 기준 — 누적 좋아요 / 최근 24h / 조회수 반영 | 1번 |
+| 6 | `source` 필드 추가 가능 여부 (목록·상세 응답, 작성 요청) | 1·2·3번 |
+| 7 | 목록 응답에 `body`, `author.id` 포함 가능 여부 | 1번 |
+| 8 | 주문 이력 없이 공유 — `combo` 직접 전달 허용 여부. 조합 분석 결과에서 바로 공유하는 경로가 있다 | 3번 |
+| 9 | 댓글 작성 응답에 `commentCount` 포함 가능 여부 | 8번 |
+| 10 | 이미지 업로드 제한 — 장수·용량·허용 포맷 | 4번 |
+| 11 | 댓글 대댓글·수정·삭제 범위 포함 여부 | 7번 |
+| 12 | 배달 불가 시 같은 브랜드 다른 지점 제안 여부 | 9번 |
+| 13 | 찜 연동 — `v1/users/me/bookmarks` 가 P2 로드맵으로 이관됨. 요기족보 조합 찜을 이번 범위에 포함할지 | bookmarks |
