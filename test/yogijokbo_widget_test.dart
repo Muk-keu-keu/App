@@ -9,6 +9,7 @@ import 'package:mukbang_ttaradamgi/screens/yogijokbo/post_order_screen.dart';
 import 'package:mukbang_ttaradamgi/screens/yogijokbo/yogijokbo_home_screen.dart';
 import 'package:mukbang_ttaradamgi/services/location_service.dart';
 import 'package:mukbang_ttaradamgi/theme.dart';
+import 'package:mukbang_ttaradamgi/widgets/ds.dart';
 
 /// 위치 수집이 테스트에 끼어들지 않게 실패로 고정한다.
 class _NoLocation implements LocationService {
@@ -58,8 +59,9 @@ void main() {
     expect(find.text('요기족보'), findsWidgets);
     expect(find.text('내 위치에서 가능한 조합만'), findsOneWidget);
     expect(find.text('떵개 추천 두찜 로제 닭발'), findsWidgets);
-    // 하단 탭바 5개
+    // 하단 내비 4탭
     expect(find.text('주문내역'), findsOneWidget);
+    expect(find.text('마이요기요'), findsOneWidget);
   });
 
   testWidgets('목록 항목을 탭하면 상세로 넘어간다', (tester) async {
@@ -105,11 +107,17 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('주문하기'), findsOneWidget);
-    expect(find.text('결제 금액'), findsOneWidget);
+    expect(find.text('결제하기'), findsOneWidget);
+
+    // 결제 요약은 화면 밖이라 아직 만들어지지 않았다. 스크롤해서 확인한다.
+    await tester.scrollUntilVisible(
+      find.text('결제 금액'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     // 주문 20,000 + 배달비 3,000 = 23,000 (시안과 같은 값)
     expect(find.text('23,000원'), findsOneWidget);
     expect(find.text('20,000원'), findsOneWidget);
-    expect(find.text('결제하기'), findsOneWidget);
   });
 
   testWidgets('주문 불가 매장은 결제 버튼을 막는다', (tester) async {
@@ -119,9 +127,10 @@ void main() {
     await pumpScreen(tester, const PostOrderScreen(), flow);
 
     expect(tester.takeException(), isNull);
-    expect(find.text('결제하기'), findsNothing);
-    expect(find.text('이 위치에서는 주문할 수 없어요'), findsOneWidget);
-    expect(find.text('지금 위치에서는 이 매장이 배달하지 않아요'), findsOneWidget);
+    // 시안의 버튼은 하나뿐이라, 막을 때는 바꿔 끼우지 않고 비활성으로 그린다.
+    final button = tester.widget<DsButton>(find.byType(DsButton));
+    expect(button.onPressed, isNull);
+    expect(find.text('지금 이 위치에서는 주문할 수 없는 조합이에요'), findsOneWidget);
   });
 
   testWidgets('족보 작성이 크래시 없이 그려지고 제목 없이는 공유할 수 없다', (tester) async {
@@ -139,8 +148,9 @@ void main() {
     expect(find.text('사진 첨부'), findsOneWidget);
 
     // 제목이 비어 있으면 공유 버튼이 잠긴다
-    expect(find.text('제목을 입력해 주세요'), findsOneWidget);
-    expect(find.text('조합 공유하기'), findsNothing);
+    expect(find.text('제목을 입력해주세요'), findsOneWidget);
+    final share = tester.widget<DsButton>(find.byType(DsButton));
+    expect(share.onPressed, isNull);
   });
 
   testWidgets('제목을 입력하면 공유 버튼이 열리고 글자수가 갱신된다', (tester) async {
@@ -155,6 +165,7 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('9/20'), findsOneWidget); // '내 로제닭발 조합' = 공백 포함 9자
-    expect(find.text('조합 공유하기'), findsOneWidget);
+    final share = tester.widget<DsButton>(find.byType(DsButton));
+    expect(share.onPressed, isNotNull);
   });
 }
