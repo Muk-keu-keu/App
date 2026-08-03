@@ -31,6 +31,15 @@ Future<void> showMenuEditSheet(BuildContext context, ComboRecommendation combo) 
 class MenuEditSheet extends StatefulWidget {
   const MenuEditSheet({super.key, required this.combo});
 
+  /// 어디서 열든 같은 모양이 되도록 모으는 헬퍼. AddressInputSheet 와 같은 형태다.
+  static Future<void> show(BuildContext context, ComboRecommendation combo) =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => MenuEditSheet(combo: combo),
+      );
+
   final ComboRecommendation combo;
 
   @override
