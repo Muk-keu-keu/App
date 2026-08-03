@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_flow.dart';
@@ -6,13 +7,12 @@ import '../../models/combo.dart';
 import '../../models/post.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
-import 'jokbo_widgets.dart';
+import '../../widgets/ds.dart';
 
-/// 족보 작성 (Figma "조합 공유").
-/// 분석해서 만든 내 조합을 요기족보에 공유한다.
+/// Figma "조합 공유" (node 681:7992).
 ///
-/// 진입은 조합 결과 화면이다. 그래야 시안 상단의 영상 카드(출처)와 "주문한 메뉴"를
-/// 채울 수 있다. 빈 화면에서 시작하면 어떤 조합을 공유하는지 알 수 없다.
+/// 주문한 조합을 요기족보에 공유한다. 상단에 출처 영상, 그 아래 "주문한 메뉴"(접힘),
+/// 제목·본문 입력과 사진 첨부가 온다.
 class PostComposeScreen extends StatefulWidget {
   const PostComposeScreen({super.key});
 
@@ -49,7 +49,8 @@ class _PostComposeScreenState extends State<PostComposeScreen> {
     super.dispose();
   }
 
-  bool get _canSubmit => _titleController.text.trim().isNotEmpty && !_submitting;
+  bool get _canSubmit =>
+      !_submitting && _titleController.text.trim().isNotEmpty;
 
   Future<void> _submit() async {
     if (!_canSubmit) return;
@@ -58,7 +59,6 @@ class _PostComposeScreenState extends State<PostComposeScreen> {
           title: _titleController.text,
           body: _bodyController.text,
         );
-    // 성공하면 상세 화면으로 넘어가 이 위젯이 사라진다. 실패 시에만 되돌린다.
     if (mounted) setState(() => _submitting = false);
   }
 
@@ -66,234 +66,296 @@ class _PostComposeScreenState extends State<PostComposeScreen> {
   Widget build(BuildContext context) {
     final flow = context.watch<AppFlow>();
     final combo = flow.composeCombo;
-
     if (combo == null) return const SizedBox.shrink();
 
     return Container(
-      color: AppColors.pageBackground,
+      color: AppColors.bg,
       child: Column(
         children: [
-          AppHeader(title: '족보 작성', onBack: () => context.read<AppFlow>().cancelCompose()),
+          DsHeader.detail(
+            title: '족보 작성',
+            onBack: () => context.read<AppFlow>().cancelCompose(),
+          ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.only(bottom: 16),
+              padding: EdgeInsets.zero,
               children: [
                 if (flow.composeSource != null)
-                  SourceVideoCard(
-                    title: flow.composeSource!.videoTitle,
-                    author: const PostAuthor(id: 'me', nickname: '나'),
-                    imagePath: combo.items.first.imagePath,
-                    imageUrl: combo.items.first.imageUrl,
-                  ),
-                _orderedMenuSection(combo),
-                const SizedBox(height: 8),
-                _writeSection(),
-                const SizedBox(height: 8),
-                _photoSection(combo),
+                  _VideoSection(source: flow.composeSource!, combo: combo),
+                _MenuToggle(
+                  combo: combo,
+                  expanded: _menuExpanded,
+                  onToggle: () => setState(() => _menuExpanded = !_menuExpanded),
+                ),
+                _FormSection(
+                  titleController: _titleController,
+                  bodyController: _bodyController,
+                  titleMax: _titleMax,
+                  bodyMax: _bodyMax,
+                ),
               ],
             ),
           ),
-          Container(
-            color: Colors.white,
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-            child: SafeArea(
-              top: false,
-              child: _canSubmit
-                  ? PrimaryButton(label: '조합 공유하기', onPressed: _submit)
-                  : _disabledButton(),
-            ),
-          ),
+          _BottomCta(onSubmit: _canSubmit ? _submit : null),
         ],
       ),
     );
   }
+}
 
-  /// 제목이 없으면 공유할 수 없다. 눌리는 버튼이 아무 일도 안 하는 것보다
-  /// 왜 못 누르는지 보이는 편이 낫다.
-  Widget _disabledButton() => Container(
+class _VideoSection extends StatelessWidget {
+  const _VideoSection({required this.source, required this.combo});
+
+  final PostSource source;
+  final ComboRecommendation combo;
+
+  @override
+  Widget build(BuildContext context) => Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: AppColors.gray300,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Text(
-          _submitting ? '공유 중…' : '제목을 입력해 주세요',
-          style: AppText.semiBold(16, spacing: -0.4, color: AppColors.gray600),
+        color: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        child: DsVideoSummary(
+          thumbnail: RemoteOrAssetImage(
+            imageUrl: combo.items.isEmpty ? null : combo.items.first.imageUrl,
+            assetPath: combo.store.imagePath,
+            size: 100,
+            radius: 0,
+          ),
+          videoTitle: source.videoTitle,
+          creatorName: combo.store.name,
         ),
       );
+}
 
-  Widget _orderedMenuSection(ComboRecommendation combo) => Container(
+/// "주문한 메뉴" — 눌러서 펼친다. 시안 기본은 접힌 상태다.
+class _MenuToggle extends StatelessWidget {
+  const _MenuToggle({
+    required this.combo,
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  final ComboRecommendation combo;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
         color: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             GestureDetector(
-              onTap: () => setState(() => _menuExpanded = !_menuExpanded),
+              onTap: onToggle,
               behavior: HitTestBehavior.opaque,
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('주문한 메뉴', style: AppText.semiBold(16, spacing: -0.4)),
-                  const Spacer(),
-                  Icon(
-                    _menuExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                    size: 22,
-                    color: AppColors.gray800,
+                  Text('주문한 메뉴', style: AppText.sub2()),
+                  RotatedBox(
+                    quarterTurns: expanded ? 2 : 0,
+                    child: const DsChevron.down(),
                   ),
                 ],
               ),
             ),
-            if (_menuExpanded) ...[
-              const SizedBox(height: 12),
-              Text(combo.store.name,
-                  style: AppText.medium(14, spacing: -0.35, color: AppColors.gray700)),
-              for (final item in combo.items)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      RemoteOrAssetImage(
-                        imageUrl: item.imageUrl,
-                        assetPath: item.imagePath,
-                        size: 48,
-                        radius: 24,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('${item.name} × ${item.quantity}',
-                                style: AppText.semiBold(14, spacing: -0.35)),
-                            const SizedBox(height: 2),
-                            Text(
-                              item.options,
-                              style: AppText.regular(12,
-                                  spacing: -0.3, color: AppColors.gray600),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ],
-        ),
-      );
-
-  Widget _writeSection() => Container(
-        color: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('먹방 속 조합, 어땠나요?', style: AppText.semiBold(16, spacing: -0.4)),
-            const SizedBox(height: 12),
-            _field(
-              controller: _titleController,
-              hint: '제목을 입력해주세요.',
-              maxLength: _titleMax,
-              maxLines: 1,
-            ),
-            const SizedBox(height: 12),
-            _field(
-              controller: _bodyController,
-              hint: '본문을 입력해주세요.',
-              maxLength: _bodyMax,
-              maxLines: 7,
-            ),
-          ],
-        ),
-      );
-
-  /// 글자수 카운터를 입력창 안 우측에 두는 시안 형태.
-  /// `maxLength` 를 TextField 에 직접 주면 기본 카운터가 밖에 붙어 시안과 달라지므로
-  /// `counterText: ''` 로 숨기고 직접 그린다.
-  Widget _field({
-    required TextEditingController controller,
-    required String hint,
-    required int maxLength,
-    required int maxLines,
-  }) =>
-      Stack(
-        children: [
-          TextField(
-            controller: controller,
-            maxLength: maxLength,
-            maxLines: maxLines,
-            minLines: maxLines,
-            style: AppText.regular(15, spacing: -0.35),
-            decoration: InputDecoration(
-              hintText: hint,
-              hintStyle: AppText.regular(15, spacing: -0.35, color: AppColors.gray500),
-              filled: true,
-              fillColor: AppColors.gray200,
-              counterText: '',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.fromLTRB(16, 14, 60, 14),
-            ),
-          ),
-          Positioned(
-            right: 12,
-            bottom: 10,
-            child: Text(
-              '${controller.text.characters.length}/$maxLength',
-              style: AppText.regular(12, spacing: -0.3, color: AppColors.gray500),
-            ),
-          ),
-        ],
-      );
-
-  /// 사진 첨부.
-  ///
-  /// 갤러리·카메라 연동(image_picker)은 이번 범위가 아니라 넣지 않았다.
-  /// 대신 조합 이미지가 기본 첨부로 들어가 있는 것을 보여준다 — 공유된 글에
-  /// 사진이 하나도 없으면 목록 썸네일이 비기 때문이다.
-  Widget _photoSection(ComboRecommendation combo) => Container(
-        color: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('사진 첨부', style: AppText.semiBold(16, spacing: -0.4)),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Container(
-                  width: 84,
-                  height: 84,
-                  decoration: BoxDecoration(
-                    color: AppColors.gray200,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.photo_camera_outlined,
-                      size: 26, color: AppColors.gray500),
-                ),
-                const SizedBox(width: 12),
-                for (final item in combo.items.take(2))
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: RemoteOrAssetImage(
+            if (expanded)
+              for (final item in combo.items) ...[
+                const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RemoteOrAssetImage(
                       imageUrl: item.imageUrl,
                       assetPath: item.imagePath,
-                      size: 84,
+                      size: 48,
                     ),
-                  ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item.name,
+                              style: AppText.sub2().copyWith(letterSpacing: -0.4)),
+                          const SizedBox(height: 4),
+                          Text(item.options,
+                              style: AppText.caption(color: AppColors.gray600)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+          ],
+        ),
+      );
+}
+
+class _FormSection extends StatelessWidget {
+  const _FormSection({
+    required this.titleController,
+    required this.bodyController,
+    required this.titleMax,
+    required this.bodyMax,
+  });
+
+  final TextEditingController titleController;
+  final TextEditingController bodyController;
+  final int titleMax;
+  final int bodyMax;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        color: Colors.white,
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('먹방 속 조합, 어땠나요?', style: AppText.sub2()),
+            const SizedBox(height: 16),
+            _Field(
+              controller: titleController,
+              hint: '제목을 입력해주세요',
+              maxLength: titleMax,
+            ),
+            const SizedBox(height: 16),
+            _Field(
+              controller: bodyController,
+              hint: '본문을 입력해주세요',
+              maxLength: bodyMax,
+              height: 189,
+              multiline: true,
+            ),
+            const SizedBox(height: 12),
+            Text('사진 첨부',
+                style: AppText.sub2().copyWith(letterSpacing: 0)),
+            const SizedBox(height: 12),
+            const _PhotoRow(),
+          ],
+        ),
+      );
+}
+
+/// 시안의 입력칸. 회색 판 안에 글자수 카운터가 함께 들어간다.
+/// 한 줄짜리는 오른쪽에, 여러 줄짜리는 오른쪽 아래에 붙는다.
+class _Field extends StatelessWidget {
+  const _Field({
+    required this.controller,
+    required this.hint,
+    required this.maxLength,
+    this.height = 44,
+    this.multiline = false,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final int maxLength;
+  final double height;
+  final bool multiline;
+
+  @override
+  Widget build(BuildContext context) {
+    final counter = Text(
+      '${controller.text.characters.length}/$maxLength',
+      style: AppText.btn3(color: AppColors.gray500),
+    );
+
+    final field = TextField(
+      controller: controller,
+      maxLength: maxLength,
+      maxLines: multiline ? null : 1,
+      expands: multiline,
+      textAlignVertical: TextAlignVertical.top,
+      style: AppText.body2().copyWith(letterSpacing: -0.35),
+      decoration: InputDecoration(
+        isDense: true,
+        border: InputBorder.none,
+        counterText: '',
+        hintText: hint,
+        hintStyle: AppText.body2(color: AppColors.gray600)
+            .copyWith(letterSpacing: -0.35),
+      ),
+    );
+
+    return Container(
+      height: height,
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.gray200,
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+      ),
+      child: multiline
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(child: field),
+                const SizedBox(height: 8),
+                counter,
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(child: field),
+                const SizedBox(width: 8),
+                counter,
               ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              '조합 사진이 기본으로 첨부돼요. 갤러리에서 고르는 기능은 준비 중이에요.',
-              style: AppText.regular(12, spacing: -0.3, color: AppColors.gray500),
+    );
+  }
+}
+
+/// 사진 첨부. 촬영·선택이 이번 범위가 아니라 추가 버튼 자리만 시안대로 둔다.
+class _PhotoRow extends StatelessWidget {
+  const _PhotoRow();
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.gray200,
+                border: Border.all(color: AppColors.gray400),
+                borderRadius: BorderRadius.circular(AppRadius.chip),
+              ),
+              child: SvgPicture.asset(DsIcons.camera, width: 24, height: 24),
             ),
           ],
+        ),
+      );
+}
+
+class _BottomCta extends StatelessWidget {
+  const _BottomCta({required this.onSubmit});
+
+  final VoidCallback? onSubmit;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF5D5D5D).withValues(alpha: 0.15),
+              blurRadius: 10,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        child: SafeArea(
+          top: false,
+          child: DsButton(label: '조합 공유하기', onPressed: onSubmit),
         ),
       );
 }
