@@ -79,14 +79,36 @@ void main() {
   });
 
   group('좌표 → 구·동 변환', () {
-    Placemark mark({String? locality, String? subLocality, String? administrativeArea}) =>
+    Placemark mark({
+      String? locality,
+      String? subLocality,
+      String? subAdministrativeArea,
+      String? administrativeArea,
+    }) =>
         Placemark(
           locality: locality,
           subLocality: subLocality,
+          subAdministrativeArea: subAdministrativeArea,
           administrativeArea: administrativeArea,
         );
 
-    test('구와 동을 이어붙인다', () {
+    test('iOS 배치 — 구가 subAdministrativeArea 로 온다', () {
+      // 실제 iOS 시뮬레이터 관측값. locality 에 시가 들어와 그대로 쓰면
+      // "서울특별시 삼성동" 이 된다. 배달 맥락에서는 구가 필요하다.
+      expect(
+        GeolocatorLocationService.formatPlacemark(
+          mark(
+            administrativeArea: '서울특별시',
+            locality: '서울특별시',
+            subAdministrativeArea: '강남구',
+            subLocality: '삼성동',
+          ),
+        ),
+        '강남구 삼성동',
+      );
+    });
+
+    test('Android 배치 — 구가 locality 로 온다', () {
       expect(
         GeolocatorLocationService.formatPlacemark(
           mark(locality: '연수구', subLocality: '송도동'),
@@ -111,10 +133,23 @@ void main() {
       );
     });
 
+    test('구를 못 얻으면 동만 보여준다 — 시는 앞에 붙이지 않는다', () {
+      expect(
+        GeolocatorLocationService.formatPlacemark(
+          mark(locality: '서울특별시', subLocality: '삼성동'),
+        ),
+        '삼성동',
+      );
+    });
+
     test('구·동을 못 얻으면 시·도라도 보여준다', () {
       expect(
         GeolocatorLocationService.formatPlacemark(mark(administrativeArea: '인천광역시')),
         '인천광역시',
+      );
+      expect(
+        GeolocatorLocationService.formatPlacemark(mark(locality: '세종특별자치시')),
+        '세종특별자치시',
       );
     });
 

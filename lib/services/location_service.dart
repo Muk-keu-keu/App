@@ -109,28 +109,37 @@ class GeolocatorLocationService implements LocationService {
     }
   }
 
-  /// 한국 주소에서 사용자가 알아보는 단위만 골라낸다.
+  /// 한국 주소에서 사용자가 알아보는 단위(구·동)만 골라낸다.
   ///
-  /// 한국은 보통 `locality` 가 시·구, `subLocality` 가 동으로 온다.
-  /// "인천광역시 연수구 송도동 123-4" 전체를 상단 바에 넣으면 잘리므로
-  /// **구·동 두 조각만** 쓴다. 둘 다 없으면 광역시/도라도 보여준다.
+  /// **필드 배치가 플랫폼마다 다르다.** iOS 는 `locality` 에 시(서울특별시)를 넣고
+  /// 구는 `subAdministrativeArea` 로 보낸다. Android 는 `locality` 에 구가 오기도 한다.
+  /// 그래서 필드 이름이 아니라 **접미사(구·군)로 판별**한다.
+  ///
+  /// "서울특별시 삼성동" 보다 "강남구 삼성동" 이 배달 맥락에서 훨씬 유용하다.
+  /// 시·도는 구를 못 찾았을 때의 마지막 수단이다.
   static String formatPlacemark(Placemark mark) {
-    final parts = [
-      mark.locality, // 연수구
-      mark.subLocality, // 송도동
-    ].whereType<String>().map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    String clean(String? v) => (v ?? '').trim();
 
-    if (parts.isEmpty) {
-      // 구·동을 못 얻은 경우. 시·도라도 있으면 그걸 쓴다.
-      final fallback = (mark.administrativeArea ?? '').trim();
-      return fallback;
-    }
+    bool isDistrict(String v) => v.endsWith('구') || v.endsWith('군');
 
-    // locality 와 subLocality 가 같은 값으로 올 수 있어 "연수구 연수구"가 되는 것을 막는다.
-    final unique = <String>[];
-    for (final part in parts) {
-      if (!unique.contains(part)) unique.add(part);
-    }
-    return unique.join(' ');
+    // 구 후보 — 플랫폼에 따라 들어오는 자리가 달라 둘 다 본다.
+    final district = [
+      clean(mark.subAdministrativeArea),
+      clean(mark.locality),
+    ].firstWhere((v) => v.isNotEmpty && isDistrict(v), orElse: () => '');
+
+    final neighborhood = clean(mark.subLocality);
+
+    final parts = <String>[];
+    if (district.isNotEmpty) parts.add(district);
+    // 같은 값이 두 자리에 들어와 "강남구 강남구" 가 되는 것을 막는다.
+    if (neighborhood.isNotEmpty && neighborhood != district) parts.add(neighborhood);
+
+    if (parts.isNotEmpty) return parts.join(' ');
+
+    // 구·동을 못 얻었다. 시·도라도 보여준다.
+    final city = clean(mark.locality);
+    if (city.isNotEmpty) return city;
+    return clean(mark.administrativeArea);
   }
 }
