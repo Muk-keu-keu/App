@@ -2,10 +2,12 @@ import 'package:flutter/foundation.dart';
 
 import 'models/analysis_source.dart';
 import 'models/combo.dart';
+import 'models/order.dart';
 import 'models/post.dart';
 import 'models/preference.dart';
 import 'models/user_location.dart';
 import 'repository/combo_repository.dart';
+import 'repository/order_repository.dart';
 import 'repository/post_repository.dart';
 import 'env.dart';
 import 'services/gemini_extractor.dart';
@@ -15,6 +17,7 @@ import 'services/metadata_fetcher.dart';
 enum AppStage {
   login, // 로그인 (앱 첫 진입)
   yogiyoHome, // 요기요 메인 홈 (배너·검색·카테고리·요기족보 차트)
+  orders, // 주문내역 (요기족보 작성 진입점)
   home, // 공유 안내
   keyword, // 취향 설정
   analyzing, // 분석 중
@@ -33,13 +36,16 @@ class AppFlow extends ChangeNotifier {
     ComboRepository? repository,
     LocationService? locationService,
     PostRepository? postRepository,
+    OrderRepository? orderRepository,
   })  : _repository = repository ?? const MockComboRepository(),
         _locationService = locationService ?? const GeolocatorLocationService(),
-        _postRepository = postRepository ?? MockPostRepository();
+        _postRepository = postRepository ?? MockPostRepository(),
+        _orderRepository = orderRepository ?? MockOrderRepository();
 
   final ComboRepository _repository;
   final LocationService _locationService;
   final PostRepository _postRepository;
+  final OrderRepository _orderRepository;
 
   AppStage _stage = AppStage.login;
   AppStage get stage => _stage;
@@ -101,6 +107,37 @@ class AppFlow extends ChangeNotifier {
   void openShareGuide() => _setStage(AppStage.home);
 
   void backToYogiyoHome() => _setStage(AppStage.yogiyoHome);
+
+  // ── 주문내역 ───────────────────────────────────────────────────────────────
+
+  List<OrderHistoryItem> orders = [];
+
+  Future<void> openOrders() async {
+    _setStage(AppStage.orders);
+    orders = await _orderRepository.list();
+    notifyListeners();
+  }
+
+  /// 주문 이력에서 족보 작성으로. 그 주문의 조합과 출처 영상을 그대로 들고 간다.
+  /// 회의록에서 정한 작성 진입점이다.
+  void composeFromOrder(OrderHistoryItem order) {
+    composeCombo = order.combo.copy();
+    composeSource = order.sourceVideoTitle.isEmpty
+        ? null
+        : PostSource(videoTitle: order.sourceVideoTitle, videoUrl: '');
+    composeOrderId = order.orderId;
+    _setStage(AppStage.jokboCompose);
+  }
+
+  /// 작성 완료 시 어떤 주문에서 왔는지 표시하기 위해 들고 있는다.
+  String? composeOrderId;
+
+  /// "다시 주문" — 주문 화면을 그 조합으로 연다.
+  void reorderFromHistory(OrderHistoryItem order) {
+    orderCombo = order.combo.copy();
+    orderUnavailable = false;
+    _setStage(AppStage.jokboOrder);
+  }
 
   UserLocation? location;
 

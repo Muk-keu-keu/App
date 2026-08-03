@@ -11,6 +11,7 @@ import 'env.dart';
 import 'screens/analyze_screen.dart';
 import 'screens/combo_list_screen.dart';
 import 'screens/combo_result_screen.dart';
+import 'screens/home/order_history_screen.dart';
 import 'screens/home/yogiyo_home_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/keyword_select_screen.dart';
@@ -127,6 +128,7 @@ class _RootScreenState extends State<RootScreen> {
       body: switch (stage) {
         AppStage.login => const LoginScreen(),
         AppStage.yogiyoHome => const YogiyoHomeScreen(),
+        AppStage.orders => const OrderHistoryScreen(),
         AppStage.home => const HomeScreen(),
         AppStage.keyword => const KeywordSelectScreen(),
         AppStage.analyzing => const AnalyzeScreen(),

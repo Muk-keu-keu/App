@@ -58,8 +58,9 @@ class YogiyoHomeScreen extends StatelessWidget {
       case DsTab.jokbo:
         flow.openJokbo();
       case DsTab.orders:
+        flow.openOrders();
       case DsTab.my:
-        // 주문내역·마이요기요 화면은 아직 없다. 시안의 자리만 지킨다.
+        // 마이요기요 화면은 시안에 없다. 자리만 지킨다.
         break;
     }
   }
