@@ -38,6 +38,8 @@ dependencies:
   # 좌표를 "구·동"으로 바꿔 화면에 보여주기 위한 것. **표시 전용**이다.
   # 서버로는 여전히 좌표만 보낸다. OS 지오코더를 쓰므로 API 키가 필요 없다.
   geocoding: ^5.0.0
+  # Figma 아이콘을 SVG 원본 그대로 렌더링한다. 벡터라 어느 해상도에서도 선명하다.
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:
@@ -50,6 +52,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/icons/
     # .env 는 gitignore 되지만 빌드 시 번들에 포함돼야 읽을 수 있다.
     - .env
 
