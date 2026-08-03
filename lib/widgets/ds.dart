@@ -154,12 +154,7 @@ class DsHeader extends StatelessWidget {
                             child: GestureDetector(
                               onTap: onBack,
                               behavior: HitTestBehavior.opaque,
-                              child: const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: Icon(Icons.arrow_back_ios_new,
-                                    size: 18, color: Colors.black),
-                              ),
+                              child: const DsChevron.left(),
                             ),
                           ),
                   ),
@@ -398,14 +393,392 @@ class DsPostItem extends StatelessWidget {
 
 /// 시안 전반에서 반복되는 1px 구분선.
 class DsDivider extends StatelessWidget {
-  const DsDivider({super.key, this.indent = 0});
+  const DsDivider({super.key, this.indent = 0, this.color = AppColors.gray200});
 
   final double indent;
+
+  /// 화면마다 gray200 / gray300 을 섞어 쓴다. 시안에 적힌 쪽을 그대로 넘긴다.
+  final Color color;
 
   @override
   Widget build(BuildContext context) => Container(
         height: 1,
         margin: EdgeInsets.symmetric(horizontal: indent),
-        color: AppColors.gray200,
+        color: color,
+      );
+}
+
+// ── Icons ────────────────────────────────────────────────────────────────────
+
+/// 시안에서 내려받은 아이콘. Material 아이콘으로 흉내 내지 않고 그대로 쓴다.
+class DsIcons {
+  const DsIcons._();
+
+  static const chevron = 'assets/icons/chevron_left.svg';
+  static const filter = 'assets/icons/filter.svg';
+  static const check = 'assets/icons/check.svg';
+  static const plus = 'assets/icons/plus.svg';
+  static const minus = 'assets/icons/minus.svg';
+  static const delete = 'assets/icons/delete.svg';
+  static const star = 'assets/icons/star.svg';
+}
+
+/// SVG 안에 색이 박혀 있어 다른 색으로 쓰려면 덧씌워야 한다.
+ColorFilter _tint(Color color) => ColorFilter.mode(color, BlendMode.srcIn);
+
+/// Figma `icon/chevron` — 아래 방향은 왼쪽 화살표를 반시계로 90° 돌린 것이다
+/// (시안 컴포넌트도 같은 벡터를 회전해 쓴다).
+class DsChevron extends StatelessWidget {
+  const DsChevron.left({super.key, this.color = Colors.black}) : _down = false;
+  const DsChevron.down({super.key, this.color = AppColors.gray800}) : _down = true;
+
+  final Color color;
+  final bool _down;
+
+  @override
+  Widget build(BuildContext context) {
+    // 시안 치수: left 는 20 프레임 안에 8×14, down 은 16 프레임 안에 10×6(회전 전 6×10).
+    final leaf = SvgPicture.asset(
+      DsIcons.chevron,
+      width: _down ? 6 : 8,
+      height: _down ? 10 : 14,
+      fit: BoxFit.fill,
+      colorFilter: _tint(color),
+    );
+    return SizedBox(
+      width: _down ? 16 : 20,
+      height: _down ? 16 : 20,
+      child: Center(
+        child: _down ? RotatedBox(quarterTurns: 3, child: leaf) : leaf,
+      ),
+    );
+  }
+}
+
+// ── Checkbox ─────────────────────────────────────────────────────────────────
+
+/// Figma `checkbox` — size L(24)/S(20) × state default/selected.
+///
+/// 선택되면 primary500 로 채우고 흰 체크를 올린다. 비선택은 gray100 + gray400 테두리.
+class DsCheckbox extends StatelessWidget {
+  const DsCheckbox({super.key, required this.isOn, this.size = 20, this.onTap});
+
+  final bool isOn;
+  final double size;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final box = Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: isOn ? AppColors.primary500 : AppColors.gray100,
+        borderRadius: BorderRadius.circular(4.8),
+        border: isOn ? null : Border.all(color: AppColors.gray400, width: 1.5),
+      ),
+      // 체크 표시는 20 기준 14×10 이고, 상자가 커지면 같은 비율로 커진다.
+      child: isOn
+          ? SvgPicture.asset(
+              DsIcons.check,
+              width: size / 20 * 14,
+              height: size / 20 * 10,
+              fit: BoxFit.fill,
+            )
+          : null,
+    );
+    if (onTap == null) return box;
+    return GestureDetector(onTap: onTap, behavior: HitTestBehavior.opaque, child: box);
+  }
+}
+
+// ── Chip ─────────────────────────────────────────────────────────────────────
+
+/// Figma `chip/filter` — 높이 36, 라운딩 20. 글자 뒤에 chevron 이 붙는다.
+/// [label] 을 비우면 시안의 아이콘 전용 칩(폭 48, 테두리 gray800)이 된다.
+class DsChipFilter extends StatelessWidget {
+  const DsChipFilter({super.key, required this.label, this.onTap});
+
+  const DsChipFilter.icon({super.key, this.onTap}) : label = null;
+
+  final String? label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final iconOnly = label == null;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: 36,
+        width: iconOnly ? 48 : null,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: iconOnly ? AppColors.gray800 : AppColors.gray600,
+          ),
+        ),
+        child: iconOnly
+            ? SizedBox(
+                width: 16,
+                height: 16,
+                child: Center(
+                  child: SvgPicture.asset(DsIcons.filter, width: 15.5, height: 13),
+                ),
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(label!, style: AppText.body2(color: AppColors.gray700)),
+                  const DsChevron.down(color: AppColors.gray600),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+// ── Stepper ──────────────────────────────────────────────────────────────────
+
+/// Figma `stepper` — 높이 28, 라운딩 20, gray300 테두리.
+/// 수량이 1이면 빼기 자리에 휴지통이 뜬다(시안의 state=minimum).
+class DsStepper extends StatelessWidget {
+  const DsStepper({
+    super.key,
+    required this.quantity,
+    required this.onDecrease,
+    required this.onIncrease,
+  });
+
+  final int quantity;
+  final VoidCallback onDecrease;
+  final VoidCallback onIncrease;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.gray300),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _icon(quantity <= 1 ? DsIcons.delete : DsIcons.minus, onDecrease),
+            SizedBox(
+              width: 24,
+              child: Text(
+                '$quantity',
+                textAlign: TextAlign.center,
+                style: AppText.body2(),
+              ),
+            ),
+            _icon(DsIcons.plus, onIncrease),
+          ],
+        ),
+      );
+
+  Widget _icon(String asset, VoidCallback onTap) => GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: SvgPicture.asset(asset, width: 20, height: 20),
+      );
+}
+
+// ── Store row ────────────────────────────────────────────────────────────────
+
+/// 카드 머리의 매장 한 줄 — 로고 44 + 상호 + 별점·거리·배달시간.
+class DsStoreRow extends StatelessWidget {
+  const DsStoreRow({
+    super.key,
+    required this.logo,
+    required this.name,
+    required this.ratingText,
+    required this.distanceText,
+    required this.deliveryText,
+    this.trailing,
+  });
+
+  final Widget logo;
+  final String name;
+  final String ratingText;
+  final String distanceText;
+  final String deliveryText;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 44, height: 44, child: logo),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: AppText.sub2().copyWith(letterSpacing: -0.4)),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    // 시안은 12 프레임 안에 10.5×10 별이다. 프레임까지 맞춰야 간격이 맞는다.
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: Center(
+                        child: SvgPicture.asset(DsIcons.star, width: 10.5, height: 10),
+                      ),
+                    ),
+                    const SizedBox(width: 2),
+                    Flexible(
+                      child: Text(
+                        ratingText,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.caption(color: AppColors.gray600),
+                      ),
+                    ),
+                    _dot(),
+                    Text(distanceText, style: AppText.caption(color: AppColors.gray600)),
+                    _dot(),
+                    Text(deliveryText, style: AppText.caption(color: AppColors.gray600)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (trailing != null) ...[const SizedBox(width: 16), trailing!],
+        ],
+      );
+
+  Widget _dot() => Container(
+        width: 2,
+        height: 2,
+        margin: const EdgeInsets.symmetric(horizontal: 4),
+        decoration: const BoxDecoration(
+          color: AppColors.gray600,
+          shape: BoxShape.circle,
+        ),
+      );
+}
+
+// ── Menu item ────────────────────────────────────────────────────────────────
+
+/// Figma `menu item` — 먹방 조합·다른 결과보기 카드가 같은 모양을 쓴다.
+///
+/// 썸네일 80 + 메뉴명·옵션, 그 아래 수량 스테퍼 · "옵션 변경" · 금액.
+class DsMenuItem extends StatelessWidget {
+  const DsMenuItem({
+    super.key,
+    required this.thumbnail,
+    required this.name,
+    required this.options,
+    required this.quantity,
+    required this.priceText,
+    required this.onDecrease,
+    required this.onIncrease,
+    this.onEditOption,
+  });
+
+  final Widget thumbnail;
+  final String name;
+  final String options;
+  final int quantity;
+  final String priceText;
+  final VoidCallback onDecrease;
+  final VoidCallback onIncrease;
+  final VoidCallback? onEditOption;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 80, height: 80, child: thumbnail),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: AppText.sub2()),
+                    const SizedBox(height: 4),
+                    Text(options, style: AppText.caption(color: AppColors.gray600)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  DsStepper(
+                    quantity: quantity,
+                    onDecrease: onDecrease,
+                    onIncrease: onIncrease,
+                  ),
+                  const SizedBox(width: 4),
+                  _optionButton(),
+                ],
+              ),
+              Text(
+                priceText,
+                style: AppText.sub2(color: AppColors.gray800)
+                    .copyWith(letterSpacing: -0.4),
+              ),
+            ],
+          ),
+        ],
+      );
+
+  Widget _optionButton() => GestureDetector(
+        onTap: onEditOption,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            border: Border.all(color: AppColors.gray500),
+            borderRadius: BorderRadius.circular(200),
+          ),
+          child: Text('옵션 변경', style: AppText.btn3(color: AppColors.gray800)),
+        ),
+      );
+}
+
+/// 카드 아래쪽의 "+ 메뉴 추가하기" 줄.
+class DsAddMenuButton extends StatelessWidget {
+  const DsAddMenuButton({super.key, this.onTap});
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SvgPicture.asset(
+              DsIcons.plus,
+              width: 20,
+              height: 20,
+              colorFilter: _tint(AppColors.gray800),
+            ),
+            const SizedBox(width: 4),
+            Text('메뉴 추가하기', style: AppText.btn1(color: AppColors.gray800)),
+          ],
+        ),
       );
 }

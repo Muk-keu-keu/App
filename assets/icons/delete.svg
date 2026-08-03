@@ -1,0 +1,9 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="icon/delete">
+<path id="Rectangle 10" d="M3 5.75C3 5.33579 3.33579 5 3.75 5H16.25C16.6642 5 17 5.33579 17 5.75C17 6.16421 16.6642 6.5 16.25 6.5H3.75C3.33579 6.5 3 6.16421 3 5.75Z" fill="#AEAEAE"/>
+<path id="Rectangle 11" d="M14 6L13.398 3.74234C13.2812 3.30458 12.8848 3 12.4317 3H7.56828C7.11523 3 6.71878 3.30458 6.60204 3.74234L6 6" stroke="#AEAEAE" stroke-width="1.5"/>
+<path id="Rectangle 9" d="M5.09473 7.75H14.9053C15.0521 7.75018 15.1675 7.87625 15.1543 8.02246L14.3359 17.0225C14.3242 17.1512 14.2162 17.2499 14.0869 17.25H5.91309C5.78384 17.2499 5.67576 17.1512 5.66406 17.0225L4.8457 8.02246C4.83253 7.87624 4.94793 7.75018 5.09473 7.75Z" stroke="#AEAEAE" stroke-width="1.5"/>
+<path id="Vector 3" d="M8.5 11V14" stroke="#AEAEAE" stroke-width="1.5" stroke-linecap="round"/>
+<path id="Vector 4" d="M11.5 11V14" stroke="#AEAEAE" stroke-width="1.5" stroke-linecap="round"/>
+</g>
+</svg>
