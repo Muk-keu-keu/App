@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_flow.dart';
-import '../../models/combo.dart';
 import '../../models/post.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
-import 'jokbo_widgets.dart';
+import '../../widgets/ds.dart';
 
-/// 조합 상세 (Figma "조합 상세").
-/// 작성자·본문·사진·출처 영상·조합 메뉴·좋아요·댓글 + "나도 주문하기".
+/// Figma "조합 상세" (node 681:8105).
+///
+/// 글 본문 · 출처 영상 · 조합에 담긴 메뉴 · 댓글이 세로로 쌓인다.
+/// 댓글 입력창은 아래에 고정된다.
 class PostDetailScreen extends StatefulWidget {
   const PostDetailScreen({super.key});
 
@@ -19,9 +21,6 @@ class PostDetailScreen extends StatefulWidget {
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
   final _commentController = TextEditingController();
-
-  /// 매장 섹션 접기. 시안은 펼쳐진(chevron up) 상태가 기본이다.
-  bool _storeExpanded = true;
 
   @override
   void dispose() {
@@ -46,244 +45,443 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     if (post == null) return const SizedBox.shrink();
 
     return Container(
-      color: Colors.white,
+      color: AppColors.bg,
       child: Column(
         children: [
-          _backBar(context),
+          // 시안의 헤더는 뒤로가기만 있고 제목 자리가 비어 있다.
+          DsHeader.detail(
+            title: '',
+            onBack: () => context.read<AppFlow>().backToJokboHome(),
+          ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.only(bottom: 16),
+              padding: EdgeInsets.zero,
               children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      PostAuthorRow(author: post.author, dateText: post.dateText),
-                      const SizedBox(height: 16),
-                      Text(post.title, style: AppText.semiBold(17, spacing: -0.4)),
-                      const SizedBox(height: 8),
-                      Text(
-                        post.body,
-                        style: AppText.regular(14, spacing: -0.35, color: AppColors.gray800),
-                      ),
-                      if (post.imagePaths.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        _photos(post),
-                      ],
-                      if (post.source != null) ...[
-                        const SizedBox(height: 12),
-                        YoutubeSourceBadge(source: post.source!),
-                      ],
-                    ],
-                  ),
+                _PostSection(post: post),
+                const SizedBox(height: 16),
+                _MenuSection(post: post),
+                const SizedBox(height: 16),
+                _CommentSection(
+                  count: post.commentCount,
+                  comments: flow.postComments,
                 ),
-                const SizedBox(height: 20),
-                _storeSection(context, post),
-                Container(height: 8, color: AppColors.pageBackground),
-                _commentSection(post, flow.postComments),
               ],
             ),
           ),
-          _commentInput(),
+          _Composer(controller: _commentController, onSend: _submitComment),
         ],
       ),
     );
   }
+}
 
-  Widget _backBar(BuildContext context) => Container(
+class _PostSection extends StatelessWidget {
+  const _PostSection({required this.post});
+
+  final YogijokboPost post;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
         color: Colors.white,
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-        child: SafeArea(
-          bottom: false,
-          child: SizedBox(
-            height: 32,
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: GestureDetector(
-                onTap: () => context.read<AppFlow>().backToJokboHome(),
-                behavior: HitTestBehavior.opaque,
-                child: const SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: Icon(Icons.arrow_back_ios_new, size: 18, color: Colors.black),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-
-  Widget _photos(YogijokboPost post) => Row(
-        children: [
-          for (final path in post.imagePaths.take(2))
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: RemoteOrAssetImage(
-                imageUrl: post.imageUrls.isEmpty ? null : post.imageUrls.first,
-                assetPath: path,
-                size: 104,
-              ),
-            ),
-        ],
-      );
-
-  /// 매장 + 조합 메뉴. 시안처럼 접을 수 있다.
-  Widget _storeSection(BuildContext context, YogijokboPost post) {
-    final combo = post.combo;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          GestureDetector(
-            onTap: () => setState(() => _storeExpanded = !_storeExpanded),
-            behavior: HitTestBehavior.opaque,
-            child: Row(
-              children: [
-                Text(combo.store.name, style: AppText.semiBold(16, spacing: -0.4)),
-                const Spacer(),
-                Icon(
-                  _storeExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                  size: 22,
-                  color: AppColors.gray800,
-                ),
-              ],
-            ),
-          ),
-          if (_storeExpanded) ...[
-            const SizedBox(height: 8),
-            Container(height: 1, color: AppColors.gray200),
-            for (final item in combo.items) _menuRow(item),
-          ],
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              LikeCommentRow(
-                likeCount: post.likeCount,
-                commentCount: post.commentCount,
-                likedByMe: post.likedByMe,
-                onLike: () => context.read<AppFlow>().toggleLike(),
-              ),
-              const Spacer(),
-              _reorderButton(context, post),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 상세의 메뉴 줄은 수량·가격 없이 이름과 옵션만 보여준다(시안 동일).
-  /// 가격은 지금 값과 다를 수 있어 "나도 주문하기"가 재확인한 뒤 주문 화면에서 보여준다.
-  Widget _menuRow(ComboItem item) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            RemoteOrAssetImage(
-              imageUrl: item.imageUrl,
-              assetPath: item.imagePath,
-              size: 56,
-              radius: 28,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(item.name, style: AppText.semiBold(14, spacing: -0.35)),
-                  const SizedBox(height: 4),
-                  Text(
-                    item.options,
-                    style: AppText.regular(12, spacing: -0.3, color: AppColors.gray600),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-
-  Widget _reorderButton(BuildContext context, YogijokboPost post) => GestureDetector(
-        onTap: () => context.read<AppFlow>().startReorder(),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text('나도 주문하기',
-              style: AppText.semiBold(14, spacing: -0.35, color: Colors.white)),
-        ),
-      );
-
-  Widget _commentSection(YogijokboPost post, List<PostComment> comments) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('댓글 ${post.commentCount}', style: AppText.semiBold(16, spacing: -0.4)),
-            const SizedBox(height: 4),
-            for (final comment in comments)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    PostAuthorRow(author: comment.author, size: 28),
-                    const SizedBox(height: 6),
-                    Text(
-                      comment.body,
-                      style: AppText.regular(14, spacing: -0.35, color: AppColors.gray800),
-                    ),
-                  ],
-                ),
-              ),
+            _Profile(author: post.author, dateText: post.dateText),
+            const SizedBox(height: 16),
+            Text(post.title, style: AppText.sub1().copyWith(letterSpacing: -0.45)),
+            const SizedBox(height: 9),
+            Text(post.body, style: AppText.body2(color: AppColors.gray800)),
+            if (post.imagePaths.isNotEmpty || post.imageUrls.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _ImageRow(post: post),
+            ],
+            const SizedBox(height: 20),
+            if (post.source != null) ...[
+              _SourceLink(source: post.source!),
+              const SizedBox(height: 20),
+            ],
+            _ActionRow(post: post),
           ],
         ),
       );
+}
 
-  Widget _commentInput() => Container(
-        color: Colors.white,
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-        child: SafeArea(
-          top: false,
-          child: Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _commentController,
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: (_) => _submitComment(),
-                  style: AppText.regular(14, spacing: -0.35),
-                  decoration: InputDecoration(
-                    hintText: '댓글을 입력해 주세요',
-                    hintStyle:
-                        AppText.regular(14, spacing: -0.35, color: AppColors.gray500),
-                    filled: true,
-                    fillColor: AppColors.gray100,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  ),
+class _Profile extends StatelessWidget {
+  const _Profile({required this.author, required this.dateText});
+
+  final PostAuthor author;
+  final String dateText;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          // 시안은 옅은 분홍 원 위에 프로필 사진을 올린다. 사진이 없으면 첫 글자를 쓴다.
+          Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: Color(0xFFFFEBF1),
+              shape: BoxShape.circle,
+            ),
+            child: Text(author.initial,
+                style: AppText.sub2(color: AppColors.primary500)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(author.nickname, style: AppText.sub2(color: AppColors.gray800)),
+                Text(dateText, style: AppText.caption(color: AppColors.gray600)),
+              ],
+            ),
+          ),
+        ],
+      );
+}
+
+class _ImageRow extends StatelessWidget {
+  const _ImageRow({required this.post});
+
+  final YogijokboPost post;
+
+  @override
+  Widget build(BuildContext context) {
+    final count = post.imageUrls.isNotEmpty
+        ? post.imageUrls.length
+        : post.imagePaths.length;
+
+    return Row(
+      children: [
+        for (var i = 0; i < count; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.gray400),
+              borderRadius: BorderRadius.circular(AppRadius.chip),
+            ),
+            child: RemoteOrAssetImage(
+              imageUrl: i < post.imageUrls.length ? post.imageUrls[i] : null,
+              assetPath:
+                  i < post.imagePaths.length ? post.imagePaths[i] : post.thumbnailPath,
+              size: 80,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// 출처 영상 한 줄. 회색 판 위에 아이콘과 제목을 얹는다.
+class _SourceLink extends StatelessWidget {
+  const _SourceLink({required this.source});
+
+  final PostSource source;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.gray100,
+          borderRadius: BorderRadius.circular(AppRadius.chip),
+        ),
+        child: Row(
+          children: [
+            // 시안은 유튜브 로고 이미지다. 아직 받지 않아 같은 치수의 아이콘으로 둔다.
+            const SizedBox(
+              width: 20,
+              height: 14,
+              child: Icon(Icons.play_arrow, size: 14, color: AppColors.primary500),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                source.videoTitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.caption(color: AppColors.gray700),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _ActionRow extends StatelessWidget {
+  const _ActionRow({required this.post});
+
+  final YogijokboPost post;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: [
+          _count(
+            asset: DsIcons.heart,
+            width: 15.5,
+            height: 14.5,
+            color: post.likedByMe ? AppColors.primary500 : null,
+            value: post.likeCount,
+            onTap: () => context.read<AppFlow>().toggleLike(),
+          ),
+          const SizedBox(width: 8),
+          _count(
+            asset: DsIcons.bubble,
+            width: 15.78,
+            height: 15.83,
+            value: post.commentCount,
+          ),
+          const Spacer(),
+          GestureDetector(
+            onTap: () => context.read<AppFlow>().startReorder(),
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              height: 36,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: AppColors.primary500,
+                borderRadius: BorderRadius.circular(AppRadius.chip),
+              ),
+              child: Text('나도 주문하기', style: AppText.btn2(color: Colors.white)),
+            ),
+          ),
+        ],
+      );
+
+  Widget _count({
+    required String asset,
+    required double width,
+    required double height,
+    required int value,
+    Color? color,
+    VoidCallback? onTap,
+  }) =>
+      GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: Center(
+                child: SvgPicture.asset(
+                  asset,
+                  width: width,
+                  height: height,
+                  colorFilter:
+                      color == null ? null : ColorFilter.mode(color, BlendMode.srcIn),
                 ),
               ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: _submitComment,
-                behavior: HitTestBehavior.opaque,
-                child: SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: Icon(Icons.send, size: 22, color: AppColors.gray500),
-                ),
+            ),
+            const SizedBox(width: 2),
+            Text('$value', style: AppText.caption(color: AppColors.gray600)),
+          ],
+        ),
+      );
+}
+
+/// 조합에 담긴 메뉴. 매장 이름을 누르면 매장 메뉴로 넘어간다.
+class _MenuSection extends StatelessWidget {
+  const _MenuSection({required this.post});
+
+  final YogijokboPost post;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        color: Colors.white,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            GestureDetector(
+              onTap: () => context.read<AppFlow>().openStoreMenu(post.combo),
+              behavior: HitTestBehavior.opaque,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(post.combo.store.name, style: AppText.sub2()),
+                  const RotatedBox(quarterTurns: 2, child: DsChevron.left()),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            const DsDivider(color: AppColors.gray300),
+            for (final item in post.combo.items) ...[
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  RemoteOrAssetImage(
+                    imageUrl: item.imageUrl,
+                    assetPath: item.imagePath,
+                    size: 48,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(item.name,
+                            style: AppText.sub2().copyWith(letterSpacing: -0.4)),
+                        const SizedBox(height: 4),
+                        Text(item.options,
+                            style: AppText.caption(color: AppColors.gray600)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
+          ],
+        ),
+      );
+}
+
+class _CommentSection extends StatelessWidget {
+  const _CommentSection({required this.count, required this.comments});
+
+  final int count;
+  final List<PostComment> comments;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        color: Colors.white,
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('댓글 $count', style: AppText.btn2(color: AppColors.gray800)),
+            for (var i = 0; i < comments.length; i++) ...[
+              const SizedBox(height: 12),
+              if (i > 0) ...[
+                const DsDivider(),
+                const SizedBox(height: 12),
+              ],
+              _CommentItem(comment: comments[i]),
+            ],
+          ],
+        ),
+      );
+}
+
+class _CommentItem extends StatelessWidget {
+  const _CommentItem({required this.comment});
+
+  final PostComment comment;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFFEBF1),
+                  shape: BoxShape.circle,
+                ),
+                child: Text(comment.author.initial,
+                    style: AppText.caption(color: AppColors.primary500)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(comment.author.nickname,
+                        style: AppText.caption()
+                            .copyWith(fontWeight: FontWeight.w600)),
+                    Text(_dateOf(comment.createdAt),
+                        style: AppText.caption2(color: AppColors.gray600)),
+                  ],
+                ),
+              ),
+              // 신고·삭제 메뉴는 연결될 화면이 아직 없어 자리만 지킨다.
+              const Icon(Icons.more_horiz, size: 20, color: AppColors.gray500),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(comment.body, style: AppText.body2(color: AppColors.gray700)),
+        ],
+      );
+
+  static String _dateOf(DateTime d) =>
+      '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}';
+}
+
+class _Composer extends StatelessWidget {
+  const _Composer({required this.controller, required this.onSend});
+
+  final TextEditingController controller;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: const Color(0xFFFEFEFE),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF8D8D8D).withValues(alpha: 0.15),
+              blurRadius: 12,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        child: SafeArea(
+          top: false,
+          child: Container(
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: AppColors.gray200,
+              borderRadius: BorderRadius.circular(AppRadius.chip),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    onSubmitted: (_) => onSend(),
+                    style: AppText.body2(),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      border: InputBorder.none,
+                      hintText: '댓글을 입력해 주세요',
+                      hintStyle: AppText.body2(color: AppColors.gray500),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: onSend,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    width: 36,
+                    height: 28,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary500,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(Icons.arrow_upward, size: 16, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );
