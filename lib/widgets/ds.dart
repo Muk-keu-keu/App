@@ -421,6 +421,9 @@ class DsIcons {
   static const minus = 'assets/icons/minus.svg';
   static const delete = 'assets/icons/delete.svg';
   static const star = 'assets/icons/star.svg';
+  static const close = 'assets/icons/close.svg';
+  static const radioRing = 'assets/icons/radio_ring.svg';
+  static const radioDot = 'assets/icons/radio_dot.svg';
 }
 
 /// SVG 안에 색이 박혀 있어 다른 색으로 쓰려면 덧씌워야 한다.
@@ -541,6 +544,96 @@ class DsChipFilter extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Figma `chip/choice` — 카테고리 고르기. 고르면 primary300 채움 + primary400 테두리.
+class DsChipChoice extends StatelessWidget {
+  const DsChipChoice({
+    super.key,
+    required this.label,
+    required this.selected,
+    this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          height: 36,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.primary300 : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: selected ? AppColors.primary400 : AppColors.gray400,
+            ),
+          ),
+          child: Text(
+            label,
+            style: AppText.body2(
+              color: selected ? AppColors.primary500 : AppColors.gray800,
+            ),
+          ),
+        ),
+      );
+}
+
+/// "필수" / "선택" 배지. 필수는 분홍, 선택은 회색.
+class DsRequirementBadge extends StatelessWidget {
+  const DsRequirementBadge({super.key, required this.isRequired});
+
+  final bool isRequired;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        decoration: BoxDecoration(
+          color: isRequired ? AppColors.primary300 : AppColors.gray300,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          isRequired ? '필수' : '선택',
+          style: AppText.btn3(
+            color: isRequired ? AppColors.primary500 : AppColors.gray700,
+          ),
+        ),
+      );
+}
+
+// ── Radio ────────────────────────────────────────────────────────────────────
+
+/// Figma `radio button` — 20 프레임 안에 16 테두리 원, 고르면 가운데 8 점이 찍힌다.
+class DsRadio extends StatelessWidget {
+  const DsRadio({super.key, required this.isOn});
+
+  final bool isOn;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: 20,
+        height: 20,
+        child: Stack(
+          children: [
+            Positioned(
+              left: 2,
+              top: 2,
+              child: SvgPicture.asset(DsIcons.radioRing, width: 16, height: 16),
+            ),
+            if (isOn)
+              Positioned(
+                left: 6,
+                top: 6,
+                child: SvgPicture.asset(DsIcons.radioDot, width: 8, height: 8),
+              ),
+          ],
+        ),
+      );
 }
 
 // ── Stepper ──────────────────────────────────────────────────────────────────
