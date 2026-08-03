@@ -55,6 +55,24 @@ class AppText {
 
   static const _family = 'Pretendard';
 
+  /// 워드마크용 디스플레이 폰트. 시안에서 `먹방요기` · `요기족보` 같은
+  /// 브랜드 문구에만 쓴다. 본문에는 쓰지 않는다.
+  static const _display = 'WAGURI';
+
+  /// Figma 배너·섹션 타이틀. line-height 가 none 이라 1.0 으로 둔다.
+  static TextStyle waguri(
+    double size, {
+    double spacing = 0,
+    Color color = Colors.black,
+  }) =>
+      TextStyle(
+        fontFamily: _display,
+        fontSize: size,
+        letterSpacing: spacing,
+        height: 1.0,
+        color: color,
+      );
+
   static TextStyle _t(
     double size,
     FontWeight weight,

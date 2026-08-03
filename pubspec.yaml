@@ -57,7 +57,12 @@ flutter:
     - .env
 
   fonts:
-    # Figma 시안과 동일한 Pretendard (SIL OFL). iOS 앱과 같은 파일을 쓴다.
+    # 배너·섹션 워드마크용 디스플레이 폰트. 시안에 쓰인 것과 같은 파일이다.
+    - family: WAGURI
+      fonts:
+        - asset: assets/fonts/WAGURI-Regular.otf
+
+    # 본문 전반. Figma 시안과 동일한 Pretendard (SIL OFL).
     - family: Pretendard
       fonts:
         - asset: assets/fonts/Pretendard-Regular.otf
