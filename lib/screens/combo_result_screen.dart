@@ -234,99 +234,28 @@ class _MenuList extends StatelessWidget {
         child: Column(
           children: [
             for (final item in combo.items) ...[
-              _MenuItem(combo: combo, item: item),
+              DsMenuItem(
+                thumbnail: RemoteOrAssetImage(
+                  imageUrl: item.imageUrl,
+                  assetPath: item.imagePath,
+                  size: 80,
+                ),
+                name: item.name,
+                options: item.options,
+                quantity: item.quantity,
+                priceText: '${wonFormat(item.lineTotal)}원',
+                onDecrease: () => context.read<AppFlow>().changeQuantity(
+                    comboId: combo.id, itemId: item.id, delta: -1),
+                onIncrease: () => context.read<AppFlow>().changeQuantity(
+                    comboId: combo.id, itemId: item.id, delta: 1),
+                onEditOption: () => MenuEditSheet.show(context, combo),
+              ),
               const SizedBox(height: 16),
               const DsDivider(),
               const SizedBox(height: 16),
             ],
-            GestureDetector(
-              onTap: () => MenuEditSheet.show(context, combo),
-              behavior: HitTestBehavior.opaque,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.add, size: 20, color: AppColors.gray800),
-                  const SizedBox(width: 4),
-                  Text('메뉴 추가하기', style: AppText.btn1(color: AppColors.gray800)),
-                ],
-              ),
-            ),
+            DsAddMenuButton(onTap: () => MenuEditSheet.show(context, combo)),
           ],
-        ),
-      );
-}
-
-class _MenuItem extends StatelessWidget {
-  const _MenuItem({required this.combo, required this.item});
-
-  final ComboRecommendation combo;
-  final ComboItem item;
-
-  @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              RemoteOrAssetImage(
-                imageUrl: item.imageUrl,
-                assetPath: item.imagePath,
-                size: 80,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item.name, style: AppText.sub2()),
-                    const SizedBox(height: 4),
-                    Text(item.options,
-                        style: AppText.caption(color: AppColors.gray600)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  QuantityStepper(
-                    quantity: item.quantity,
-                    onDecrease: () => context.read<AppFlow>().changeQuantity(
-                        comboId: combo.id, itemId: item.id, delta: -1),
-                    onIncrease: () => context.read<AppFlow>().changeQuantity(
-                        comboId: combo.id, itemId: item.id, delta: 1),
-                  ),
-                  const SizedBox(width: 4),
-                  _optionButton(context),
-                ],
-              ),
-              Text('${wonFormat(item.lineTotal)}원',
-                  style: AppText.sub2(color: AppColors.gray800)
-                      .copyWith(letterSpacing: -0.4)),
-            ],
-          ),
-        ],
-      );
-
-  /// 옵션 변경 — 메뉴 수정 시트를 그 항목으로 연다.
-  Widget _optionButton(BuildContext context) => GestureDetector(
-        onTap: () => MenuEditSheet.show(context, combo),
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          height: 28,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: AppColors.gray500),
-            borderRadius: BorderRadius.circular(200),
-          ),
-          child: Text('옵션 변경', style: AppText.btn3(color: AppColors.gray800)),
         ),
       );
 }
