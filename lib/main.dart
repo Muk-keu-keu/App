@@ -16,6 +16,7 @@ import 'screens/home/yogiyo_home_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/keyword_select_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/store_menu_screen.dart';
 import 'screens/yogijokbo/post_compose_screen.dart';
 import 'screens/yogijokbo/post_detail_screen.dart';
 import 'screens/yogijokbo/post_order_screen.dart';
@@ -134,6 +135,7 @@ class _RootScreenState extends State<RootScreen> {
         AppStage.analyzing => const AnalyzeScreen(),
         AppStage.combo => const ComboResultScreen(),
         AppStage.comboList => const ComboListScreen(),
+        AppStage.storeMenu => const StoreMenuScreen(),
         AppStage.failed => const _FailedScreen(),
         AppStage.jokboHome => const YogijokboHomeScreen(),
         AppStage.jokboDetail => const PostDetailScreen(),

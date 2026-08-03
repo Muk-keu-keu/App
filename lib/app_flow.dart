@@ -23,6 +23,7 @@ enum AppStage {
   analyzing, // 분석 중
   combo, // 가장 유사한 조합 하나
   comboList, // 여러 매장 비교
+  storeMenu, // 매장 메뉴 전체 (메뉴 추가하기)
   failed, // 실패 안내
   jokboHome, // 요기족보 홈 (실시간 인기 + 목록)
   jokboDetail, // 조합 상세
@@ -237,6 +238,71 @@ class AppFlow extends ChangeNotifier {
     final ci = recommendations.indexWhere((c) => c.id == comboId);
     if (ci < 0) return;
     recommendations[ci].items = items;
+    notifyListeners();
+  }
+
+  /// 옵션 변경 시트에서 고른 것들을 반영한다.
+  /// 표시용 문구와 단가를 함께 다시 계산해야 카드의 금액이 맞는다.
+  void updateItemOptions({
+    required String comboId,
+    required String itemId,
+    required List<MenuOptionChoice> choices,
+  }) {
+    final ci = recommendations.indexWhere((c) => c.id == comboId);
+    if (ci < 0) return;
+    final items = recommendations[ci].items;
+    final ii = items.indexWhere((e) => e.id == itemId);
+    if (ii < 0) return;
+
+    final extra = choices.fold(0, (sum, c) => sum + c.extraPrice);
+    final base = items[ii].unitPrice - _extraOf(items[ii]);
+    items[ii].options = choices.map((c) => c.name).join(', ');
+    items[ii].unitPrice = base + extra;
+    notifyListeners();
+  }
+
+  /// 지금 붙어 있는 옵션들의 추가금. 옵션을 바꿀 때 기본가를 되찾는 데 쓴다.
+  int _extraOf(ComboItem item) {
+    final chosen = item.options.split(',').map((e) => e.trim()).toSet();
+    var sum = 0;
+    for (final g in item.optionGroups) {
+      for (final c in g.choices) {
+        if (chosen.contains(c.name)) sum += c.extraPrice;
+      }
+    }
+    return sum;
+  }
+
+  // ── 매장 메뉴 (메뉴 추가하기) ───────────────────────────────────────────────
+
+  /// 메뉴를 담을 대상 조합. 매장 메뉴 화면이 어느 조합에서 열렸는지 기억한다.
+  ComboRecommendation? storeMenuCombo;
+  List<MenuItem> storeMenuItems = [];
+
+  /// 매장 메뉴를 닫았을 때 돌아갈 화면. 조합 카드와 비교 목록 양쪽에서 열린다.
+  AppStage _storeMenuOrigin = AppStage.combo;
+
+  Future<void> openStoreMenu(ComboRecommendation combo) async {
+    storeMenuCombo = combo;
+    storeMenuItems = [];
+    _storeMenuOrigin = _stage;
+    _setStage(AppStage.storeMenu);
+    storeMenuItems = await _repository.menu(combo.store.id);
+    notifyListeners();
+  }
+
+  void closeStoreMenu() => _setStage(_storeMenuOrigin);
+
+  /// 매장 메뉴의 + 버튼. 이미 담긴 메뉴면 수량만 올린다.
+  void addMenuToCombo(MenuItem menu) {
+    final combo = storeMenuCombo;
+    if (combo == null) return;
+    final i = combo.items.indexWhere((e) => e.id == menu.id);
+    if (i >= 0) {
+      combo.items[i].quantity += 1;
+    } else {
+      combo.items.add(menu.toComboItem());
+    }
     notifyListeners();
   }
 

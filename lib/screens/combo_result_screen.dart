@@ -9,7 +9,7 @@ import '../models/combo.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/ds.dart';
-import 'menu_edit_sheet.dart';
+import 'menu_option_sheet.dart';
 
 /// Figma "먹방 조합" (node 681:5981).
 ///
@@ -248,13 +248,16 @@ class _MenuList extends StatelessWidget {
                     comboId: combo.id, itemId: item.id, delta: -1),
                 onIncrease: () => context.read<AppFlow>().changeQuantity(
                     comboId: combo.id, itemId: item.id, delta: 1),
-                onEditOption: () => MenuEditSheet.show(context, combo),
+                onEditOption: () => MenuOptionSheet.show(context,
+                    comboId: combo.id, item: item),
               ),
               const SizedBox(height: 16),
               const DsDivider(),
               const SizedBox(height: 16),
             ],
-            DsAddMenuButton(onTap: () => MenuEditSheet.show(context, combo)),
+            DsAddMenuButton(
+              onTap: () => context.read<AppFlow>().openStoreMenu(combo),
+            ),
           ],
         ),
       );

@@ -49,7 +49,54 @@ class MockComboRepository implements ComboRepository {
   }
 
   @override
-  Future<List<MenuItem>> menu(String storeId) async => _menus[storeId] ?? const [];
+  Future<List<MenuItem>> menu(String storeId) async =>
+      _menus[storeId] ?? ComboBuilder.menuFor(storeId);
+
+  /// 시안 "옵션 변경" (681:6050) 의 옵션 그룹. 닭발·찜닭류가 공유한다.
+  static const _dakbalOptions = [
+    MenuOptionGroup(
+      id: 'bone',
+      name: '뼈 / 순살 선택',
+      choices: [
+        MenuOptionChoice(id: 'bone-in', name: '뼈 (국내산 신선육)'),
+        MenuOptionChoice(id: 'boneless', name: '순살 (국내산 신선육)'),
+      ],
+    ),
+    MenuOptionGroup(
+      id: 'spice',
+      name: '매운맛 5단계',
+      choices: [
+        MenuOptionChoice(id: 'spice-1', name: '1단계 (아주 순한맛)'),
+        MenuOptionChoice(id: 'spice-2', name: '2단계 (순한맛)'),
+        MenuOptionChoice(id: 'spice-3', name: '3단계 (보통맛)'),
+        MenuOptionChoice(id: 'spice-4', name: '4단계 (매운맛)'),
+        MenuOptionChoice(id: 'spice-5', name: '5단계 (아주매운맛)'),
+      ],
+    ),
+    MenuOptionGroup(
+      id: 'noodle',
+      name: '당면추가',
+      isRequired: false,
+      choices: [
+        MenuOptionChoice(id: 'noodle-round', name: '둥근당면 추가', extraPrice: 2500),
+        MenuOptionChoice(id: 'noodle-flat', name: '납작당면 추가', extraPrice: 3000),
+        MenuOptionChoice(id: 'noodle-kalguksu', name: '칼국수 사리 추가', extraPrice: 3000),
+        MenuOptionChoice(id: 'noodle-udon', name: '우동사리 추가', extraPrice: 2000),
+      ],
+    ),
+  ];
+
+  /// 사이드 메뉴의 옵션. 시안에 별도 화면이 없어 수량만 고르는 단일 그룹으로 둔다.
+  static const _sideOptions = [
+    MenuOptionGroup(
+      id: 'side-serving',
+      name: '양 선택',
+      choices: [
+        MenuOptionChoice(id: 'side-normal', name: '기본'),
+        MenuOptionChoice(id: 'side-large', name: '곱빼기', extraPrice: 1500),
+      ],
+    ),
+  ];
 
   /// 매장별 판매 메뉴. Figma 시안 항목에 조합에 없는 메뉴를 몇 개 더했다.
   static const Map<String, List<MenuItem>> _menus = {
@@ -60,6 +107,7 @@ class MockComboRepository implements ComboRepository {
         options: '순살, 보통맛, 중국당면, 치즈몽땅 추가, [리뷰 이벤트] 분모자 추가',
         price: 23000,
         imagePath: 'assets/images/menu_rose_dakbal.png',
+        optionGroups: _dakbalOptions,
       ),
       MenuItem(
         id: 'cheese-ball',
@@ -67,6 +115,8 @@ class MockComboRepository implements ComboRepository {
         options: '모짜렐라 치즈 가득한 쫀득 치즈볼',
         price: 2000,
         imagePath: 'assets/images/menu_cheese_ball.png',
+        category: '사이드',
+        optionGroups: _sideOptions,
       ),
       MenuItem(
         id: 'dujjim-jjim',
@@ -74,6 +124,7 @@ class MockComboRepository implements ComboRepository {
         options: '무뼈, 매운맛, 우동사리 추가',
         price: 21000,
         imagePath: 'assets/images/menu_rose_dakbal.png',
+        optionGroups: _dakbalOptions,
       ),
       MenuItem(
         id: 'egg-jjim',
@@ -81,6 +132,34 @@ class MockComboRepository implements ComboRepository {
         options: '부드러운 뚝배기 계란찜',
         price: 3000,
         imagePath: 'assets/images/menu_cheese_ball.png',
+        category: '사이드',
+        optionGroups: _sideOptions,
+      ),
+      MenuItem(
+        id: 'buldak-rose-jjimdak',
+        name: '불닭로제 찜닭',
+        options: '불닭과 로제가 만나 부드럽고 강렬한 중독적인 맛. 닭은 반마리양이 사용됩니다.',
+        price: 26800,
+        imagePath: 'assets/images/menu_rose_dakbal.png',
+        category: '신메뉴',
+        optionGroups: _dakbalOptions,
+      ),
+      MenuItem(
+        id: 'kalnakji-jjimdak',
+        name: '두찜 칼낙지 찜닭',
+        options: '매콤한 찜닭에 쫄깃한 낙지, 칼국수 사리를 더해 푸짐하게 즐기는 칼낙지 찜닭',
+        price: 34800,
+        imagePath: 'assets/images/menu_rose_dakbal.png',
+        category: '신메뉴',
+        optionGroups: _dakbalOptions,
+      ),
+      MenuItem(
+        id: 'cola',
+        name: '코카콜라 500ml',
+        options: '시원하게 마시는 콜라',
+        price: 2500,
+        imagePath: 'assets/images/menu_cheese_ball.png',
+        category: '음료',
       ),
     ],
     'hongmanyeo-songpa': [
@@ -90,6 +169,7 @@ class MockComboRepository implements ComboRepository {
         options: '돼지 껍데기(볶음) 도련, 통뼈, 무뼈닭기반, 통마늘 소스',
         price: 21000,
         imagePath: 'assets/images/menu_rose_dakbal.png',
+        optionGroups: _dakbalOptions,
       ),
       MenuItem(
         id: 'hong-cheese',
@@ -97,6 +177,8 @@ class MockComboRepository implements ComboRepository {
         options: '모짜렐라 치즈 가득한 쫀득 치즈볼',
         price: 2500,
         imagePath: 'assets/images/menu_cheese_ball.png',
+        category: '사이드',
+        optionGroups: _sideOptions,
       ),
     ],
     'dujjim-songpa': [
@@ -106,6 +188,7 @@ class MockComboRepository implements ComboRepository {
         options: '순살, 보통맛, 중국당면, 치즈몽땅 추가, [리뷰 이벤트] 분모자 추가',
         price: 16000,
         imagePath: 'assets/images/menu_rose_dakbal.png',
+        optionGroups: _dakbalOptions,
       ),
       MenuItem(
         id: 'songpa-cheese',
@@ -113,6 +196,8 @@ class MockComboRepository implements ComboRepository {
         options: '모짜렐라 치즈 가득한 쫀득 치즈볼',
         price: 2000,
         imagePath: 'assets/images/menu_cheese_ball.png',
+        category: '사이드',
+        optionGroups: _sideOptions,
       ),
     ],
   };

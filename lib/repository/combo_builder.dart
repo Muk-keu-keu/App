@@ -44,6 +44,55 @@ class ComboBuilder {
     '카페·디저트': ('[사이드] 아메리카노', 3500, '산미 적은 원두'),
   };
 
+  /// AI 로 만든 메뉴에 붙일 옵션 그룹.
+  ///
+  /// 실제 매장의 옵션표는 서버가 줘야 하는 값이다. 그때까지 "옵션 변경" 시트가
+  /// 빈 화면으로 열리지 않도록, 배달 음식에 대체로 통하는 두 그룹만 채워 둔다.
+  /// 맵기 단계는 시안(681:6050)의 5단계를 그대로 쓴다.
+  static const _genericOptions = [
+    MenuOptionGroup(
+      id: 'spice',
+      name: '매운맛 5단계',
+      choices: [
+        MenuOptionChoice(id: 'spice-1', name: '1단계 (아주 순한맛)'),
+        MenuOptionChoice(id: 'spice-2', name: '2단계 (순한맛)'),
+        MenuOptionChoice(id: 'spice-3', name: '3단계 (보통맛)'),
+        MenuOptionChoice(id: 'spice-4', name: '4단계 (매운맛)'),
+        MenuOptionChoice(id: 'spice-5', name: '5단계 (아주매운맛)'),
+      ],
+    ),
+    MenuOptionGroup(
+      id: 'serving',
+      name: '양 선택',
+      isRequired: false,
+      choices: [
+        MenuOptionChoice(id: 'serving-normal', name: '기본'),
+        MenuOptionChoice(id: 'serving-large', name: '곱빼기', extraPrice: 3000),
+      ],
+    ),
+  ];
+
+  /// 사이드용 옵션 한 그룹.
+  static const _sideOptions = [
+    MenuOptionGroup(
+      id: 'side-serving',
+      name: '양 선택',
+      choices: [
+        MenuOptionChoice(id: 'side-normal', name: '기본'),
+        MenuOptionChoice(id: 'side-large', name: '곱빼기', extraPrice: 1500),
+      ],
+    ),
+  ];
+
+  /// AI 로 만든 매장의 판매 메뉴. `_make` 가 채우고 MockComboRepository 가 읽는다.
+  ///
+  /// AI 가 만든 매장은 [_menus] 같은 고정 목록에 없어서, 이 캐시가 없으면
+  /// "메뉴 추가하기" 화면이 빈 목록으로 열린다. 서버가 붙으면 함께 사라진다.
+  static final Map<String, List<MenuItem>> _builtMenus = {};
+
+  static List<MenuItem> menuFor(String storeId) =>
+      _builtMenus[storeId] ?? const [];
+
   /// 추출 결과 하나로 조합 후보들을 만든다.
   /// 첫 번째가 영상 속 그 매장이고, 뒤는 같은 지역·같은 종류의 대안이다.
   static List<ComboRecommendation> build({
@@ -115,6 +164,9 @@ class ComboBuilder {
       minimumOrderAmount: 12000 + (seed % 4) * 2000,
       deliveryFee: 1000 + (seed % 4) * 500,
       similarity: similarity.toDouble(),
+      // 매장 상세 상단에 쓰는 값들. 배달 예상은 시안처럼 구간으로 보여준다.
+      deliveryRangeText: '${25 + (seed % 8) * 5}~${33 + (seed % 8) * 5}분',
+      pickupMinutes: 15 + (seed % 3) * 5,
     );
 
     var items = _mainItems(
@@ -140,9 +192,43 @@ class ComboBuilder {
           unitPrice: _roundedPrice(side.$2),
           quantity: 1,
           imagePath: _placeholder,
+          optionGroups: _sideOptions,
         ),
       );
     }
+
+    // "메뉴 추가하기" 가 읽을 판매 메뉴를 만들어 둔다.
+    // 조합에 담긴 것 + 아직 안 담긴 사이드·음료를 합쳐 목록이 비지 않게 한다.
+    _builtMenus[store.id] = [
+      for (final item in items)
+        MenuItem(
+          id: item.id,
+          name: item.name,
+          options: item.options,
+          price: item.unitPrice,
+          imagePath: item.imagePath,
+          imageUrl: item.imageUrl,
+          category: item.id.startsWith('side-') ? '사이드' : '대표메뉴',
+          optionGroups: item.optionGroups,
+        ),
+      MenuItem(
+        id: 'extra-drink-$seed',
+        name: '코카콜라 500ml',
+        options: '시원하게 마시는 콜라',
+        price: 2500,
+        imagePath: _placeholder,
+        category: '음료',
+      ),
+      MenuItem(
+        id: 'extra-side-$seed',
+        name: '[사이드] 치즈볼',
+        options: '모짜렐라 치즈 가득한 쫀득 치즈볼',
+        price: 3000,
+        imagePath: _placeholder,
+        category: '사이드',
+        optionGroups: _sideOptions,
+      ),
+    ];
 
     return ComboRecommendation(store: store, items: items);
   }
@@ -170,6 +256,7 @@ class ComboBuilder {
           quantity: 1,
           imagePath: _placeholder,
           imageUrl: thumbnailUrl,
+          optionGroups: _genericOptions,
         ),
       ];
     }
@@ -185,6 +272,7 @@ class ComboBuilder {
           imagePath: _placeholder,
           // 첫 메뉴만 릴스 썸네일을 쓴다. 그게 영상에서 본 그 음식이다.
           imageUrl: i == 0 ? thumbnailUrl : null,
+          optionGroups: _genericOptions,
         ),
     ];
   }

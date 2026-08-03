@@ -9,7 +9,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/ds.dart';
 import 'combo_filter_sheet.dart';
-import 'menu_edit_sheet.dart';
+import 'menu_option_sheet.dart';
 
 /// Figma "다른 결과보기" (node 681:6245).
 ///
@@ -249,13 +249,14 @@ class _ComboCard extends StatelessWidget {
                   flow.changeQuantity(comboId: combo.id, itemId: item.id, delta: -1),
               onIncrease: () =>
                   flow.changeQuantity(comboId: combo.id, itemId: item.id, delta: 1),
-              onEditOption: () => MenuEditSheet.show(context, combo),
+              onEditOption: () => MenuOptionSheet.show(context,
+                  comboId: combo.id, item: item),
             ),
           ],
           const SizedBox(height: 16),
           const DsDivider(color: AppColors.gray300),
           const SizedBox(height: 16),
-          DsAddMenuButton(onTap: () => MenuEditSheet.show(context, combo)),
+          DsAddMenuButton(onTap: () => flow.openStoreMenu(combo)),
         ],
       ),
     );
