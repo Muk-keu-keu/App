@@ -1,163 +1,195 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../app_flow.dart';
 import '../theme.dart';
-import '../widgets/common.dart';
-import 'address_input_sheet.dart';
+import '../widgets/ds.dart';
 
-/// 공유로 들어오지 않고 앱을 직접 열었을 때 보여주는 안내 화면.
-/// Figma 와이어프레임에는 없어서 로딩화면의 디자인 언어를 따라 만들었다.
+/// Figma "먹방요기" (node 681:7115) — 공유 안내 화면.
+///
+/// 요기요 메인 홈의 퀵메뉴 "먹방요기" 로 들어온다. 인스타·유튜브에서 공유했을 때
+/// 무슨 일이 일어나는지 설명하는 서비스 소개 화면이다.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) => Container(
-        color: AppColors.pageBackground,
+        color: Colors.white,
+        child: Column(
+          children: [
+            DsHeader.detail(
+              title: '먹방요기',
+              onBack: () => context.read<AppFlow>().backToYogiyoHome(),
+            ),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: const [
+                  _Hero(),
+                  SizedBox(height: 20),
+                  _StepSection(),
+                  SizedBox(height: 40),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+/// 일러스트 + 헤드라인 + 설명.
+///
+/// 일러스트는 Figma export 에 배경(#FFEBF1)이 구워져 나온다. 조각별로 받아도
+/// 마찬가지라, 섹션 배경을 같은 색으로 끝맺어 이음새가 보이지 않게 했다.
+class _Hero extends StatelessWidget {
+  const _Hero();
+
+  static const _bottom = Color(0xFFFFEBF1);
+
+  @override
+  Widget build(BuildContext context) => Container(
         width: double.infinity,
-        child: SafeArea(
-          child: SingleChildScrollView(
-            child: Column(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFFFFB6CE), _bottom, Colors.white],
+            stops: [0, 0.55, 1],
+          ),
+        ),
+        child: Column(
+          children: [
+            Image.asset(
+              'assets/images/guide/hero.png',
+              width: double.infinity,
+              fit: BoxFit.fitWidth,
+            ),
+            const SizedBox(height: 20),
+            const _Headline(),
+            const SizedBox(height: 27),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 26),
+              child: Text(
+                '먹방을 보다 배가 고파지는 순간 공유버튼을 누르면\n'
+                '먹방 속 음식을 찾아 주문 가능한 조합으로 바꿔드릴게요',
+                textAlign: TextAlign.center,
+                style: AppText.body2(color: AppColors.gray700),
+              ),
+            ),
+            const SizedBox(height: 56),
+          ],
+        ),
+      );
+}
+
+/// "**먹방** 속 그 메뉴, / 지금 바로 먹어볼까요?"
+///
+/// 시안에서는 글자가 아웃라인 벡터로 분해돼 있어 폰트를 알 수 없다. 디자인시스템의
+/// 디스플레이 폰트(WAGURI)로 옮겼다 — 배너 워드마크와 같은 계열이라 톤이 맞는다.
+class _Headline extends StatelessWidget {
+  const _Headline();
+
+  @override
+  Widget build(BuildContext context) => Column(
+        children: [
+          RichText(
+            textAlign: TextAlign.center,
+            text: TextSpan(
+              style: AppText.waguri(24, color: AppColors.gray800),
               children: [
-                const _LocationBar(),
-                const SizedBox(height: 24),
-                Image.asset('assets/images/platter.png', width: 200, height: 200),
-                const SizedBox(height: 24),
-                Text('인스타그램에서 공유해 주세요',
-                    textAlign: TextAlign.center, style: AppText.semiBold(26)),
-                const SizedBox(height: 12),
-                Text(
-                  '릴스를 보다가 공유 버튼을 누르면\n먹방 속 조합을 요기요 메뉴로 바꿔드릴게요',
-                  textAlign: TextAlign.center,
-                  style: AppText.regular(16, color: AppColors.gray700),
+                TextSpan(
+                  text: '먹방',
+                  style: AppText.waguri(24, color: AppColors.primary500),
                 ),
-                const SizedBox(height: 32),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: FigmaCard(
-                    child: Column(
-                      children: [
-                        _step(1, '인스타그램 릴스에서 공유 버튼을 누르세요'),
-                        const SizedBox(height: 16),
-                        _step(2, '‘공유 대상…’을 선택하세요'),
-                        const SizedBox(height: 16),
-                        _step(3, '‘먹방요기’를 누르면 분석이 시작돼요'),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                // 요기족보 진입. 시안의 하단 탭바가 요기족보 홈에만 있어서
-                // 앱 홈에서 들어갈 문을 따로 뒀다.
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: GestureDetector(
-                    onTap: () => context.read<AppFlow>().openJokbo(),
-                    child: FigmaCard(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.menu_book_outlined,
-                              size: 22, color: AppColors.primary),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('요기족보 보러 가기',
-                                    style: AppText.semiBold(15, spacing: -0.4)),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '다른 사람들이 공유한 먹방 조합을 그대로 주문해요',
-                                  style: AppText.regular(13,
-                                      spacing: -0.3, color: AppColors.gray600),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Icon(Icons.keyboard_arrow_right,
-                              size: 20, color: AppColors.gray500),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 40),
+                const TextSpan(text: ' 속 그 메뉴,'),
               ],
             ),
           ),
-        ),
-      );
-
-  static Widget _step(int number, String text) => Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 22,
-            height: 22,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-            child: Text('$number', style: AppText.semiBold(13, color: Colors.white)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(text, style: AppText.regular(15, spacing: -0.35, color: AppColors.gray800)),
+          const SizedBox(height: 8),
+          Text(
+            '지금 바로 먹어볼까요?',
+            style: AppText.waguri(24, color: AppColors.gray800),
           ),
         ],
       );
 }
 
-/// 상단 위치 표시줄. 탭하면 주소 입력 시트가 열린다.
-///
-/// 위치는 로그인 직후 자동으로 한 번 수집되지만, 실패했거나 다른 동네로 바꾸고 싶을 때
-/// 들어갈 문이 필요하다. 디버그 빌드에서는 이 시트가 좌표 override 진입점도 겸한다.
-class _LocationBar extends StatelessWidget {
-  const _LocationBar();
+class _StepSection extends StatelessWidget {
+  const _StepSection();
+
+  static const _steps = [
+    ('Step 1', 'assets/icons/step_share.svg', '영상 시청 중\n공유 버튼을 눌러요'),
+    ('Step 2', 'assets/icons/step_upload.svg', '하단에 있는\n공유대상을 눌러요'),
+    ('Step 3', 'assets/icons/step_app.svg', '먹방요기를\n선택해요'),
+  ];
 
   @override
-  Widget build(BuildContext context) {
-    final flow = context.watch<AppFlow>();
-    final location = flow.location;
-
-    final (icon, text, color) = switch (location) {
-      null when flow.isLocating => (
-          Icons.location_searching,
-          '위치 확인 중…',
-          AppColors.gray600,
-        ),
-      null => (
-          Icons.location_off_outlined,
-          '위치를 설정해 주세요',
-          AppColors.primary,
-        ),
-      _ => (
-          Icons.location_on_outlined,
-          '${location.displayText} · ${location.origin.label}',
-          AppColors.gray800,
-        ),
-    };
-
-    return GestureDetector(
-      onTap: () => AddressInputSheet.show(context),
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: Row(
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                text,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppText.medium(14, spacing: -0.35, color: color),
-              ),
+            Text('먹방요기, 이렇게 사용해요', style: AppText.h3()),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                for (var i = 0; i < _steps.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  Expanded(child: _card(_steps[i])),
+                ],
+              ],
             ),
-            Icon(Icons.keyboard_arrow_right, size: 18, color: AppColors.gray500),
           ],
         ),
+      );
+
+  Widget _card((String, String, String) step) {
+    final (badge, icon, label) = step;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(4, 12, 4, 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: AppColors.gray300),
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF8D8D8D).withValues(alpha: 0.15),
+            blurRadius: 6,
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            width: 50,
+            height: 21,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppColors.primary500,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(badge, style: AppText.btn3(color: Colors.white)),
+          ),
+          const SizedBox(height: 20),
+          // 아이콘은 옅은 분홍 원 위에 올린다.
+          Container(
+            width: 50,
+            height: 50,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: AppColors.primary100,
+              shape: BoxShape.circle,
+            ),
+            child: SvgPicture.asset(icon, width: 24, height: 24),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: AppText.caption2(color: AppColors.gray700),
+          ),
+        ],
       ),
     );
   }
