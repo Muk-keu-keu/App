@@ -5,6 +5,11 @@
 ///
 /// imagePath 는 지금 로컬 에셋 경로이고, API 연동 시 URL 로 바뀐다.
 /// 그때 Image.asset → Image.network 로만 바꾸면 된다.
+library;
+
+import 'menu_option.dart';
+
+export 'menu_option.dart';
 
 class StoreSummary {
   const StoreSummary({
@@ -19,6 +24,9 @@ class StoreSummary {
     required this.minimumOrderAmount,
     required this.deliveryFee,
     required this.similarity,
+    this.heroImagePath = '',
+    this.deliveryRangeText,
+    this.pickupMinutes = 0,
   });
 
   final String id;
@@ -37,7 +45,21 @@ class StoreSummary {
   /// 먹방 영상 속 조합과의 유사도 0.0~1.0. 정렬 기준.
   final double similarity;
 
+  /// 매장 상세 상단에 깔리는 큰 사진. 비면 [imagePath] 를 쓴다.
+  final String heroImagePath;
+
+  /// "26~42분" 처럼 폭이 있는 배달 예상. 서버가 구간으로 주는 값이라
+  /// 정렬용 숫자([deliveryMinutes])와 따로 둔다. 없으면 숫자로 표시한다.
+  final String? deliveryRangeText;
+
+  /// 포장 예상 시간(분). 0이면 포장 탭을 비활성으로 그린다.
+  final int pickupMinutes;
+
   String get ratingText => '${rating.toStringAsFixed(1)}/5 ($reviewCount)';
+
+  String get heroPath => heroImagePath.isEmpty ? imagePath : heroImagePath;
+  String get deliveryTabText => '배달 ${deliveryRangeText ?? deliveryText}';
+  String get pickupTabText => pickupMinutes == 0 ? '포장' : '포장 $pickupMinutes분';
   String get distanceText => '${distanceKm.toStringAsFixed(1)} km';
 
   String get deliveryText {
@@ -59,14 +81,23 @@ class ComboItem {
     required this.quantity,
     required this.imagePath,
     this.imageUrl,
+    this.optionGroups = const [],
   });
 
   final String id;
   final String name; // "[원조 K 로제] 로제 닭발"
-  final String options; // "순살, 보통맛, 중국당면, ..."
-  final int unitPrice;
+
+  /// "순살, 보통맛, 중국당면, ..." — 고른 옵션을 이어 붙인 표시용 문자열.
+  /// 옵션 변경 시트에서 다시 만들어 넣기 때문에 final 이 아니다.
+  String options;
+
+  /// 옵션을 바꾸면 추가금이 붙어 단가가 달라진다.
+  int unitPrice;
   int quantity;
   final String imagePath;
+
+  /// 이 메뉴가 고를 수 있는 옵션 그룹. 조합에 담길 때 메뉴에서 그대로 물려받는다.
+  final List<MenuOptionGroup> optionGroups;
 
   /// 원격 이미지. 릴스 썸네일이 곧 영상에서 본 그 음식이라 첫 메뉴에 쓴다.
   final String? imageUrl;
@@ -81,6 +112,7 @@ class ComboItem {
         quantity: quantity,
         imagePath: imagePath,
         imageUrl: imageUrl,
+        optionGroups: optionGroups,
       );
 }
 
@@ -94,6 +126,8 @@ class MenuItem {
     required this.price,
     required this.imagePath,
     this.imageUrl,
+    this.category = '대표메뉴',
+    this.optionGroups = const [],
   });
 
   final String id;
@@ -103,6 +137,12 @@ class MenuItem {
   final String imagePath;
   final String? imageUrl;
 
+  /// 매장 메뉴 화면의 카테고리 칩(대표메뉴·신메뉴·사이드…) 구분.
+  final String category;
+
+  /// 옵션 그룹. 비어 있으면 "옵션 변경"에서 고칠 게 없다.
+  final List<MenuOptionGroup> optionGroups;
+
   ComboItem toComboItem({int quantity = 1}) => ComboItem(
         id: id,
         name: name,
@@ -111,6 +151,7 @@ class MenuItem {
         quantity: quantity,
         imagePath: imagePath,
         imageUrl: imageUrl,
+        optionGroups: optionGroups,
       );
 }
 
