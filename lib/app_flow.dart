@@ -241,6 +241,18 @@ class AppFlow extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 옵션 변경 시트가 열릴 수 있는 모든 조합을 뒤진다.
+  /// 추천 목록뿐 아니라 "나도 주문하기"의 복사본에서도 옵션을 고칠 수 있다.
+  ComboRecommendation? _comboById(String comboId) {
+    for (final c in recommendations) {
+      if (c.id == comboId) return c;
+    }
+    for (final c in [orderCombo, composeCombo, storeMenuCombo]) {
+      if (c != null && c.id == comboId) return c;
+    }
+    return null;
+  }
+
   /// 옵션 변경 시트에서 고른 것들을 반영한다.
   /// 표시용 문구와 단가를 함께 다시 계산해야 카드의 금액이 맞는다.
   void updateItemOptions({
@@ -248,9 +260,9 @@ class AppFlow extends ChangeNotifier {
     required String itemId,
     required List<MenuOptionChoice> choices,
   }) {
-    final ci = recommendations.indexWhere((c) => c.id == comboId);
-    if (ci < 0) return;
-    final items = recommendations[ci].items;
+    final combo = _comboById(comboId);
+    if (combo == null) return;
+    final items = combo.items;
     final ii = items.indexWhere((e) => e.id == itemId);
     if (ii < 0) return;
 
@@ -467,7 +479,19 @@ class AppFlow extends ChangeNotifier {
   Future<void> toggleLike() async {
     final post = selectedPost;
     if (post == null) return;
+    await _toggleLikeOf(post);
+  }
 
+  /// 목록에서 누른 좋아요. 시안(681:8066)의 목록 행에도 좋아요 버튼이 있어
+  /// 글을 열지 않고 바로 누를 수 있어야 한다.
+  Future<void> toggleLikeOn(String postId) async {
+    for (final list in [posts, popularPosts]) {
+      final i = list.indexWhere((p) => p.id == postId);
+      if (i >= 0) return _toggleLikeOf(list[i]);
+    }
+  }
+
+  Future<void> _toggleLikeOf(YogijokboPost post) async {
     // 낙관적 업데이트. 서버가 변경 후 카운트를 돌려주므로 응답으로 덮어쓴다.
     post.likedByMe = !post.likedByMe;
     post.likeCount += post.likedByMe ? 1 : -1;

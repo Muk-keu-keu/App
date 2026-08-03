@@ -174,7 +174,11 @@ class DsHeader extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      for (final a in actions) ...[a, const SizedBox(width: 12)],
+                      // 마지막 뒤에도 여백을 넣으면 아이콘 2개에서 64를 넘겨 터진다.
+                      for (var i = 0; i < actions.length; i++) ...[
+                        if (i > 0) const SizedBox(width: 12),
+                        actions[i],
+                      ],
                     ],
                   ),
                 ),
@@ -346,21 +350,30 @@ class DsPostItem extends StatelessWidget {
               Row(
                 children: [
                   _count(
-                    icon: liked ? Icons.favorite : Icons.favorite_border,
-                    color: liked ? AppColors.primary500 : AppColors.gray600,
+                    asset: DsIcons.heart,
+                    width: 15.5,
+                    height: 14.5,
+                    color: liked ? AppColors.primary500 : null,
                     value: likeCount,
                     onTap: onLike,
                   ),
                   const SizedBox(width: 8),
                   _count(
-                    icon: Icons.chat_bubble_outline,
-                    color: AppColors.gray600,
+                    asset: DsIcons.bubble,
+                    width: 15.78,
+                    height: 15.83,
                     value: commentCount,
                   ),
                   const Spacer(),
-                  Text(
-                    dateText,
-                    style: AppText.caption(color: AppColors.gray500),
+                  // 시안은 날짜 칸을 58 로 고정하고 오른쪽 정렬한다.
+                  // "2분 전"과 "2026.07.22"가 섞여도 오른쪽 끝이 흔들리지 않는다.
+                  SizedBox(
+                    width: 58,
+                    child: Text(
+                      dateText,
+                      textAlign: TextAlign.right,
+                      style: AppText.caption(color: AppColors.gray500),
+                    ),
                   ),
                 ],
               ),
@@ -370,9 +383,11 @@ class DsPostItem extends StatelessWidget {
       );
 
   Widget _count({
-    required IconData icon,
-    required Color color,
+    required String asset,
+    required double width,
+    required double height,
     required int value,
+    Color? color,
     VoidCallback? onTap,
   }) =>
       GestureDetector(
@@ -381,7 +396,18 @@ class DsPostItem extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(width: 20, height: 20, child: Icon(icon, size: 17, color: color)),
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: Center(
+                child: SvgPicture.asset(
+                  asset,
+                  width: width,
+                  height: height,
+                  colorFilter: color == null ? null : _tint(color),
+                ),
+              ),
+            ),
             const SizedBox(width: 2),
             Text('$value', style: AppText.caption(color: AppColors.gray600)),
           ],
@@ -424,6 +450,9 @@ class DsIcons {
   static const close = 'assets/icons/close.svg';
   static const radioRing = 'assets/icons/radio_ring.svg';
   static const radioDot = 'assets/icons/radio_dot.svg';
+  static const heart = 'assets/icons/heart.svg';
+  static const bubble = 'assets/icons/bubble.svg';
+  static const camera = 'assets/icons/camera.svg';
 }
 
 /// SVG 안에 색이 박혀 있어 다른 색으로 쓰려면 덧씌워야 한다.
@@ -846,6 +875,86 @@ class DsMenuItem extends StatelessWidget {
             borderRadius: BorderRadius.circular(200),
           ),
           child: Text('옵션 변경', style: AppText.btn3(color: AppColors.gray800)),
+        ),
+      );
+}
+
+// ── Video summary ────────────────────────────────────────────────────────────
+
+/// Figma `video summary` — 출처 영상 한 덩어리.
+///
+/// 족보 작성과 주문하기 화면이 같은 컴포넌트를 쓴다. 썸네일과 글이 화면을
+/// 반씩 나눠 갖고, 제목은 세 줄까지 보인다.
+class DsVideoSummary extends StatelessWidget {
+  const DsVideoSummary({
+    super.key,
+    required this.thumbnail,
+    required this.videoTitle,
+    required this.creatorName,
+    this.creatorAvatar,
+  });
+
+  final Widget thumbnail;
+  final String videoTitle;
+  final String creatorName;
+  final Widget? creatorAvatar;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Row(
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.chip),
+                child: SizedBox(height: 100, child: thumbnail),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    height: 66,
+                    child: Text(
+                      videoTitle,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.sub2(color: AppColors.gray800)
+                          .copyWith(letterSpacing: 0),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: creatorAvatar ??
+                            Container(
+                              decoration: const BoxDecoration(
+                                color: AppColors.gray300,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          creatorName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppText.body2(color: AppColors.gray700)
+                              .copyWith(letterSpacing: 0),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       );
 }

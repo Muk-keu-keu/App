@@ -102,6 +102,18 @@ class YogijokboPost {
 
   static String _two(int v) => v.toString().padLeft(2, '0');
 
+  /// 목록에서 쓰는 날짜. 시안(681:8066)은 갓 올라온 글은 "2분 전"으로,
+  /// 오래된 글은 날짜로 보여준다. 하루가 넘어가면 절대 날짜가 더 읽기 쉽다.
+  String relativeDateTextAt(DateTime now) {
+    final gap = now.difference(createdAt);
+    if (gap.inMinutes < 1) return '방금 전';
+    if (gap.inHours < 1) return '${gap.inMinutes}분 전';
+    if (gap.inDays < 1) return '${gap.inHours}시간 전';
+    return dateText;
+  }
+
+  String get relativeDateText => relativeDateTextAt(DateTime.now());
+
   /// 목록·상세에서 본문을 몇 줄로 줄여 보여줄 때 쓴다.
   String get bodyPreview => body.replaceAll('\n', ' ');
 
