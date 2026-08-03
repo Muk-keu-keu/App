@@ -14,6 +14,7 @@ import 'services/metadata_fetcher.dart';
 
 enum AppStage {
   login, // 로그인 (앱 첫 진입)
+  yogiyoHome, // 요기요 메인 홈 (배너·검색·카테고리·요기족보 차트)
   home, // 공유 안내
   keyword, // 취향 설정
   analyzing, // 분석 중
@@ -83,9 +84,23 @@ class AppFlow extends ChangeNotifier {
   /// 조합만", 나도 주문하기)에 도달했을 때 이미 준비돼 있어야 흐름이 끊기지 않는다.
   /// 화면 전환을 기다리게 하지 않으려고 await 하지 않고 넘긴다 — 권한 팝업은 홈 위에 뜬다.
   void completeLogin() {
-    _setStage(AppStage.home);
+    _setStage(AppStage.yogiyoHome);
     refreshLocation();
+    loadPopularPosts();
   }
+
+  /// 요기요 메인 홈의 "요기족보 실시간 인기조합" 차트에 쓸 목록.
+  List<YogijokboPost> popularPosts = [];
+
+  Future<void> loadPopularPosts() async {
+    popularPosts = await _postRepository.list(sort: PostSort.popular);
+    notifyListeners();
+  }
+
+  /// 퀵메뉴 "먹방요기" — 공유 안내 화면으로 간다.
+  void openShareGuide() => _setStage(AppStage.home);
+
+  void backToYogiyoHome() => _setStage(AppStage.yogiyoHome);
 
   UserLocation? location;
 

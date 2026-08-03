@@ -149,7 +149,8 @@ void main() {
       flow.completeLogin();
       await pumpEventQueue();
 
-      expect(flow.stage, AppStage.home);
+      // 로그인 후 도착지는 요기요 메인 홈이다. 공유 안내 화면은 퀵메뉴로 들어간다.
+      expect(flow.stage, AppStage.yogiyoHome);
       expect(flow.location, isNull);
       expect(flow.locationFailure, LocationFailure.unavailable);
     });

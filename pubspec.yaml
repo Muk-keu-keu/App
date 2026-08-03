@@ -52,6 +52,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/images/home/
     - assets/icons/
     # .env 는 gitignore 되지만 빌드 시 번들에 포함돼야 읽을 수 있다.
     - .env
