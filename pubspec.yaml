@@ -2,7 +2,7 @@ name: mukbang_ttaradamgi
 description: "먹방요기 — 릴스 속 맛집을 요기요 주문으로 이어주는 앱"
 publish_to: 'none'
 
-version: 1.1.0+6
+version: 1.1.0+7
 
 environment:
   sdk: ^3.12.0
