@@ -196,15 +196,22 @@ class DsHeader extends StatelessWidget {
 /// 떠 있는 알약 형태다. 폭 350, 라운딩 100, 반투명 흰 배경에 그림자.
 /// 선택된 탭 뒤에 회색 알약이 깔린다.
 enum DsTab {
-  home('홈', 'assets/icons/nav_home.svg'),
-  orders('주문내역', 'assets/icons/nav_order.svg'),
-  jokbo('요기족보', 'assets/icons/nav_jokbo.svg'),
-  my('마이요기요', 'assets/icons/nav_my.svg');
+  home('홈', 'assets/icons/nav_home.svg', 'assets/icons/nav_home_fill.svg'),
+  orders('주문내역', 'assets/icons/nav_order.svg', null),
+  jokbo('요기족보', 'assets/icons/nav_jokbo.svg', 'assets/icons/nav_jokbo_fill.svg'),
+  my('마이요기요', 'assets/icons/nav_my.svg', null);
 
-  const DsTab(this.label, this.icon);
+  const DsTab(this.label, this.icon, this._selectedIcon);
 
   final String label;
   final String icon;
+
+  /// 선택됐을 때 쓰는 채운 아이콘. 시안에 fill 변형이 있는 탭만 가진다
+  /// (홈·요기족보). 없는 탭은 선택돼도 같은 선 아이콘을 쓴다.
+  final String? _selectedIcon;
+
+  String iconFor({required bool selected}) =>
+      selected ? (_selectedIcon ?? icon) : icon;
 }
 
 class DsBottomNavigation extends StatelessWidget {
@@ -258,7 +265,11 @@ class DsBottomNavigation extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SvgPicture.asset(tab.icon, width: 24, height: 24),
+            SvgPicture.asset(
+              tab.iconFor(selected: selected),
+              width: 24,
+              height: 24,
+            ),
             const SizedBox(height: 0.5),
             Text(
               tab.label,
