@@ -17,8 +17,8 @@ abstract class ComboRepository {
     required TastePreference preference,
   });
 
-  /// 매장이 파는 메뉴 전체. "메뉴 수정하기"에서 항목 추가에 쓴다.
-  /// API 로는 GET /stores/{id}/menu.
+  /// 매장이 파는 메뉴 전체. "메뉴 추가하기" 화면(681:6132)이 쓴다.
+  /// API 로는 GET v1/stores/{storeId}/menu.
   Future<List<MenuItem>> menu(String storeId);
 }
 
