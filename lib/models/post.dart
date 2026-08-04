@@ -23,15 +23,55 @@ class PostAuthor {
   String get initial => nickname.isEmpty ? '?' : nickname.substring(0, 1);
 }
 
-/// 조합의 출처 영상. Figma 의 유튜브 배지에 해당한다.
+/// 출처 영상의 플랫폼. wire 값은 대문자 (api-yogijokbo.md 2번).
+enum PostPlatform {
+  instagram('INSTAGRAM'),
+  youtube('YOUTUBE');
+
+  const PostPlatform(this.wire);
+
+  final String wire;
+
+  static PostPlatform fromWire(String value) => values.firstWhere(
+        (p) => p.wire == value.toUpperCase(),
+        orElse: () => PostPlatform.youtube,
+      );
+}
+
+/// 조합의 출처 영상. API `source` 객체.
 ///
 /// 분석 파이프라인의 `AnalysisSource` 와 다르다 — 그쪽은 AI 에 넣은 입력이고,
 /// 이건 게시글에 붙어 사용자에게 보이는 링크다.
 class PostSource {
-  const PostSource({required this.videoTitle, required this.videoUrl});
+  const PostSource({
+    required this.platform,
+    required this.url,
+    required this.title,
+    this.thumbnailUrl,
+  });
 
-  final String videoTitle;
-  final String videoUrl;
+  final PostPlatform platform;
+
+  /// 영상 연결 화면으로 가는 링크.
+  final String url;
+  final String title;
+
+  /// 영상 썸네일. 목록 카드가 쓰는 이미지이기도 하다.
+  final String? thumbnailUrl;
+}
+
+/// cursor 페이지네이션 응답. `{ items, nextCursor }` 형태를 그대로 담는다.
+class CursorPage<T> {
+  const CursorPage({required this.items, this.nextCursor});
+
+  const CursorPage.empty() : items = const [], nextCursor = null;
+
+  final List<T> items;
+
+  /// 다음 페이지가 없으면 null.
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
 }
 
 class PostComment {
@@ -89,10 +129,15 @@ class YogijokboPost {
   int commentCount;
 
   /// 내 위치에서 주문 가능한지. 목록의 "내 위치에서 가능한 조합만" 필터에 쓴다.
-  final bool orderableHere;
+  ///
+  /// 목록(1번)만 내려주는 값이다. 상세(2번) 응답에는 없어서, 상세를 받을 때
+  /// 목록에서 알던 값을 그대로 물려준다 (`docs/api-yogijokbo.md` 확인 필요 항목).
+  bool orderableHere;
 
-  /// 대표 이미지. 목록 썸네일.
-  String? get thumbnailUrl => imageUrls.isEmpty ? null : imageUrls.first;
+  /// 목록 카드에 쓰는 대표 이미지. 명세는 영상 썸네일을 먼저 쓰고, 없으면
+  /// 사용자가 올린 첫 사진을 쓴다 (1번 비고).
+  String? get thumbnailUrl =>
+      source?.thumbnailUrl ?? (imageUrls.isEmpty ? null : imageUrls.first);
   String get thumbnailPath =>
       imagePaths.isEmpty ? 'assets/images/store_dujjim.png' : imagePaths.first;
 

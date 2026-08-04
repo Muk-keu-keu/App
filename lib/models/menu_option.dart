@@ -5,6 +5,36 @@
 /// API 로는 GET /stores/{storeId}/menu 응답의 `optionGroups`.
 library;
 
+/// 주문에 실제로 담긴 옵션 하나. API `combo.items[].selectedOptions[]`.
+class SelectedOption {
+  const SelectedOption({required this.name, required this.price});
+
+  final String name;
+  final int price;
+}
+
+/// 주문에 담긴 맵기. API `combo.items[].selectedSpice` — nullable 3단계다.
+///
+/// 시안의 "매운맛 5단계" 는 매장이 파는 옵션 그룹이라 [SelectedOption] 으로 들어간다.
+/// 이 값은 그와 별개로 서버가 요약해 두는 필드다.
+enum SpiceSelection {
+  none('NONE'),
+  medium('MEDIUM'),
+  hot('HOT');
+
+  const SpiceSelection(this.wire);
+
+  final String wire;
+
+  static SpiceSelection? fromWire(String? value) {
+    if (value == null) return null;
+    for (final s in values) {
+      if (s.wire == value.toUpperCase()) return s;
+    }
+    return null;
+  }
+}
+
 class MenuOptionChoice {
   const MenuOptionChoice({
     required this.id,

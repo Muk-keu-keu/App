@@ -82,19 +82,32 @@ class ComboItem {
     required this.imagePath,
     this.imageUrl,
     this.optionGroups = const [],
+    this.selectedOptions = const [],
+    this.selectedSpice,
+    this.optionsPrice = 0,
   });
 
   final String id;
   final String name; // "[원조 K 로제] 로제 닭발"
 
-  /// "순살, 보통맛, 중국당면, ..." — 고른 옵션을 이어 붙인 표시용 문자열.
+  /// API `description` — "순살, 보통맛, 중국당면, ..." 주문 시점 스냅샷 문자열.
   /// 옵션 변경 시트에서 다시 만들어 넣기 때문에 final 이 아니다.
   String options;
 
-  /// 옵션을 바꾸면 추가금이 붙어 단가가 달라진다.
+  /// 메뉴 기본가. 옵션 추가금은 [optionsPrice] 로 따로 둔다 — 명세가 두 값을
+  /// 나눠 내려주고, 합쳐 두면 나중에 옵션만 바꿀 때 기본가를 되찾을 수 없다.
   int unitPrice;
   int quantity;
   final String imagePath;
+
+  /// 고른 옵션들. API `selectedOptions`.
+  List<SelectedOption> selectedOptions;
+
+  /// 고른 맵기. API `selectedSpice` (nullable).
+  SpiceSelection? selectedSpice;
+
+  /// 옵션 추가금 합. API `optionsPrice`.
+  int optionsPrice;
 
   /// 이 메뉴가 고를 수 있는 옵션 그룹. 조합에 담길 때 메뉴에서 그대로 물려받는다.
   final List<MenuOptionGroup> optionGroups;
@@ -102,7 +115,8 @@ class ComboItem {
   /// 원격 이미지. 릴스 썸네일이 곧 영상에서 본 그 음식이라 첫 메뉴에 쓴다.
   final String? imageUrl;
 
-  int get lineTotal => unitPrice * quantity;
+  /// API `lineTotal` — (기본가 + 옵션 추가금) × 수량.
+  int get lineTotal => (unitPrice + optionsPrice) * quantity;
 
   ComboItem copy() => ComboItem(
         id: id,
@@ -113,6 +127,9 @@ class ComboItem {
         imagePath: imagePath,
         imageUrl: imageUrl,
         optionGroups: optionGroups,
+        selectedOptions: [...selectedOptions],
+        selectedSpice: selectedSpice,
+        optionsPrice: optionsPrice,
       );
 }
 
@@ -153,6 +170,27 @@ class MenuItem {
         imageUrl: imageUrl,
         optionGroups: optionGroups,
       );
+
+  /// 필수 그룹의 첫 선택지를 미리 골라 담는다. 요기요처럼 필수 옵션이 있는
+  /// 메뉴는 아무것도 안 고른 상태로 장바구니에 들어갈 수 없다.
+  ComboItem toComboItemWithDefaults({int quantity = 1}) {
+    final chosen = [
+      for (final g in optionGroups)
+        SelectedOption(name: g.defaultChoice.name, price: g.defaultChoice.extraPrice),
+    ];
+    return ComboItem(
+      id: id,
+      name: name,
+      options: chosen.isEmpty ? options : chosen.map((c) => c.name).join(', '),
+      unitPrice: price,
+      quantity: quantity,
+      imagePath: imagePath,
+      imageUrl: imageUrl,
+      optionGroups: optionGroups,
+      selectedOptions: chosen,
+      optionsPrice: chosen.fold(0, (sum, c) => sum + c.price),
+    );
+  }
 }
 
 class ComboRecommendation {
