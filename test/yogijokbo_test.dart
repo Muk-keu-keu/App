@@ -51,13 +51,14 @@ void main() {
 
   group('요기족보 목록', () {
     test('인기순은 좋아요가 많은 글이 먼저다', () async {
-      final posts = await MockPostRepository().list(sort: PostSort.popular);
-      expect(posts.first.likeCount, greaterThanOrEqualTo(posts.last.likeCount));
+      final page = await MockPostRepository().list(sort: PostSort.popular);
+      expect(page.items.first.likeCount,
+          greaterThanOrEqualTo(page.items.last.likeCount));
     });
 
     test('최신순은 작성일이 늦은 글이 먼저다', () async {
-      final posts = await MockPostRepository().list(sort: PostSort.latest);
-      expect(posts.first.createdAt.isAfter(posts.last.createdAt), isTrue);
+      final page = await MockPostRepository().list(sort: PostSort.latest);
+      expect(page.items.first.createdAt.isAfter(page.items.last.createdAt), isTrue);
     });
 
     test('내 위치에서 가능한 조합만 켜면 배달 불가 매장이 걸러진다', () async {
@@ -69,8 +70,8 @@ void main() {
         location: _gangnam,
       );
 
-      expect(all.length, greaterThan(filtered.length));
-      expect(filtered.every((p) => p.orderableHere), isTrue);
+      expect(all.items.length, greaterThan(filtered.items.length));
+      expect(filtered.items.every((p) => p.orderableHere), isTrue);
     });
 
     test('위치가 없으면 필터를 무시하고 전체를 준다', () async {
@@ -79,7 +80,7 @@ void main() {
       final all = await repo.list(sort: PostSort.latest);
       final noLocation = await repo.list(sort: PostSort.latest, orderableOnly: true);
 
-      expect(noLocation.length, all.length);
+      expect(noLocation.items.length, all.items.length);
     });
 
     test('정렬을 바꾸면 목록을 다시 불러온다', () async {
@@ -216,17 +217,17 @@ void main() {
       // 작성 화면은 분석 결과 조합을 받아 열린다.
       final seed = await repo.detail('post_01H8X');
       flow.selectedPost = seed;
-      await flow.startReorder();
-      flow.composeCombo = flow.orderCombo;
+      // 명세 3번: 조합 내용을 보내지 않는다. orderId 하나로 서버가 붙인다.
+      flow.composeOrderId = 'order_5001';
 
       await flow.submitPost(title: '내 로제닭발 조합', body: '치즈 두 배가 정답');
 
       expect(flow.stage, AppStage.jokboDetail);
       expect(flow.selectedPost?.title, '내 로제닭발 조합');
-      expect(flow.composeCombo, isNull); // 작성 상태는 비워진다
+      expect(flow.composeOrderId, isNull); // 작성 상태는 비워진다
 
-      final posts = await repo.list(sort: PostSort.latest);
-      expect(posts.first.title, '내 로제닭발 조합');
+      final page = await repo.list(sort: PostSort.latest);
+      expect(page.items.first.title, '내 로제닭발 조합');
     });
 
     test('제목이 비면 공유하지 않는다', () async {
@@ -234,12 +235,13 @@ void main() {
       final flow = AppFlow(locationService: const _NoLocation(), postRepository: repo);
       final seed = await repo.detail('post_01H8X');
       flow.selectedPost = seed;
-      await flow.startReorder();
-      flow.composeCombo = flow.orderCombo;
+      flow.composeOrderId = 'order_5001';
 
       await flow.submitPost(title: '   ', body: '본문만 있음');
 
-      expect(flow.composeCombo, isNotNull); // 작성 화면에 머문다
+      // 작성 상태가 남아 있어야 화면에 머문다. 비워지면 상세로 넘어가 버린다.
+      expect(flow.composeOrderId, 'order_5001');
+      expect(flow.stage, isNot(AppStage.jokboDetail));
     });
   });
 
