@@ -16,7 +16,7 @@ class YoutubeSourceBadge extends StatelessWidget {
   final PostSource source;
 
   Future<void> _open() async {
-    final uri = Uri.tryParse(source.videoUrl);
+    final uri = Uri.tryParse(source.url);
     if (uri == null) return;
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
@@ -48,7 +48,7 @@ class YoutubeSourceBadge extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  source.videoTitle,
+                  source.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppText.regular(12, spacing: -0.3, color: AppColors.gray700),

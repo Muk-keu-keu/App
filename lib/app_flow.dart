@@ -100,7 +100,8 @@ class AppFlow extends ChangeNotifier {
   List<YogijokboPost> popularPosts = [];
 
   Future<void> loadPopularPosts() async {
-    popularPosts = await _postRepository.list(sort: PostSort.popular);
+    final page = await _postRepository.list(sort: PostSort.popular);
+    popularPosts = page.items;
     notifyListeners();
   }
 
@@ -125,7 +126,12 @@ class AppFlow extends ChangeNotifier {
     composeCombo = order.combo.copy();
     composeSource = order.sourceVideoTitle.isEmpty
         ? null
-        : PostSource(videoTitle: order.sourceVideoTitle, videoUrl: '');
+        // 주문 이력에는 영상 제목만 있다. 링크·플랫폼은 서버가 orders 에서 붙인다.
+        : PostSource(
+            platform: PostPlatform.youtube,
+            title: order.sourceVideoTitle,
+            url: '',
+          );
     composeOrderId = order.orderId;
     _setStage(AppStage.jokboCompose);
   }
@@ -266,23 +272,14 @@ class AppFlow extends ChangeNotifier {
     final ii = items.indexWhere((e) => e.id == itemId);
     if (ii < 0) return;
 
-    final extra = choices.fold(0, (sum, c) => sum + c.extraPrice);
-    final base = items[ii].unitPrice - _extraOf(items[ii]);
+    // 명세는 기본가(unitPrice)와 옵션 추가금(optionsPrice)을 나눠 둔다.
+    // 그래서 기본가를 건드리지 않고 추가금만 다시 계산하면 된다.
+    items[ii].selectedOptions = [
+      for (final c in choices) SelectedOption(name: c.name, price: c.extraPrice),
+    ];
+    items[ii].optionsPrice = choices.fold(0, (sum, c) => sum + c.extraPrice);
     items[ii].options = choices.map((c) => c.name).join(', ');
-    items[ii].unitPrice = base + extra;
     notifyListeners();
-  }
-
-  /// 지금 붙어 있는 옵션들의 추가금. 옵션을 바꿀 때 기본가를 되찾는 데 쓴다.
-  int _extraOf(ComboItem item) {
-    final chosen = item.options.split(',').map((e) => e.trim()).toSet();
-    var sum = 0;
-    for (final g in item.optionGroups) {
-      for (final c in g.choices) {
-        if (chosen.contains(c.name)) sum += c.extraPrice;
-      }
-    }
-    return sum;
   }
 
   // ── 매장 메뉴 (메뉴 추가하기) ───────────────────────────────────────────────
@@ -313,7 +310,7 @@ class AppFlow extends ChangeNotifier {
     if (i >= 0) {
       combo.items[i].quantity += 1;
     } else {
-      combo.items.add(menu.toComboItem());
+      combo.items.add(menu.toComboItemWithDefaults());
     }
     notifyListeners();
   }
@@ -482,15 +479,41 @@ class AppFlow extends ChangeNotifier {
     return loadPosts();
   }
 
+  /// 다음 페이지 커서. null 이면 더 없다 (api-yogijokbo.md 1번).
+  String? postsNextCursor;
+
   Future<void> loadPosts() async {
     postsLoading = true;
     notifyListeners();
 
-    posts = await _postRepository.list(
+    final page = await _postRepository.list(
       sort: postSort,
       orderableOnly: orderableOnly,
       location: location,
     );
+    posts = page.items;
+    postsNextCursor = page.nextCursor;
+
+    postsLoading = false;
+    notifyListeners();
+  }
+
+  /// 목록 끝에서 다음 페이지를 이어 붙인다.
+  Future<void> loadMorePosts() async {
+    final cursor = postsNextCursor;
+    if (cursor == null || postsLoading) return;
+
+    postsLoading = true;
+    notifyListeners();
+
+    final page = await _postRepository.list(
+      sort: postSort,
+      orderableOnly: orderableOnly,
+      location: location,
+      cursor: cursor,
+    );
+    posts = [...posts, ...page.items];
+    postsNextCursor = page.nextCursor;
 
     postsLoading = false;
     notifyListeners();
@@ -510,12 +533,43 @@ class AppFlow extends ChangeNotifier {
   Future<void> openPost(String postId) async {
     final post = await _postRepository.detail(postId);
     if (post == null) return;
+
+    // 상세 응답에는 orderableHere 가 없다. 목록에서 알던 값을 물려준다.
+    for (final list in [posts, popularPosts]) {
+      final known = list.where((p) => p.id == postId);
+      if (known.isNotEmpty) {
+        post.orderableHere = known.first.orderableHere;
+        break;
+      }
+    }
+
     selectedPost = post;
     postComments = [];
+    commentsNextCursor = null;
     _setStage(AppStage.jokboDetail);
 
-    // 댓글은 화면을 띄운 뒤 채운다. 목록 API 가 댓글을 내려주지 않아 별도 호출이다.
-    postComments = await _postRepository.comments(postId);
+    // 댓글은 화면을 띄운 뒤 채운다. 상세 응답이 댓글을 내려주지 않아 별도 호출이다.
+    await loadComments(postId);
+  }
+
+  /// 댓글 다음 페이지 커서.
+  String? commentsNextCursor;
+
+  Future<void> loadComments(String postId) async {
+    final page = await _postRepository.comments(postId);
+    postComments = page.items;
+    commentsNextCursor = page.nextCursor;
+    notifyListeners();
+  }
+
+  Future<void> loadMoreComments() async {
+    final post = selectedPost;
+    final cursor = commentsNextCursor;
+    if (post == null || cursor == null) return;
+
+    final page = await _postRepository.comments(post.id, cursor: cursor);
+    postComments = [...postComments, ...page.items];
+    commentsNextCursor = page.nextCursor;
     notifyListeners();
   }
 
@@ -546,7 +600,11 @@ class AppFlow extends ChangeNotifier {
     post.likeCount += post.likedByMe ? 1 : -1;
     notifyListeners();
 
-    final result = await _postRepository.toggleLike(post.id);
+    // 명세는 좋아요와 취소를 다른 엔드포인트로 나눈다. 둘 다 멱등이라
+    // 낙관적 업데이트가 서버 상태와 어긋나도 응답으로 맞춰진다.
+    final result = post.likedByMe
+        ? await _postRepository.like(post.id)
+        : await _postRepository.unlike(post.id);
     post.likeCount = result.likeCount;
     post.likedByMe = result.likedByMe;
     notifyListeners();
@@ -557,20 +615,24 @@ class AppFlow extends ChangeNotifier {
     final trimmed = body.trim();
     if (post == null || trimmed.isEmpty) return;
 
-    final comment = await _postRepository.addComment(post.id, trimmed);
-    postComments = [...postComments, comment];
+    // 201 은 본문이 없다. 서버가 매긴 id·작성시각을 알 수 없어 다시 받아온다.
+    await _postRepository.addComment(post.id, trimmed);
+    await loadComments(post.id);
     post.commentCount = postComments.length;
     notifyListeners();
   }
 
-  /// "나도 주문하기". 스냅샷이 지금도 주문 가능한지 서버가 재확인한다.
+  /// "나도 주문하기".
+  ///
+  /// 전용 API 가 없다 (api-yogijokbo.md "나도 주문하기 흐름"). 상세 응답의 조합이
+  /// 이미 장바구니 모양이라 그것을 복사해 주문 화면으로 넘긴다. 복사본이라
+  /// 주문 화면에서 수량을 바꿔도 게시글 스냅샷은 그대로다.
   Future<void> startReorder() async {
     final post = selectedPost;
     if (post == null) return;
 
-    final result = await _postRepository.reorder(postId: post.id, location: location);
-    orderCombo = result.combo;
-    orderUnavailable = !result.orderable;
+    orderCombo = post.combo.copy();
+    orderUnavailable = !post.orderableHere;
     _setStage(AppStage.jokboOrder);
   }
 
@@ -596,51 +658,33 @@ class AppFlow extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 분석 결과를 요기족보에 공유하러 간다.
-  /// 영상 카드는 분석에 쓴 링크(`source`)를 그대로 재사용한다.
-  void openCompose() {
-    final combo = selectedCombo;
-    if (combo == null) return;
-    composeCombo = combo.copy();
-    composeSource = _composeSourceFromAnalysis();
-    _setStage(AppStage.jokboCompose);
-  }
-
-  PostSource? _composeSourceFromAnalysis() {
-    final src = source;
-    if (src == null) return null;
-    // 영상 제목이 없으면 AI 요약을 대신 쓴다. 링크만 있는 카드는 무엇인지 알 수 없다.
-    final title = extraction?.summary.isNotEmpty == true
-        ? extraction!.summary
-        : src.rawText.split('\n').last;
-    return PostSource(videoTitle: title, videoUrl: src.url);
-  }
-
   void cancelCompose() {
     composeCombo = null;
     composeSource = null;
-    _setStage(AppStage.combo);
+    composeOrderId = null;
+    _setStage(AppStage.orders);
   }
 
   /// 작성 완료. 공유한 글을 바로 열어 결과를 확인시켜 준다.
+  /// 작성 완료. 서버는 postId 만 돌려주므로 그 id 로 상세를 열어 확인시켜 준다
+  /// (api-yogijokbo.md 3번 흐름).
+  ///
+  /// 조합 내용은 보내지 않는다. orderId 만 보내면 서버가 주문 스냅샷에서 읽어 붙인다.
   Future<void> submitPost({required String title, required String body}) async {
-    final combo = composeCombo;
-    if (combo == null || title.trim().isEmpty) return;
+    final orderId = composeOrderId;
+    if (orderId == null || title.trim().isEmpty) return;
 
-    final post = await _postRepository.create(
+    final postId = await _postRepository.create(
+      orderId: orderId,
       title: title.trim(),
       body: body.trim(),
-      // 사진 첨부는 조합 이미지를 그대로 쓴다. 갤러리 연동은 이번 범위가 아니다.
-      imagePaths: combo.items.map((e) => e.imagePath).toList(),
-      combo: combo,
-      source: composeSource,
+      // 사진 첨부(갤러리·카메라)는 이번 범위가 아니다. 명세상 0장도 허용된다.
     );
 
     composeCombo = null;
     composeSource = null;
-    selectedPost = post;
-    postComments = [];
-    _setStage(AppStage.jokboDetail);
+    composeOrderId = null;
+    await openPost(postId);
   }
 
   /// 키 문제일 때 보여줄 문구.

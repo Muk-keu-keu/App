@@ -121,7 +121,7 @@ class _VideoSection extends StatelessWidget {
             size: 100,
             radius: 0,
           ),
-          videoTitle: source.videoTitle,
+          videoTitle: source.title,
           creatorName: combo.store.name,
         ),
       );

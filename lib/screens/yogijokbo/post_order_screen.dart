@@ -74,7 +74,7 @@ class _VideoSection extends StatelessWidget {
             size: 100,
             radius: 0,
           ),
-          videoTitle: post.source!.videoTitle,
+          videoTitle: post.source!.title,
           creatorName: post.author.nickname,
         ),
       );

@@ -201,7 +201,7 @@ class _SourceLink extends StatelessWidget {
             const SizedBox(width: 4),
             Expanded(
               child: Text(
-                source.videoTitle,
+                source.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppText.caption(color: AppColors.gray700),
