@@ -8,7 +8,6 @@ import '../models/preference.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/ds.dart';
-import 'combo_filter_sheet.dart';
 import 'menu_option_sheet.dart';
 
 /// Figma "다른 결과보기" (node 681:6245).
@@ -98,6 +97,9 @@ class _ComboListScreenState extends State<ComboListScreen> {
 
 /// 필터 칩 줄. 시안에는 "모드 · 맛 · 예상 시간" 이라는 기본 라벨로 그려져 있지만,
 /// 앱에서는 키워드 선택 화면에서 이미 값이 정해져 있어 고른 값을 그대로 보여준다.
+///
+/// 누르면 시안의 "필터"(681:6194) 화면이 열린다. 그 시안이 키워드 선택 화면과
+/// 구조가 같아 같은 화면을 필터 모드로 다시 쓴다.
 class _ChipRow extends StatelessWidget {
   const _ChipRow({required this.preference});
 
@@ -112,21 +114,21 @@ class _ChipRow extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              DsChipFilter.icon(onTap: () => showComboFilterSheet(context)),
+              DsChipFilter.icon(onTap: () => context.read<AppFlow>().openFilter()),
               const SizedBox(width: 8),
               DsChipFilter(
                 label: preference.mode.title,
-                onTap: () => showComboFilterSheet(context),
+                onTap: () => context.read<AppFlow>().openFilter(),
               ),
               const SizedBox(width: 8),
               DsChipFilter(
                 label: preference.spice.title,
-                onTap: () => showComboFilterSheet(context),
+                onTap: () => context.read<AppFlow>().openFilter(),
               ),
               const SizedBox(width: 8),
               DsChipFilter(
                 label: preference.deliveryLabel,
-                onTap: () => showComboFilterSheet(context),
+                onTap: () => context.read<AppFlow>().openFilter(),
               ),
             ],
           ),

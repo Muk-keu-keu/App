@@ -328,8 +328,56 @@ class AppFlow extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 취향 설정 화면을 필터로 다시 열었는지.
+  ///
+  /// 시안의 "필터"(681:6194)는 키워드 선택 화면과 구조가 같다 — 디자이너가 같은
+  /// 화면을 재사용했다. 그래서 화면을 새로 만들지 않고 이 깃발로 갈라 쓴다.
+  bool _keywordIsFilter = false;
+
+  /// 마지막 분석의 썸네일. 필터를 다시 걸 때 같은 이미지를 써야 카드가 바뀌지 않는다.
+  String? _lastThumbnailUrl;
+
+  /// 비교 목록의 필터 칩. 취향 설정 화면을 필터로 다시 연다.
+  void openFilter() {
+    _keywordIsFilter = true;
+    _setStage(AppStage.keyword);
+  }
+
   /// 취향 설정에서 "적용하기"를 누르면 실제 분석을 시작한다.
+  /// 필터로 열렸을 때는 AI 를 다시 부르지 않고 추천만 다시 만든다 —
+  /// 영상에서 뽑은 내용은 그대로이고 취향만 바뀌었다.
   Future<void> applyPreferenceAndAnalyze() async {
+    if (_keywordIsFilter) {
+      _keywordIsFilter = false;
+      return _reapplyPreference();
+    }
+    return _analyze();
+  }
+
+  Future<void> _reapplyPreference() async {
+    final result = extraction;
+    if (result == null) {
+      _setStage(AppStage.comboList);
+      return;
+    }
+
+    _setStage(AppStage.analyzing);
+    final combos = await _repository.recommend(
+      extraction: result,
+      thumbnailUrl: _lastThumbnailUrl,
+      preference: preference,
+    );
+    if (combos.isEmpty) {
+      _fail('조건에 맞는 조합을 찾지 못했어요.');
+      return;
+    }
+
+    recommendations = combos;
+    selectedComboIndex = 0;
+    _setStage(AppStage.comboList);
+  }
+
+  Future<void> _analyze() async {
     final link = _pendingLink;
     // 이전 분석의 입력·결과가 남아 새 링크의 것으로 오인되지 않게 먼저 비운다.
     source = null;
@@ -348,6 +396,7 @@ class AppFlow extends ChangeNotifier {
       final metadata = await const MetadataFetcher().fetch(uri);
       text = metadata.combinedText;
       thumbnailUrl = metadata.imageUrl;
+      _lastThumbnailUrl = thumbnailUrl;
     } catch (_) {
       _fail('게시물 내용을 가져오지 못했어요.\n잠시 후 다시 시도해 주세요.');
       return;
