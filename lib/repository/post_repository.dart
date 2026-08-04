@@ -8,55 +8,44 @@ import '../models/user_location.dart';
 /// 서버가 붙으면 이 구현체만 갈아끼우면 화면 코드는 그대로다.
 /// 메서드는 `docs/api-yogijokbo.md` 의 엔드포인트와 1:1로 대응한다.
 abstract class PostRepository {
-  /// GET /api/v1/posts
+  /// 1. GET v1/posts
   /// [orderableOnly] 가 true 면 좌표가 필요하다. 좌표가 없으면 필터를 무시한다.
-  Future<List<YogijokboPost>> list({
+  Future<CursorPage<YogijokboPost>> list({
     required PostSort sort,
     bool orderableOnly = false,
     UserLocation? location,
+    String? cursor,
+    int size = 20,
   });
 
-  /// GET /api/v1/posts/{postId}
+  /// 2. GET v1/posts/{postId}
   Future<YogijokboPost?> detail(String postId);
 
-  /// GET /api/v1/posts/{postId}/comments
-  Future<List<PostComment>> comments(String postId);
-
-  /// POST /api/v1/posts/{postId}/comments
-  Future<PostComment> addComment(String postId, String body);
-
-  /// POST·DELETE /api/v1/posts/{postId}/likes — 변경 후 카운트를 돌려준다(멱등).
-  Future<({int likeCount, bool likedByMe})> toggleLike(String postId);
-
-  /// POST /api/v1/posts/{postId}/reorder
-  /// 스냅샷이 지금도 주문 가능한지 현재 시점으로 재확인한다.
-  Future<ReorderResult> reorder({required String postId, UserLocation? location});
-
-  /// POST /api/v1/posts — 내 조합을 공유한다.
-  Future<YogijokboPost> create({
+  /// 3. POST v1/posts — multipart. 서버는 postId 만 돌려준다.
+  ///
+  /// 조합 내용을 보내지 않는다. [orderId] 만 보내면 서버가 주문 스냅샷에서 읽어 붙인다.
+  Future<String> create({
+    required String orderId,
     required String title,
     required String body,
-    required List<String> imagePaths,
-    required ComboRecommendation combo,
-    PostSource? source,
-  });
-}
-
-/// "나도 주문하기" 결과. 시안의 주문하기 화면이 이 값으로 그려진다.
-class ReorderResult {
-  const ReorderResult({
-    required this.orderable,
-    this.combo,
-    this.unavailableItems = const [],
+    List<String> imagePaths = const [],
   });
 
-  final bool orderable;
+  /// 4. POST v1/posts/{postId}/likes — 멱등. 변경 후 카운트를 돌려준다.
+  Future<({int likeCount, bool likedByMe})> like(String postId);
 
-  /// 현재 가격·재고로 다시 계산한 조합.
-  final ComboRecommendation? combo;
+  /// 5. DELETE v1/posts/{postId}/likes — 멱등. `likedByMe` 는 항상 false.
+  Future<({int likeCount, bool likedByMe})> unlike(String postId);
 
-  /// 담을 수 없는 항목. reason 은 SOLD_OUT / DISCONTINUED / OUT_OF_DELIVERY_AREA.
-  final List<({String name, String reason})> unavailableItems;
+  /// 6. GET v1/posts/{postId}/comments — created_at 오름차순.
+  Future<CursorPage<PostComment>> comments(
+    String postId, {
+    String? cursor,
+    int size = 20,
+  });
+
+  /// 7. POST v1/posts/{postId}/comments — 201 CREATED, 본문 없음.
+  Future<void> addComment(String postId, String body);
 }
 
 class MockPostRepository implements PostRepository {
@@ -83,10 +72,12 @@ class MockPostRepository implements PostRepository {
   List<YogijokboPost> get _posts => _cache ??= _samples();
 
   @override
-  Future<List<YogijokboPost>> list({
+  Future<CursorPage<YogijokboPost>> list({
     required PostSort sort,
     bool orderableOnly = false,
     UserLocation? location,
+    String? cursor,
+    int size = 20,
   }) async {
     await _wait;
 
@@ -102,7 +93,17 @@ class MockPostRepository implements PostRepository {
       PostSort.popular => (a, b) => b.likeCount.compareTo(a.likeCount),
       PostSort.latest => (a, b) => b.createdAt.compareTo(a.createdAt),
     });
-    return result.map((p) => p.copy()).toList();
+
+    // cursor 는 앞에서 몇 개를 건너뛸지로 흉내낸다. 서버는 불투명 문자열을 주므로
+    // 화면은 값의 모양에 기대지 않고 그대로 되돌려주기만 한다.
+    final start = int.tryParse(cursor ?? '') ?? 0;
+    final page = result.skip(start).take(size).toList();
+    final next = start + page.length;
+
+    return CursorPage(
+      items: page.map((p) => p.copy()).toList(),
+      nextCursor: next < result.length ? '$next' : null,
+    );
   }
 
   /// **복사본을 돌려준다.** 실제 HTTP API 는 매번 새 객체를 주므로 화면이 응답을
@@ -120,71 +121,87 @@ class MockPostRepository implements PostRepository {
   /// 같은 이유로 리스트도 새로 만들어 준다. 저장소의 리스트를 그대로 주면
   /// 화면이 항목을 더할 때 저장소에도 함께 들어간다.
   @override
-  Future<List<PostComment>> comments(String postId) async {
+  Future<CursorPage<PostComment>> comments(
+    String postId, {
+    String? cursor,
+    int size = 20,
+  }) async {
     await _wait;
-    return [..._comments[postId] ??= _sampleComments(postId)];
+    final all = _comments[postId] ??= _sampleComments(postId);
+    final start = int.tryParse(cursor ?? '') ?? 0;
+    final page = all.skip(start).take(size).toList();
+    final next = start + page.length;
+
+    return CursorPage(
+      items: page,
+      nextCursor: next < all.length ? '$next' : null,
+    );
   }
 
   @override
-  Future<PostComment> addComment(String postId, String body) async {
+  Future<void> addComment(String postId, String body) async {
+    await _wait;
     final list = _comments[postId] ??= _sampleComments(postId);
-    final comment = PostComment(
-      id: 'local_${++_commentSeq}',
-      author: const PostAuthor(id: 'me', nickname: '나'),
-      // createdAt 은 호출 시각. 목록 정렬용이라 실제 시각이 필요하다.
-      body: body,
-      createdAt: DateTime.now(),
+    list.add(
+      PostComment(
+        id: 'local_${++_commentSeq}',
+        author: const PostAuthor(id: 'me', nickname: '나'),
+        body: body,
+        // createdAt 은 호출 시각. 목록 정렬용이라 실제 시각이 필요하다.
+        createdAt: DateTime.now(),
+      ),
     );
-    list.add(comment);
     for (final post in _posts) {
       if (post.id == postId) post.commentCount = list.length;
     }
-    return comment;
   }
 
   @override
-  Future<({int likeCount, bool likedByMe})> toggleLike(String postId) async {
+  Future<({int likeCount, bool likedByMe})> like(String postId) => _setLike(postId, true);
+
+  @override
+  Future<({int likeCount, bool likedByMe})> unlike(String postId) =>
+      _setLike(postId, false);
+
+  /// 두 엔드포인트 모두 멱등이다. 이미 그 상태면 카운트를 건드리지 않는다.
+  Future<({int likeCount, bool likedByMe})> _setLike(String postId, bool on) async {
     for (final post in _posts) {
       if (post.id != postId) continue;
-      post.likedByMe = !post.likedByMe;
-      post.likeCount += post.likedByMe ? 1 : -1;
+      if (post.likedByMe != on) {
+        post.likedByMe = on;
+        // 0 미만으로 내려가지 않게 한다 (명세 5번).
+        post.likeCount = (post.likeCount + (on ? 1 : -1)).clamp(0, 1 << 30);
+      }
       return (likeCount: post.likeCount, likedByMe: post.likedByMe);
     }
     return (likeCount: 0, likedByMe: false);
   }
 
   @override
-  Future<ReorderResult> reorder({required String postId, UserLocation? location}) async {
-    await _wait;
-    final post = await detail(postId);
-    if (post == null) return const ReorderResult(orderable: false);
-
-    // 스냅샷을 복사해서 준다. 주문 화면에서 수량을 바꿔도 게시글은 그대로여야 한다.
-    return ReorderResult(orderable: post.orderableHere, combo: post.combo.copy());
-  }
-
-  @override
-  Future<YogijokboPost> create({
+  Future<String> create({
+    required String orderId,
     required String title,
     required String body,
-    required List<String> imagePaths,
-    required ComboRecommendation combo,
-    PostSource? source,
+    List<String> imagePaths = const [],
   }) async {
     await _wait;
+
+    // 서버는 orderId 로 주문 스냅샷을 읽어 조합을 붙인다. mock 은 그럴 주문
+    // 저장소가 없어 첫 샘플의 조합을 빌려 쓴다. 서버가 붙으면 사라질 코드다.
+    final template = _posts.first;
     final post = YogijokboPost(
       id: 'local_post_${_posts.length + 1}',
       title: title,
       body: body,
       author: const PostAuthor(id: 'me', nickname: '나'),
-      combo: combo.copy(),
+      combo: template.combo.copy(),
       createdAt: DateTime.now(),
       imagePaths: imagePaths,
-      source: source,
+      source: template.source,
       commentCount: 0,
     );
     _posts.insert(0, post);
-    return post.copy();
+    return post.id;
   }
 
   // ── 시안 데이터 ────────────────────────────────────────────────────────────
@@ -209,8 +226,9 @@ class MockPostRepository implements PostRepository {
             'assets/images/store_dujjim.png',
           ],
           source: const PostSource(
-            videoTitle: 'Sub) 로제닭발 먹방! 두찜에서 로제닭발과 중국당면, 치즈 추가 / 닭발 먹방 asmr',
-            videoUrl: 'https://www.youtube.com/watch?v=demo-rose-dakbal',
+            platform: PostPlatform.youtube,
+            title: 'Sub) 로제닭발 먹방! 두찜에서 로제닭발과 중국당면, 치즈 추가 / 닭발 먹방 asmr',
+            url: 'https://www.youtube.com/watch?v=demo-rose-dakbal',
           ),
           likeCount: 12,
           commentCount: 4,
@@ -235,6 +253,12 @@ class MockPostRepository implements PostRepository {
                 unitPrice: 16000,
                 quantity: 1,
                 imagePath: 'assets/images/menu_rose_dakbal.png',
+                selectedSpice: SpiceSelection.medium,
+                selectedOptions: [
+                  SelectedOption(name: '순살', price: 0),
+                  SelectedOption(name: '분모자로 변경', price: 0),
+                  SelectedOption(name: '치즈몽땅 추가', price: 0),
+                ],
               ),
               ComboItem(
                 id: 'cheese-ball',
@@ -256,8 +280,9 @@ class MockPostRepository implements PostRepository {
           createdAt: DateTime(2026, 7, 5),
           imagePaths: const ['assets/images/store_dujjim.png'],
           source: const PostSource(
-            videoTitle: '겉바속촉 KFC 핫크리스피 치르르치킨에 까르보불닭볶음면 먹방! 소세지도 같이',
-            videoUrl: 'https://www.youtube.com/watch?v=demo-chireureu',
+            platform: PostPlatform.youtube,
+            title: '겉바속촉 KFC 핫크리스피 치르르치킨에 까르보불닭볶음면 먹방! 소세지도 같이',
+            url: 'https://www.youtube.com/watch?v=demo-chireureu',
           ),
           likeCount: 32,
           commentCount: 9,
