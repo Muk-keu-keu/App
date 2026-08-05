@@ -34,13 +34,13 @@ void main() {
     });
 
     test('맵기는 NONE / MEDIUM / HOT 3단계이고 null 을 허용한다', () {
-      expect(SpiceSelection.none.wire, 'NONE');
-      expect(SpiceSelection.medium.wire, 'MEDIUM');
-      expect(SpiceSelection.hot.wire, 'HOT');
-      expect(SpiceSelection.fromWire(null), isNull);
-      expect(SpiceSelection.fromWire('MEDIUM'), SpiceSelection.medium);
+      expect(SpiceLevel.none.wire, 'NONE');
+      expect(SpiceLevel.medium.wire, 'MEDIUM');
+      expect(SpiceLevel.hot.wire, 'HOT');
+      expect(SpiceLevel.fromWire(null), isNull);
+      expect(SpiceLevel.fromWire('MEDIUM'), SpiceLevel.medium);
       // 명세에 없는 값이 와도 터지지 않는다.
-      expect(SpiceSelection.fromWire('EXTREME'), isNull);
+      expect(SpiceLevel.fromWire('EXTREME'), isNull);
     });
   });
 
@@ -95,7 +95,7 @@ void main() {
     test('조합을 보내지 않고 orderId 로 만든다', () async {
       final repo = MockPostRepository(delay: Duration.zero);
       final postId = await repo.create(
-        orderId: 'order_5001',
+        checkoutId: 7002,
         title: '제목',
         body: '본문',
       );
@@ -108,7 +108,7 @@ void main() {
     test('작성 후 그 postId 의 상세로 이동한다', () async {
       final repo = MockPostRepository(delay: Duration.zero);
       final flow = makeFlow(repo);
-      flow.composeOrderId = 'order_5001';
+      flow.composeCheckoutId = 7002;
 
       await flow.submitPost(title: '내 조합', body: '본문');
 
@@ -167,7 +167,7 @@ void main() {
   });
 
   group('나도 주문하기 — 전용 API 가 없다', () {
-    test('상세의 조합을 복사해 주문 화면으로 간다', () async {
+    test('게시글의 조합을 복사해 장바구니로 간다', () async {
       final repo = MockPostRepository(delay: Duration.zero);
       final flow = makeFlow(repo);
       await flow.openPost('post_01H8X');
@@ -175,14 +175,21 @@ void main() {
       await flow.startReorder();
 
       expect(flow.stage, AppStage.jokboOrder);
-      expect(flow.orderCombo, isNotNull);
+      expect(flow.cart.isNotEmpty, isTrue);
 
-      // 복사본이라 주문 화면에서 수량을 바꿔도 게시글 스냅샷은 그대로다.
-      final itemId = flow.orderCombo!.items.first.id;
-      final snapshotBefore = flow.selectedPost!.combo.items.first.quantity;
-      flow.changeOrderQuantity(itemId: itemId, delta: 1);
+      // 복사본이라 장바구니에서 수량을 바꿔도 게시글 스냅샷은 그대로다.
+      final store = flow.cart.stores.first;
+      final snapshotBefore = flow.selectedPost!.stores.first.lines.first.quantity;
+      flow.changeCartQuantity(
+        restaurantId: store.restaurantId,
+        menuId: store.lines.first.menuId,
+        delta: 1,
+      );
 
-      expect(flow.selectedPost!.combo.items.first.quantity, snapshotBefore);
+      expect(
+        flow.selectedPost!.stores.first.lines.first.quantity,
+        snapshotBefore,
+      );
     });
 
     test('배달 불가 글은 주문 불가로 표시한다', () async {
@@ -200,26 +207,38 @@ void main() {
 
   group('금액', () {
     test('lineTotal 은 (기본가 + 옵션 추가금) × 수량', () {
-      final item = ComboItem(
-        id: 'i1',
+      final line = CartLine(
+        menuId: 1,
         name: '로제 닭발',
-        options: '순살',
-        unitPrice: 20000,
+        menuType: MenuType.main,
+        price: 20000,
         quantity: 2,
-        imagePath: 'assets/images/menu_rose_dakbal.png',
-        optionsPrice: 3000,
+        options: const [
+          MenuOption(name: '치즈몽땅', price: 3000, selected: true),
+        ],
       );
 
-      expect(item.lineTotal, 46000);
+      expect(line.optionsPrice, 3000);
+      expect(line.lineTotal, 46000);
     });
 
-    test('payableTotal 은 주문 금액 + 배달비', () async {
+    test('payableTotal 은 주문 금액 + 매장별 배달비', () async {
       final repo = MockPostRepository(delay: Duration.zero);
       final post = (await repo.detail('post_01H8X'))!;
 
+      final deliveryTotal = post.stores.fold(0, (sum, s) => sum + s.deliveryFee);
+      expect(post.payableTotal, post.itemsTotal + deliveryTotal);
+    });
+
+    test('매장이 여러 곳이면 배달비가 여러 번 붙는다', () async {
+      final repo = MockPostRepository(delay: Duration.zero);
+      final post = (await repo.detail('post_02K3M'))!;
+
+      expect(post.stores.length, 2);
+      // 소계의 합이 결제 예상액이다 (명세 5번: 전체 합계는 서버로 보내지 않는다).
       expect(
-        post.combo.payableTotal,
-        post.combo.itemsTotal + post.combo.store.deliveryFee,
+        post.payableTotal,
+        post.stores.fold(0, (sum, s) => sum + s.subtotal),
       );
     });
   });

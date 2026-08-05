@@ -166,10 +166,12 @@ class PostAuthorRow extends StatelessWidget {
 
 /// 요기족보 홈 하단 탭바.
 ///
-/// 시안의 5개 탭 중 **요기족보만 이번 범위**다. 홈은 앱의 공유 안내 화면으로
-/// 돌아가고, 찜·주문내역·My 는 아직 화면이 없어 비활성으로 둔다. 눌러도 아무 일도
-/// 없는 대신 흐릿하게 그려 "아직 없음"이 보이게 했다 — 시안의 자리를 지키면서
-/// 없는 기능을 있는 것처럼 보이지 않게 하는 편이 시연에서 안전하다.
+/// **찜 탭은 없다.** 회의(2026-08-04)에서 찜하기 기능을 제거했다 — 복잡도만
+/// 올리고 쓰이지 않는 기능이었다. 자리도 남기지 않는다. 비활성 탭으로 두면
+/// "곧 생긴다"는 뜻이 되는데 그럴 계획이 없다.
+///
+/// 홈은 앱의 공유 안내 화면으로 돌아가고, My 는 아직 화면이 없어 비활성이다.
+/// 흐릿하게 그려 "아직 없음"이 보이게 한다.
 class JokboTabBar extends StatelessWidget {
   const JokboTabBar({super.key, required this.onHome});
 
@@ -188,7 +190,6 @@ class JokboTabBar extends StatelessWidget {
             child: Row(
               children: [
                 _tab(Icons.home_outlined, '홈', onTap: onHome),
-                _tab(Icons.favorite_border, '찜'),
                 _tab(Icons.receipt_long_outlined, '주문내역'),
                 _tab(Icons.menu_book_outlined, '요기족보', isActive: true),
                 _tab(Icons.person_outline, 'My'),

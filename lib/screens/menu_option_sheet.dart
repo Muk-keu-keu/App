@@ -9,18 +9,27 @@ import '../widgets/ds.dart';
 
 /// Figma "옵션 변경" (node 681:6050).
 ///
-/// 조합에 담긴 메뉴 하나의 옵션을 다시 고른다. 그룹마다 라디오라 하나씩만 고르고,
-/// 고른 것들의 추가금이 단가에 더해진다.
+/// 회의(2026-08-04) 이후 구조가 두 군데 바뀌었다.
+///
+/// 1. 옵션이 **평평한 목록**이 됐다. 그룹마다 라디오로 하나씩 고르는 게 아니라,
+///    `group` 은 묶어 그릴 라벨일 뿐이고 각 옵션을 체크박스로 켜고 끈다.
+///    서버가 `selected` 로 이미 체크된 상태를 내려준다.
+/// 2. 맵기가 옵션에서 빠졌다. `spiceAdjustable` 이 true 인 메뉴만 3버튼을 그리고,
+///    고른 값은 `selectedSpice` 로 따로 나간다. 시안의 "매운맛 5단계" 는 없앴다.
 class MenuOptionSheet extends StatefulWidget {
-  const MenuOptionSheet({super.key, required this.comboId, required this.item});
+  const MenuOptionSheet({
+    super.key,
+    required this.restaurantId,
+    required this.line,
+  });
 
-  final String comboId;
-  final ComboItem item;
+  final int restaurantId;
+  final CartLine line;
 
   static Future<void> show(
     BuildContext context, {
-    required String comboId,
-    required ComboItem item,
+    required int restaurantId,
+    required CartLine line,
   }) {
     final flow = context.read<AppFlow>();
     return showModalBottomSheet<void>(
@@ -31,7 +40,7 @@ class MenuOptionSheet extends StatefulWidget {
         value: flow,
         child: FractionallySizedBox(
           heightFactor: 0.92,
-          child: MenuOptionSheet(comboId: comboId, item: item),
+          child: MenuOptionSheet(restaurantId: restaurantId, line: line),
         ),
       ),
     );
@@ -42,76 +51,98 @@ class MenuOptionSheet extends StatefulWidget {
 }
 
 class _MenuOptionSheetState extends State<MenuOptionSheet> {
-  /// 그룹 id → 고른 선택지 id.
-  late final Map<String, String> _picked = {
-    for (final g in widget.item.optionGroups) g.id: _initial(g),
+  /// 체크된 옵션. `group + name` 이 사실상의 키다 — 서버가 옵션 id 를 주지 않는다.
+  late final Set<String> _checked = {
+    for (final o in widget.line.options)
+      if (o.selected) _keyOf(o),
   };
 
-  /// 이미 담긴 메뉴의 옵션 문자열에서 이름이 일치하는 선택지를 되살린다.
-  /// 못 찾으면 시안처럼 첫 선택지가 켜진 상태로 연다.
-  String _initial(MenuOptionGroup group) {
-    final chosen = widget.item.options.split(',').map((e) => e.trim()).toSet();
-    final match = group.choices.where((c) => chosen.contains(c.name));
-    return match.isEmpty ? group.defaultChoice.id : match.first.id;
-  }
+  /// 고른 맵기. 조절 불가 메뉴면 쓰이지 않는다.
+  late SpiceLevel? _spice = widget.line.selectedSpice;
 
-  List<MenuOptionChoice> get _selection => [
-        for (final g in widget.item.optionGroups)
-          g.choices.firstWhere((c) => c.id == _picked[g.id]),
+  static String _keyOf(MenuOption o) => '${o.group ?? ''}|${o.name}';
+
+  List<MenuOption> get _selection => [
+        for (final o in widget.line.options)
+          if (_checked.contains(_keyOf(o))) o,
       ];
 
+  void _toggle(MenuOption option) => setState(() {
+        final key = _keyOf(option);
+        if (!_checked.remove(key)) _checked.add(key);
+      });
+
   @override
-  Widget build(BuildContext context) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFFFEFEFE),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 48,
-              height: 5,
-              decoration: BoxDecoration(
-                color: const Color(0xFFDCDCDC),
-                borderRadius: BorderRadius.circular(100),
-              ),
+  Widget build(BuildContext context) {
+    final groups = MenuOptionGroup.groupBy(widget.line.options);
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFFEFEFE),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            width: 48,
+            height: 5,
+            decoration: BoxDecoration(
+              color: const Color(0xFFDCDCDC),
+              borderRadius: BorderRadius.circular(100),
             ),
-            const SizedBox(height: 15),
-            _Header(
-              title: widget.item.name,
-              onClose: () => Navigator.of(context).pop(),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                children: [
-                  for (var i = 0; i < widget.item.optionGroups.length; i++) ...[
-                    if (i > 0) const DsDivider(color: AppColors.gray300),
-                    _Group(
-                      group: widget.item.optionGroups[i],
-                      pickedId: _picked[widget.item.optionGroups[i].id]!,
-                      onPick: (id) => setState(
-                        () => _picked[widget.item.optionGroups[i].id] = id,
+          ),
+          const SizedBox(height: 15),
+          _Header(
+            title: widget.line.name,
+            onClose: () => Navigator.of(context).pop(),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              children: [
+                if (widget.line.spiceAdjustable)
+                  _SpiceSection(
+                    selected: _spice,
+                    onPick: (next) => setState(() => _spice = next),
+                  ),
+                for (var i = 0; i < groups.length; i++) ...[
+                  if (i > 0 || widget.line.spiceAdjustable)
+                    const DsDivider(color: AppColors.gray300),
+                  _Group(
+                    group: groups[i],
+                    isChecked: (o) => _checked.contains(_keyOf(o)),
+                    onToggle: _toggle,
+                  ),
+                ],
+                if (groups.isEmpty && !widget.line.spiceAdjustable)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    child: Center(
+                      child: Text(
+                        '이 메뉴는 고를 수 있는 옵션이 없어요',
+                        style: AppText.body2(color: AppColors.gray600),
                       ),
                     ),
-                  ],
-                ],
-              ),
+                  ),
+              ],
             ),
-            _BottomCta(
-              onApply: () {
-                context.read<AppFlow>().updateItemOptions(
-                      comboId: widget.comboId,
-                      itemId: widget.item.id,
-                      choices: _selection,
-                    );
-                Navigator.of(context).pop();
-              },
-            ),
-          ],
-        ),
-      );
+          ),
+          _BottomCta(
+            onApply: () {
+              context.read<AppFlow>().updateLineOptions(
+                    restaurantId: widget.restaurantId,
+                    menuId: widget.line.menuId,
+                    chosen: _selection,
+                    spice: widget.line.spiceAdjustable ? _spice : null,
+                  );
+              Navigator.of(context).pop();
+            },
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _Header extends StatelessWidget {
@@ -170,16 +201,14 @@ class _Header extends StatelessWidget {
       );
 }
 
-class _Group extends StatelessWidget {
-  const _Group({
-    required this.group,
-    required this.pickedId,
-    required this.onPick,
-  });
+/// 맵기 3버튼. `spiceAdjustable` 이 true 인 메뉴에만 나온다.
+///
+/// 라디오처럼 하나만 고른다 — 옵션과 달리 값이 하나(`selectedSpice`)라서다.
+class _SpiceSection extends StatelessWidget {
+  const _SpiceSection({required this.selected, required this.onPick});
 
-  final MenuOptionGroup group;
-  final String pickedId;
-  final ValueChanged<String> onPick;
+  final SpiceLevel? selected;
+  final ValueChanged<SpiceLevel> onPick;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -190,18 +219,67 @@ class _Group extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(group.name, style: AppText.sub2(color: AppColors.gray800)),
+                Text('맵기 선택', style: AppText.sub2(color: AppColors.gray800)),
                 const SizedBox(width: 4),
-                DsRequirementBadge(isRequired: group.isRequired),
+                const DsRequirementBadge(isRequired: true),
               ],
             ),
             const SizedBox(height: 16),
-            for (var i = 0; i < group.choices.length; i++) ...[
+            Row(
+              children: [
+                for (final level in SpiceLevel.values) ...[
+                  if (level != SpiceLevel.values.first) const SizedBox(width: 8),
+                  Expanded(
+                    child: DsChipChoice(
+                      label: level.title,
+                      selected: selected == level,
+                      onTap: () => onPick(level),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      );
+}
+
+class _Group extends StatelessWidget {
+  const _Group({
+    required this.group,
+    required this.isChecked,
+    required this.onToggle,
+  });
+
+  final MenuOptionGroup group;
+  final bool Function(MenuOption) isChecked;
+  final ValueChanged<MenuOption> onToggle;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 라벨이 없는 옵션(`group == null`)은 제목 줄 없이 바로 나열한다.
+            if (group.label != null) ...[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(group.label!, style: AppText.sub2(color: AppColors.gray800)),
+                  const SizedBox(width: 4),
+                  // 옵션은 전부 선택이다 — 명세에 필수 여부 필드가 없다.
+                  const DsRequirementBadge(isRequired: false),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+            for (var i = 0; i < group.options.length; i++) ...[
               if (i > 0) const SizedBox(height: 12),
               _Row(
-                choice: group.choices[i],
-                isOn: group.choices[i].id == pickedId,
-                onTap: () => onPick(group.choices[i].id),
+                option: group.options[i],
+                isOn: isChecked(group.options[i]),
+                onTap: () => onToggle(group.options[i]),
               ),
             ],
           ],
@@ -210,9 +288,9 @@ class _Group extends StatelessWidget {
 }
 
 class _Row extends StatelessWidget {
-  const _Row({required this.choice, required this.isOn, required this.onTap});
+  const _Row({required this.option, required this.isOn, required this.onTap});
 
-  final MenuOptionChoice choice;
+  final MenuOption option;
   final bool isOn;
   final VoidCallback onTap;
 
@@ -226,11 +304,11 @@ class _Row extends StatelessWidget {
             Expanded(
               child: Row(
                 children: [
-                  DsRadio(isOn: isOn),
-                  const SizedBox(width: 4),
+                  DsCheckbox(isOn: isOn),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      choice.name,
+                      option.name,
                       style: AppText.body2(color: AppColors.gray800),
                     ),
                   ),
@@ -238,7 +316,7 @@ class _Row extends StatelessWidget {
               ),
             ),
             Text(
-              '+${wonFormat(choice.extraPrice)}원',
+              '+${wonFormat(option.price)}원',
               style: AppText.body2(color: AppColors.gray600),
             ),
           ],
@@ -268,6 +346,7 @@ class _BottomCta extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
         child: SafeArea(
           top: false,
+          // 시안(681:6050) 문구 그대로. 금액은 시트를 닫으면 카드에서 보인다.
           child: DsButton(label: '변경하기', onPressed: onApply),
         ),
       );

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../models/combo.dart';
 import '../models/preference.dart';
 import '../theme.dart';
 
@@ -210,63 +209,6 @@ class FigmaCheckbox extends StatelessWidget {
           border: isOn ? null : Border.all(color: AppColors.gray400, width: 1.5),
         ),
         child: isOn ? Icon(Icons.check, size: size * 0.62, color: Colors.white) : null,
-      );
-}
-
-/// 메뉴 한 줄. 결과 화면·장바구니·메뉴수정 시트가 같은 모양을 쓴다.
-class ComboMenuRow extends StatelessWidget {
-  const ComboMenuRow({
-    super.key,
-    required this.item,
-    required this.onDecrease,
-    required this.onIncrease,
-  });
-
-  final ComboItem item;
-  final VoidCallback onDecrease;
-  final VoidCallback onIncrease;
-
-  @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              RemoteOrAssetImage(
-                imageUrl: item.imageUrl,
-                assetPath: item.imagePath,
-                size: 80,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item.name, style: AppText.semiBold(16, spacing: -0.4)),
-                    const SizedBox(height: 4),
-                    Text(
-                      item.options,
-                      style: AppText.regular(12, spacing: -0.3, color: AppColors.gray600),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              QuantityStepper(
-                quantity: item.quantity,
-                onDecrease: onDecrease,
-                onIncrease: onIncrease,
-              ),
-              Text('${wonFormat(item.lineTotal)}원', style: AppText.semiBold(16, spacing: -0.4)),
-            ],
-          ),
-        ],
       );
 }
 

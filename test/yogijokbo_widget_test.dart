@@ -5,7 +5,7 @@ import 'package:mukbang_ttaradamgi/app_flow.dart';
 import 'package:mukbang_ttaradamgi/repository/post_repository.dart';
 import 'package:mukbang_ttaradamgi/screens/yogijokbo/post_compose_screen.dart';
 import 'package:mukbang_ttaradamgi/screens/yogijokbo/post_detail_screen.dart';
-import 'package:mukbang_ttaradamgi/screens/yogijokbo/post_order_screen.dart';
+import 'package:mukbang_ttaradamgi/screens/cart_screen.dart';
 import 'package:mukbang_ttaradamgi/screens/yogijokbo/yogijokbo_home_screen.dart';
 import 'package:mukbang_ttaradamgi/services/location_service.dart';
 import 'package:mukbang_ttaradamgi/theme.dart';
@@ -103,7 +103,7 @@ void main() {
     final flow = newFlow();
     await flow.openPost('post_01H8X');
     await flow.startReorder();
-    await pumpScreen(tester, const PostOrderScreen(), flow);
+    await pumpScreen(tester, CartScreen(title: '주문하기', onBack: () {}), flow);
 
     expect(tester.takeException(), isNull);
     expect(find.text('주문하기'), findsOneWidget);
@@ -116,15 +116,45 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     // 주문 20,000 + 배달비 3,000 = 23,000 (시안과 같은 값)
-    expect(find.text('23,000원'), findsOneWidget);
-    expect(find.text('20,000원'), findsOneWidget);
+    expect(find.text('23,000원'), findsWidgets);
+    expect(find.text('20,000원'), findsWidgets);
+  });
+
+  testWidgets('매장이 여러 곳이면 매장마다 섹션과 배달비가 나온다', (tester) async {
+    final flow = newFlow();
+    await flow.openPost('post_02K3M');
+    await flow.startReorder();
+    await pumpScreen(tester, CartScreen(title: '주문하기', onBack: () {}), flow);
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('KFC-용산아이파크몰점'), findsOneWidget);
+    expect(find.textContaining('2곳에서 따로 배달'), findsOneWidget);
+
+    // 두 번째 매장 섹션은 화면 밖이라 스크롤해서 확인한다.
+    await tester.scrollUntilVisible(
+      find.text('편의점 배달-용산점'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    // 배달비 합계는 "배달비 (2곳)" 로 표기된다.
+    await tester.scrollUntilVisible(
+      find.text('배달비 (2곳)'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('4,500원'), findsOneWidget); // 2,500 + 2,000
   });
 
   testWidgets('주문 불가 매장은 결제 버튼을 막는다', (tester) async {
     final flow = newFlow();
     await flow.openPost('post_02K3M'); // orderableHere: false
     await flow.startReorder();
-    await pumpScreen(tester, const PostOrderScreen(), flow);
+    await pumpScreen(
+      tester,
+      CartScreen(title: '주문하기', unavailable: true, onBack: () {}),
+      flow,
+    );
 
     expect(tester.takeException(), isNull);
     // 시안의 버튼은 하나뿐이라, 막을 때는 바꿔 끼우지 않고 비활성으로 그린다.
@@ -137,7 +167,7 @@ void main() {
     final flow = newFlow();
     await flow.openPost('post_01H8X');
     await flow.startReorder();
-    flow.composeCombo = flow.orderCombo;
+    flow.composeCart = flow.cart;
     await pumpScreen(tester, const PostComposeScreen(), flow);
 
     expect(tester.takeException(), isNull);
@@ -157,7 +187,7 @@ void main() {
     final flow = newFlow();
     await flow.openPost('post_01H8X');
     await flow.startReorder();
-    flow.composeCombo = flow.orderCombo;
+    flow.composeCart = flow.cart;
     await pumpScreen(tester, const PostComposeScreen(), flow);
 
     await tester.enterText(find.byType(TextField).first, '내 로제닭발 조합');

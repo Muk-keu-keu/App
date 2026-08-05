@@ -1,44 +1,238 @@
-import 'combo.dart';
-
-/// 주문 이력 한 건.
+/// 주문(결제) 도메인 모델. `docs/api-spec.md` 3·4·5번과 1:1이다.
 ///
-/// 서버 `GET v1/users/me/orders` 의 `orders[]` 원소에 대응한다.
-/// 요기족보 글 작성은 이 목록에서 시작한다 — `isPostedToJokbo` 로 이미 공유한
-/// 주문을 구분한다.
-class OrderHistoryItem {
-  OrderHistoryItem({
-    required this.orderId,
-    required this.storeName,
-    required this.combo,
-    required this.orderedAt,
-    this.thumbnailPath = 'assets/images/store_dujjim.png',
+/// 이름이 헷갈리기 쉬워 먼저 정리한다.
+/// - **결제 하나 = 영상 하나 = 카드 하나** 이고 그 키가 `checkoutId` 다.
+/// - 한 결제 안에 가게가 여러 곳일 수 있다 (`stores[]`). 엽떡+명랑핫도그를 한 번에
+///   결제하면 DB 행은 2개 생기고 두 행의 `checkout_id` 가 같다.
+/// - API 에 나가는 `orderId` 는 `checkout_id` 다. DB 의 `order_id` 는 내부 저장용이라
+///   밖으로 노출되지 않는다.
+library;
+
+import 'cart.dart';
+import 'menu.dart';
+
+/// 출처 영상. 주문 요청·응답과 결제 목록이 같은 모양을 쓴다.
+class OrderSource {
+  const OrderSource({
+    required this.platform,
+    required this.url,
     this.thumbnailUrl,
-    this.sourceVideoTitle = '',
-    this.isPostedToJokbo = false,
+    this.title = '',
   });
 
-  final String orderId;
-  final String storeName;
+  /// `INSTAGRAM` | `YOUTUBE`. 명세가 두 값만 허용한다.
+  final SourceKind platform;
 
-  /// 주문한 조합. 족보 작성 시 그대로 게시글에 실린다.
-  final ComboRecommendation combo;
-
-  final DateTime orderedAt;
-  final String thumbnailPath;
+  final String url;
   final String? thumbnailUrl;
+  final String title;
 
-  /// 이 주문이 어떤 영상에서 왔는지. 먹방요기로 주문한 건에만 있다.
-  final String sourceVideoTitle;
+  factory OrderSource.fromJson(Map<String, dynamic> json) => OrderSource(
+        platform: SourceKind.fromWire(json['platform'] as String?),
+        url: (json['url'] ?? '') as String,
+        thumbnailUrl: json['thumbnailUrl'] as String?,
+        title: (json['title'] ?? '') as String,
+      );
 
-  /// 이미 요기족보에 공유했는지. true 면 "족보 작성" 대신 작성한 글로 보낸다.
-  bool isPostedToJokbo;
+  Map<String, dynamic> toJson() => {
+        'platform': platform.wire,
+        'url': url,
+        'thumbnailUrl': thumbnailUrl,
+        'title': title,
+      };
+}
 
-  /// 카드에 두 줄로 보여줄 메뉴 이름들.
-  List<String> get menuNames => combo.items.map((e) => e.name).toList();
+/// 영상 플랫폼. `POST v1/analyses` 와 `POST v1/orders` 가 공유한다.
+///
+/// 명세는 두 값만 받는다. 그 밖의 링크는 분석 전에 막아야 하고, 그 판정은
+/// `AnalysisSource` 쪽 `SourcePlatform.fromUrl` 이 한다.
+enum SourceKind {
+  instagram('INSTAGRAM'),
+  youtube('YOUTUBE');
 
-  /// 2026.07.22
+  const SourceKind(this.wire);
+
+  final String wire;
+
+  static SourceKind fromWire(String? value) {
+    final upper = (value ?? '').trim().toUpperCase();
+    for (final k in values) {
+      if (k.wire == upper) return k;
+    }
+    return SourceKind.youtube;
+  }
+}
+
+/// 결제 목록의 카드 하나. `GET v1/orders` 의 `orders[]`.
+///
+/// 목록은 조합 전체를 내리지 않는다. 메뉴·옵션·금액은 상세에서 받는다.
+class OrderSummary {
+  const OrderSummary({
+    required this.checkoutId,
+    required this.orderedAt,
+    required this.restaurantNames,
+    required this.totalPrice,
+    this.source,
+  });
+
+  final int checkoutId;
+  final DateTime orderedAt;
+  final OrderSource? source;
+
+  /// 그 결제에 들어간 가게 이름 전부. 카드에 두 줄로 보여준다.
+  final List<String> restaurantNames;
+
+  final int totalPrice;
+
+  /// 카드 제목 자리. 가게가 여러 곳이면 "외 N곳" 으로 줄인다.
+  String get storeSummary => switch (restaurantNames.length) {
+        0 => '',
+        1 => restaurantNames.first,
+        final n => '${restaurantNames.first} 외 ${n - 1}곳',
+      };
+
+  String get sourceVideoTitle => source?.title ?? '';
+
+  String? get thumbnailUrl => source?.thumbnailUrl;
+
+  /// 2026.08.04
   String get dateText =>
       '${orderedAt.year}.${_two(orderedAt.month)}.${_two(orderedAt.day)}';
 
   static String _two(int v) => v.toString().padLeft(2, '0');
+
+  factory OrderSummary.fromJson(Map<String, dynamic> json) => OrderSummary(
+        checkoutId: ((json['checkoutId'] ?? 0) as num).toInt(),
+        orderedAt:
+            DateTime.tryParse((json['orderedAt'] ?? '') as String) ?? DateTime(2026),
+        source: json['source'] is Map<String, dynamic>
+            ? OrderSource.fromJson(json['source'] as Map<String, dynamic>)
+            : null,
+        restaurantNames: [
+          for (final e in (json['restaurantNames'] ?? const []) as List) '$e',
+        ],
+        totalPrice: ((json['totalPrice'] ?? 0) as num).toInt(),
+      );
+}
+
+/// 결제 내역 상세. `GET v1/orders/{checkoutId}`.
+class OrderDetail {
+  const OrderDetail({
+    required this.checkoutId,
+    required this.orderedAt,
+    required this.stores,
+    required this.totalPrice,
+    this.source,
+  });
+
+  final int checkoutId;
+  final DateTime orderedAt;
+  final OrderSource? source;
+  final List<OrderStore> stores;
+  final int totalPrice;
+
+  List<String> get restaurantNames => [for (final s in stores) s.restaurantName];
+
+  /// 카드에 두 줄로 보여줄 메뉴 이름들.
+  List<String> get menuNames =>
+      [for (final s in stores) for (final i in s.items) i.name];
+
+  factory OrderDetail.fromJson(Map<String, dynamic> json) => OrderDetail(
+        checkoutId: ((json['checkoutId'] ?? 0) as num).toInt(),
+        orderedAt:
+            DateTime.tryParse((json['orderedAt'] ?? '') as String) ?? DateTime(2026),
+        source: json['source'] is Map<String, dynamic>
+            ? OrderSource.fromJson(json['source'] as Map<String, dynamic>)
+            : null,
+        stores: [
+          for (final e in (json['stores'] ?? const []) as List)
+            if (e is Map<String, dynamic>) OrderStore.fromJson(e),
+        ],
+        totalPrice: ((json['totalPrice'] ?? 0) as num).toInt(),
+      );
+}
+
+/// 한 결제 안의 가게 하나. 배달은 가게마다 따로 간다.
+class OrderStore {
+  const OrderStore({
+    required this.restaurantId,
+    required this.restaurantName,
+    required this.deliveryFee,
+    required this.items,
+    required this.itemsTotal,
+    required this.subtotal,
+  });
+
+  final int restaurantId;
+  final String restaurantName;
+  final int deliveryFee;
+
+  /// 주문 상세의 `items[]`. 옵션은 **고른 것만** 온다.
+  final List<CartLine> items;
+
+  final int itemsTotal;
+
+  /// `itemsTotal + deliveryFee`. 그 가게의 결제액이다.
+  final int subtotal;
+
+  factory OrderStore.fromJson(Map<String, dynamic> json) => OrderStore(
+        restaurantId: ((json['restaurantId'] ?? 0) as num).toInt(),
+        restaurantName: (json['restaurantName'] ?? '') as String,
+        deliveryFee: ((json['deliveryFee'] ?? 0) as num).toInt(),
+        items: [
+          for (final e in (json['items'] ?? const []) as List)
+            if (e is Map<String, dynamic>) CartLine.fromOrderJson(e),
+        ],
+        itemsTotal: ((json['itemsTotal'] ?? 0) as num).toInt(),
+        subtotal: ((json['subtotal'] ?? 0) as num).toInt(),
+      );
+}
+
+/// `POST v1/orders` 의 `201` 응답. 가게 이름만 돌려준다.
+///
+/// `orderId` 를 주지 않는다 — 주문이 2건이면 특정 상세로 바로 갈 수도 없어서다.
+/// 그래서 완료 화면은 목록으로만 갈 수 있다 (`docs/api-spec.md` 확인 필요 항목).
+class OrderReceipt {
+  const OrderReceipt({required this.restaurantNames});
+
+  final List<String> restaurantNames;
+
+  /// 건수를 따로 주지 않는다. 이름 개수가 곳 건수다.
+  int get storeCount => restaurantNames.length;
+
+  /// "2건 · 엽기떡볶이 성수점, 교촌치킨 성수점"
+  String get completionText => '$storeCount건 · ${restaurantNames.join(', ')}';
+
+  factory OrderReceipt.fromJson(Map<String, dynamic> json) => OrderReceipt(
+        restaurantNames: [
+          for (final e in (json['restaurantNames'] ?? const []) as List) '$e',
+        ],
+      );
+}
+
+/// 결제 목록 한 페이지. `{ orders, nextCursor }`.
+class OrderPage {
+  const OrderPage({required this.orders, this.nextCursor});
+
+  const OrderPage.empty() : orders = const [], nextCursor = null;
+
+  final List<OrderSummary> orders;
+
+  /// 다음 페이지가 없으면 null.
+  final String? nextCursor;
+
+  bool get hasMore => nextCursor != null;
+
+  factory OrderPage.fromJson(Map<String, dynamic> json) => OrderPage(
+        orders: [
+          for (final e in (json['orders'] ?? const []) as List)
+            if (e is Map<String, dynamic>) OrderSummary.fromJson(e),
+        ],
+        nextCursor: json['nextCursor'] as String?,
+      );
+}
+
+/// 주문 상세를 장바구니로 되돌린 결과. 다시 주문·족보 작성이 쓴다.
+extension OrderDetailToCart on OrderDetail {
+  Cart toCart() => Cart.fromOrderDetail(this);
 }

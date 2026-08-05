@@ -3,6 +3,13 @@
 /// 사용자들이 자기 먹방 조합을 공유하고, 실시간 인기 조합을 보고, 마음에 들면 그대로
 /// 주문하는 커뮤니티 기능. `docs/api-yogijokbo.md` 의 응답 스키마와 1:1로 맞췄다.
 /// 필드를 고치면 그 문서도 함께 고친다 — 백엔드와의 계약이다.
+///
+/// 회의(2026-08-04)에서 족보 등록·주문·리뷰를 **묶음 조합 단위**로 바꿨다. 그래서
+/// 게시글이 매장 하나(`combo`)가 아니라 매장 목록(`stores`)을 갖는다. 주문 상세와
+/// 같은 모양이라 "나도 주문하기" 가 변환 없이 장바구니로 넘긴다.
+///
+/// 다만 요기족보 응답의 정확한 `stores` 필드명은 아직 확정 명세에 없다
+/// (`docs/api-spec.md` 확인 필요 항목). 주문 상세와 같은 모양을 가정한다.
 library;
 
 import 'combo.dart';
@@ -94,7 +101,7 @@ class YogijokboPost {
     required this.title,
     required this.body,
     required this.author,
-    required this.combo,
+    required this.stores,
     required this.createdAt,
     this.imagePaths = const [],
     this.imageUrls = const [],
@@ -112,7 +119,9 @@ class YogijokboPost {
 
   /// 작성 시점 조합 스냅샷. 매장이 가격을 올려도 예전 글은 그때 모습대로 보인다.
   /// (api-yogijokbo.md 2번 비고) 현재 주문 가능 여부는 "나도 주문하기"가 다시 확인한다.
-  final ComboRecommendation combo;
+  ///
+  /// 매장이 여러 곳일 수 있다 — 떡볶이+핫도그 조합을 한 글로 올린 경우다.
+  final List<StoreCart> stores;
 
   final DateTime createdAt;
 
@@ -162,12 +171,33 @@ class YogijokboPost {
   /// 목록·상세에서 본문을 몇 줄로 줄여 보여줄 때 쓴다.
   String get bodyPreview => body.replaceAll('\n', ' ');
 
+  /// 이 글에 담긴 매장 이름 전부.
+  List<String> get restaurantNames => [for (final s in stores) s.restaurant.name];
+
+  /// 카드 제목 옆에 붙이는 매장 표기. 여러 곳이면 "외 N곳" 으로 줄인다.
+  String get storeSummary => switch (restaurantNames.length) {
+        0 => '',
+        1 => restaurantNames.first,
+        final n => '${restaurantNames.first} 외 ${n - 1}곳',
+      };
+
+  /// 매장을 통틀어 담긴 메뉴 전부.
+  List<CartLine> get allLines => [for (final s in stores) ...s.lines];
+
+  /// 결제 예상액. 매장별 배달비가 모두 더해진다.
+  int get payableTotal => stores.fold(0, (sum, s) => sum + s.subtotal);
+
+  int get itemsTotal => stores.fold(0, (sum, s) => sum + s.itemsTotal);
+
+  /// "나도 주문하기" 가 넘길 장바구니. 스냅샷을 건드리지 않도록 복사본이다.
+  Cart toCart() => Cart(stores: [for (final s in stores) s.copy()]);
+
   YogijokboPost copy() => YogijokboPost(
         id: id,
         title: title,
         body: body,
         author: author,
-        combo: combo.copy(),
+        stores: [for (final s in stores) s.copy()],
         createdAt: createdAt,
         imagePaths: imagePaths,
         imageUrls: imageUrls,

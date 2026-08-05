@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_flow.dart';
+import '../../models/cart.dart';
 import '../../models/order.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
@@ -30,8 +31,11 @@ class OrderHistoryScreen extends StatelessWidget {
                 : ListView.separated(
                     padding: const EdgeInsets.fromLTRB(20, 15, 20, 120),
                     itemCount: flow.orders.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (context, i) => _OrderCard(order: flow.orders[i]),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    itemBuilder: (context, i) => _OrderCard(
+                      order: flow.orders[i],
+                      posted: flow.isPostedToJokbo(flow.orders[i].checkoutId),
+                    ),
                   ),
           ),
           SafeArea(
@@ -98,10 +102,18 @@ class _TabBar extends StatelessWidget {
       );
 }
 
+/// 결제 카드 하나. **카드 하나 = 결제 하나 = 영상 하나**다 (명세 3번 비고).
+///
+/// 목록 응답은 조합 전체를 내려주지 않는다 — 가게 이름과 총액만 온다. 메뉴·옵션은
+/// 상세에서 받으므로 "족보 작성"·"다시 주문" 을 누를 때 `GET v1/orders/{id}` 를 탄다.
 class _OrderCard extends StatelessWidget {
-  const _OrderCard({required this.order});
+  const _OrderCard({required this.order, required this.posted});
 
-  final OrderHistoryItem order;
+  final OrderSummary order;
+
+  /// 이미 족보에 공유했는지. 서버가 알려주지 않아 앱이 기억한 값이다
+  /// (`GET v1/orders` 에 `isPostedToJokbo` 가 없다).
+  final bool posted;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -120,7 +132,7 @@ class _OrderCard extends StatelessWidget {
               children: [
                 RemoteOrAssetImage(
                   imageUrl: order.thumbnailUrl,
-                  assetPath: order.thumbnailPath,
+                  assetPath: 'assets/images/store_dujjim.png',
                   size: 80,
                 ),
                 const SizedBox(width: 16),
@@ -130,10 +142,23 @@ class _OrderCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(order.storeName, style: AppText.sub2()),
+                        // 가게가 여러 곳인 결제는 이름을 모두 보여준다.
+                        // 한 영상 보고 한 번에 시킨 것이라는 사실이 여기서 드러난다.
+                        for (final name in order.restaurantNames)
+                          Text(name, style: AppText.sub2()),
                         const SizedBox(height: 4),
-                        for (final name in order.menuNames)
-                          Text(name, style: AppText.body2(color: AppColors.gray700)),
+                        if (order.sourceVideoTitle.isNotEmpty)
+                          Text(
+                            order.sourceVideoTitle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppText.body2(color: AppColors.gray700),
+                          ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${wonFormat(order.totalPrice)}원',
+                          style: AppText.btn2(color: AppColors.gray800),
+                        ),
                       ],
                     ),
                   ),
@@ -158,9 +183,9 @@ class _OrderCard extends StatelessWidget {
         ),
       );
 
-  /// 이미 공유한 주문이면 작성 대신 그 글을 열어준다.
+  /// 이미 공유한 결제면 작성 대신 그 글을 열어준다.
   Widget _jokboButton(BuildContext context) {
-    final done = order.isPostedToJokbo;
+    final done = posted;
     return GestureDetector(
       onTap: () => context.read<AppFlow>().composeFromOrder(order),
       behavior: HitTestBehavior.opaque,

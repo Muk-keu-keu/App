@@ -1,256 +1,106 @@
+import '../api/api_client.dart';
+import '../api/mukbang_api.dart';
+import '../models/analysis_source.dart';
 import '../models/combo.dart';
 import '../models/preference.dart';
 import '../services/gemini_extractor.dart';
 import 'combo_builder.dart';
 
-/// 조합 추천 데이터 소스.
+/// 분석·메뉴 데이터 소스.
 ///
-/// 백엔드 API가 아직 없어 MockComboRepository 가 Figma 시안의 데이터를 그대로
-/// 돌려준다. 서버가 붙으면 이 프로토콜의 구현체만 갈아끼우면 화면 코드는 그대로다.
-/// iOS 앱의 ComboRepository 와 같은 계약이므로 API 명세는 한 벌만 쓴다.
+/// 구현이 둘이다.
+/// - [ApiComboRepository] — 실제 서버. `.env` 의 `API_BASE_URL` 이 있을 때 쓴다.
+/// - [MockComboRepository] — 더미. 백엔드가 없어도 시연이 돌아가게 한다.
+///
+/// 화면과 [AppFlow] 는 이 계약만 본다. 서버가 올라오면 갈아끼우는 것 말고 할 일이 없다.
 abstract class ComboRepository {
-  /// 첫 번째 원소가 가장 유사한 조합이다.
-  /// thumbnailUrl 은 공유된 게시물의 og:image 로, 결과 카드 이미지에 쓴다.
-  Future<List<ComboRecommendation>> recommend({
+  /// `POST v1/analyses`.
+  ///
+  /// 결과가 0개여도 예외가 아니다 — 명세가 200 + 빈 배열을 주고, 빈 화면은 호출한
+  /// 쪽이 다룬다.
+  Future<AnalysisResult> analyze({
+    required AnalysisSource source,
     required ExtractionResult extraction,
     required String? thumbnailUrl,
     required TastePreference preference,
   });
 
-  /// 매장이 파는 메뉴 전체. "메뉴 추가하기" 화면(681:6132)이 쓴다.
-  /// API 로는 GET v1/stores/{storeId}/menu.
-  Future<List<MenuItem>> menu(String storeId);
+  /// `GET v1/restaurants/{restaurantId}/menus` — "메뉴 수정하기" 가 쓴다.
+  Future<RestaurantMenus?> menus(int restaurantId);
 }
 
-class MockComboRepository implements ComboRepository {
-  const MockComboRepository();
+class ApiComboRepository implements ComboRepository {
+  const ApiComboRepository(this._api);
+
+  final MukbangApi _api;
 
   @override
-  Future<List<ComboRecommendation>> recommend({
+  Future<AnalysisResult> analyze({
+    required AnalysisSource source,
+    required ExtractionResult extraction,
+    required String? thumbnailUrl,
+    required TastePreference preference,
+  }) =>
+      // thumbnailUrl 은 서버로 보내지 않는다. 명세의 `source` 는 platform·url·rawText
+      // 셋뿐이고, 썸네일은 주문할 때(`POST v1/orders`) 실어 보낸다.
+      _api.analyze(source: source, extraction: extraction, preference: preference);
+
+  @override
+  Future<RestaurantMenus?> menus(int restaurantId) async {
+    try {
+      return await _api.restaurantMenus(restaurantId);
+    } on ApiException catch (e) {
+      // 404 는 그 restaurantId 가 없을 때만 온다. 화면은 "메뉴를 불러올 수 없어요"
+      // 대신 빈 목록으로 두는 게 낫다 — 조합 카드 자체는 이미 보이고 있다.
+      if (e.isNotFound) return null;
+      rethrow;
+    }
+  }
+}
+
+/// 백엔드가 없는 동안 쓰는 더미. [ComboBuilder] 가 만든 값을 돌려준다.
+class MockComboRepository implements ComboRepository {
+  const MockComboRepository({this.delay = const Duration(milliseconds: 900)});
+
+  /// 로딩 화면이 보이도록 흉내내는 지연. 테스트는 0으로 준다.
+  final Duration delay;
+
+  @override
+  Future<AnalysisResult> analyze({
+    required AnalysisSource source,
     required ExtractionResult extraction,
     required String? thumbnailUrl,
     required TastePreference preference,
   }) async {
-    // 네트워크 지연을 흉내내 로딩 화면이 보이도록 한다.
-    await Future<void>.delayed(const Duration(milliseconds: 900));
+    if (delay > Duration.zero) await Future<void>.delayed(delay);
 
     final built = ComboBuilder.build(
       extraction: extraction,
       thumbnailUrl: thumbnailUrl,
       preference: preference,
     );
-    final filtered =
-        built.where((c) => c.store.deliveryMinutes <= preference.maxDeliveryMinutes).toList();
 
-    // 도착 시간 조건에 맞는 게 없으면 전체를 유사도순으로 준다.
-    final result = filtered.isEmpty ? built : filtered;
-    result.sort((a, b) => b.store.similarity.compareTo(a.store.similarity));
-    return result;
+    // 서버는 배달시간 필터를 검색 단계에서 건다. 더미는 만든 뒤에 걸러야 해서,
+    // 조건에 맞는 게 하나도 없으면 필터를 포기하고 전체를 준다 —
+    // 시연 중에 "조건에 맞는 조합이 없어요" 만 보이는 편이 더 나쁘다.
+    final within = [
+      for (final c in built.combos)
+        if (c.restaurant.etaMin <= preference.maxDeliveryMinutes) c,
+    ];
+
+    return AnalysisResult(
+      exactMatches: built.exactMatches,
+      combos: within.isEmpty ? built.combos : within,
+    );
   }
 
   @override
-  Future<List<MenuItem>> menu(String storeId) async =>
-      _menus[storeId] ?? ComboBuilder.menuFor(storeId);
-
-  /// 시안 "옵션 변경" (681:6050) 의 옵션 그룹. 닭발·찜닭류가 공유한다.
-  static const _dakbalOptions = [
-    MenuOptionGroup(
-      id: 'bone',
-      name: '뼈 / 순살 선택',
-      choices: [
-        MenuOptionChoice(id: 'bone-in', name: '뼈 (국내산 신선육)'),
-        MenuOptionChoice(id: 'boneless', name: '순살 (국내산 신선육)'),
-      ],
-    ),
-    MenuOptionGroup(
-      id: 'spice',
-      name: '매운맛 5단계',
-      choices: [
-        MenuOptionChoice(id: 'spice-1', name: '1단계 (아주 순한맛)'),
-        MenuOptionChoice(id: 'spice-2', name: '2단계 (순한맛)'),
-        MenuOptionChoice(id: 'spice-3', name: '3단계 (보통맛)'),
-        MenuOptionChoice(id: 'spice-4', name: '4단계 (매운맛)'),
-        MenuOptionChoice(id: 'spice-5', name: '5단계 (아주매운맛)'),
-      ],
-    ),
-    MenuOptionGroup(
-      id: 'noodle',
-      name: '당면추가',
-      isRequired: false,
-      choices: [
-        MenuOptionChoice(id: 'noodle-round', name: '둥근당면 추가', extraPrice: 2500),
-        MenuOptionChoice(id: 'noodle-flat', name: '납작당면 추가', extraPrice: 3000),
-        MenuOptionChoice(id: 'noodle-kalguksu', name: '칼국수 사리 추가', extraPrice: 3000),
-        MenuOptionChoice(id: 'noodle-udon', name: '우동사리 추가', extraPrice: 2000),
-      ],
-    ),
-  ];
-
-  /// 사이드 메뉴의 옵션. 시안에 별도 화면이 없어 수량만 고르는 단일 그룹으로 둔다.
-  static const _sideOptions = [
-    MenuOptionGroup(
-      id: 'side-serving',
-      name: '양 선택',
-      choices: [
-        MenuOptionChoice(id: 'side-normal', name: '기본'),
-        MenuOptionChoice(id: 'side-large', name: '곱빼기', extraPrice: 1500),
-      ],
-    ),
-  ];
-
-  /// 매장별 판매 메뉴. Figma 시안 항목에 조합에 없는 메뉴를 몇 개 더했다.
-  static const Map<String, List<MenuItem>> _menus = {
-    'dujjim-jamsil': [
-      MenuItem(
-        id: 'rose-dakbal',
-        name: '[원조 K 로제] 로제 닭발',
-        options: '순살, 보통맛, 중국당면, 치즈몽땅 추가, [리뷰 이벤트] 분모자 추가',
-        price: 23000,
-        imagePath: 'assets/images/menu_rose_dakbal.png',
-        optionGroups: _dakbalOptions,
-      ),
-      MenuItem(
-        id: 'cheese-ball',
-        name: '[사이드] 치즈볼',
-        options: '모짜렐라 치즈 가득한 쫀득 치즈볼',
-        price: 2000,
-        imagePath: 'assets/images/menu_cheese_ball.png',
-        category: '사이드',
-        optionGroups: _sideOptions,
-      ),
-      MenuItem(
-        id: 'dujjim-jjim',
-        name: '[대표] 두찜 국물닭발',
-        options: '무뼈, 매운맛, 우동사리 추가',
-        price: 21000,
-        imagePath: 'assets/images/menu_rose_dakbal.png',
-        optionGroups: _dakbalOptions,
-      ),
-      MenuItem(
-        id: 'egg-jjim',
-        name: '[사이드] 계란찜',
-        options: '부드러운 뚝배기 계란찜',
-        price: 3000,
-        imagePath: 'assets/images/menu_cheese_ball.png',
-        category: '사이드',
-        optionGroups: _sideOptions,
-      ),
-      MenuItem(
-        id: 'buldak-rose-jjimdak',
-        name: '불닭로제 찜닭',
-        options: '불닭과 로제가 만나 부드럽고 강렬한 중독적인 맛. 닭은 반마리양이 사용됩니다.',
-        price: 26800,
-        imagePath: 'assets/images/menu_rose_dakbal.png',
-        category: '신메뉴',
-        optionGroups: _dakbalOptions,
-      ),
-      MenuItem(
-        id: 'kalnakji-jjimdak',
-        name: '두찜 칼낙지 찜닭',
-        options: '매콤한 찜닭에 쫄깃한 낙지, 칼국수 사리를 더해 푸짐하게 즐기는 칼낙지 찜닭',
-        price: 34800,
-        imagePath: 'assets/images/menu_rose_dakbal.png',
-        category: '신메뉴',
-        optionGroups: _dakbalOptions,
-      ),
-      MenuItem(
-        id: 'cola',
-        name: '코카콜라 500ml',
-        options: '시원하게 마시는 콜라',
-        price: 2500,
-        imagePath: 'assets/images/menu_cheese_ball.png',
-        category: '음료',
-      ),
-    ],
-    'hongmanyeo-songpa': [
-      MenuItem(
-        id: 'rose-noodle',
-        name: '로제국물닭발',
-        options: '돼지 껍데기(볶음) 도련, 통뼈, 무뼈닭기반, 통마늘 소스',
-        price: 21000,
-        imagePath: 'assets/images/menu_rose_dakbal.png',
-        optionGroups: _dakbalOptions,
-      ),
-      MenuItem(
-        id: 'hong-cheese',
-        name: '[사이드] 치즈볼',
-        options: '모짜렐라 치즈 가득한 쫀득 치즈볼',
-        price: 2500,
-        imagePath: 'assets/images/menu_cheese_ball.png',
-        category: '사이드',
-        optionGroups: _sideOptions,
-      ),
-    ],
-    'dujjim-songpa': [
-      MenuItem(
-        id: 'rose-dakbal-2',
-        name: '[원조 K 로제] 로제 닭발',
-        options: '순살, 보통맛, 중국당면, 치즈몽땅 추가, [리뷰 이벤트] 분모자 추가',
-        price: 16000,
-        imagePath: 'assets/images/menu_rose_dakbal.png',
-        optionGroups: _dakbalOptions,
-      ),
-      MenuItem(
-        id: 'songpa-cheese',
-        name: '[사이드] 치즈볼',
-        options: '모짜렐라 치즈 가득한 쫀득 치즈볼',
-        price: 2000,
-        imagePath: 'assets/images/menu_cheese_ball.png',
-        category: '사이드',
-        optionGroups: _sideOptions,
-      ),
-    ],
-  };
-
-  /// 매번 새 인스턴스를 만들어 수량 변경이 다음 분석에 남지 않게 한다.
-  static List<ComboRecommendation> _samples() => [
-        ComboRecommendation(
-          store: const StoreSummary(
-            id: 'dujjim-jamsil',
-            name: '두찜-잠실새내점',
-            rating: 4.2,
-            reviewCount: 312,
-            distanceKm: 3.2,
-            deliveryMinutes: 40,
-            imagePath: 'assets/images/store_dujjim.png',
-            minimumOrderAmount: 14000,
-            deliveryFee: 1500,
-            similarity: 0.96,
-          ),
-          items: [
-            _menus['dujjim-jamsil']![0].toComboItem(),
-            _menus['dujjim-jamsil']![1].toComboItem(quantity: 2),
-          ],
-        ),
-        ComboRecommendation(
-          store: const StoreSummary(
-            id: 'hongmanyeo-songpa',
-            name: '홍마녀불닭발-송파점',
-            rating: 3.8,
-            reviewCount: 164,
-            distanceKm: 2.8,
-            deliveryMinutes: 70,
-            imagePath: 'assets/images/store_dujjim.png',
-            minimumOrderAmount: 16000,
-            deliveryFee: 2000,
-            similarity: 0.88,
-          ),
-          items: [_menus['hongmanyeo-songpa']![0].toComboItem()],
-        ),
-        ComboRecommendation(
-          store: const StoreSummary(
-            id: 'dujjim-songpa',
-            name: '두찜-송파점',
-            rating: 4.2,
-            reviewCount: 310,
-            distanceKm: 3.2,
-            deliveryMinutes: 45,
-            imagePath: 'assets/images/store_dujjim.png',
-            minimumOrderAmount: 14000,
-            deliveryFee: 1500,
-            similarity: 0.81,
-          ),
-          items: [_menus['dujjim-songpa']![0].toComboItem()],
-        ),
-      ];
+  Future<RestaurantMenus?> menus(int restaurantId) async {
+    final restaurant = ComboBuilder.restaurantFor(restaurantId);
+    if (restaurant == null) return null;
+    return RestaurantMenus(
+      restaurant: restaurant,
+      menus: ComboBuilder.menuFor(restaurantId),
+    );
+  }
 }

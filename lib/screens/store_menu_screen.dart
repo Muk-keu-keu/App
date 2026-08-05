@@ -8,11 +8,15 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/ds.dart';
 
-/// Figma "메뉴 추가하기" (node 681:6132).
+/// Figma "메뉴 수정하기" (node 681:6132).
 ///
-/// 조합 카드의 "메뉴 추가하기"로 들어오는 매장 메뉴 화면. 시트가 아니라 전체 화면이고,
-/// 요기요 매장 상세와 같은 구조다 — 큰 사진 위에 로고가 걸치고, 카테고리 칩으로 목록을
-/// 걸러 본다. 메뉴 오른쪽 + 를 누르면 지금 보고 있던 조합에 담긴다.
+/// `GET v1/restaurants/{id}/menus` 로 매장 메뉴 전체를 받아 보여준다. 시트가 아니라
+/// 전체 화면이고, 요기요 매장 상세와 같은 구조다 — 큰 사진 위에 로고가 걸치고,
+/// 칩으로 목록을 걸러 본다. 메뉴 오른쪽 + 를 누르면 장바구니의 그 매장 칸에 담긴다.
+///
+/// 칩은 `menuType` 이다. 명세가 `MAIN → SIDE → DRINK` 순으로 정렬해 내려주므로
+/// 앱이 다시 정렬하지 않고 받은 순서대로 섹션을 나눈다. 사이드를 옵션으로 넣지 않은
+/// 이유가 이 화면이다 — 여기서 따로 골라 담으면 된다.
 class StoreMenuScreen extends StatefulWidget {
   const StoreMenuScreen({super.key});
 
@@ -21,23 +25,34 @@ class StoreMenuScreen extends StatefulWidget {
 }
 
 class _StoreMenuScreenState extends State<StoreMenuScreen> {
-  String? _category;
+  MenuType? _type;
 
   @override
   Widget build(BuildContext context) {
     final flow = context.watch<AppFlow>();
-    final combo = flow.storeMenuCombo;
-    if (combo == null) return const SizedBox.shrink();
-
+    final restaurant = flow.storeMenuRestaurant;
     final menu = flow.storeMenuItems;
-    final categories = <String>[];
-    for (final m in menu) {
-      if (!categories.contains(m.category)) categories.add(m.category);
+
+    // 매장을 못 받았으면 아직 로딩 중이거나 404 다. 화면 뼈대 대신 비워 둔다.
+    if (restaurant == null) {
+      return const ColoredBox(
+        color: Colors.white,
+        child: Center(child: CircularProgressIndicator(color: AppColors.primary500)),
+      );
     }
-    final selected = _category != null && categories.contains(_category)
-        ? _category!
-        : (categories.isEmpty ? '' : categories.first);
-    final visible = menu.where((m) => m.category == selected).toList();
+
+    // 응답 순서를 그대로 쓴다. 서버가 보낸 순서가 곧 노출 순서다.
+    final types = <MenuType>[];
+    for (final m in menu) {
+      if (!types.contains(m.menuType)) types.add(m.menuType);
+    }
+    final selected = _type != null && types.contains(_type)
+        ? _type!
+        : (types.isEmpty ? MenuType.main : types.first);
+    final visible = [
+      for (final m in menu)
+        if (m.menuType == selected) m,
+    ];
 
     return Container(
       color: Colors.white,
@@ -45,11 +60,11 @@ class _StoreMenuScreenState extends State<StoreMenuScreen> {
         slivers: [
           SliverToBoxAdapter(
             child: _Hero(
-              store: combo.store,
+              store: restaurant,
               onBack: () => context.read<AppFlow>().closeStoreMenu(),
             ),
           ),
-          SliverToBoxAdapter(child: _StoreInfo(store: combo.store)),
+          SliverToBoxAdapter(child: _StoreInfo(store: restaurant)),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(0, 20, 0, 20),
@@ -58,12 +73,12 @@ class _StoreMenuScreenState extends State<StoreMenuScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
                   children: [
-                    for (var i = 0; i < categories.length; i++) ...[
+                    for (var i = 0; i < types.length; i++) ...[
                       if (i > 0) const SizedBox(width: 8),
                       DsChipChoice(
-                        label: categories[i],
-                        selected: categories[i] == selected,
-                        onTap: () => setState(() => _category = categories[i]),
+                        label: types[i].label,
+                        selected: types[i] == selected,
+                        onTap: () => setState(() => _type = types[i]),
                       ),
                     ],
                   ],
@@ -74,7 +89,7 @@ class _StoreMenuScreenState extends State<StoreMenuScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text(selected, style: AppText.h3()),
+              child: Text(selected.label, style: AppText.h3()),
             ),
           ),
           SliverList.separated(
@@ -85,7 +100,10 @@ class _StoreMenuScreenState extends State<StoreMenuScreen> {
             ),
             itemBuilder: (_, i) => _ProductCard(
               menu: visible[i],
-              onAdd: () => context.read<AppFlow>().addMenuToCombo(visible[i]),
+              // 담긴 수량을 보여준다. 같은 메뉴를 다시 누르면 수량만 올라가는데,
+              // 표시가 없으면 눌린 건지 알 수 없다.
+              inCart: flow.cartQuantityOf(visible[i].menuId),
+              onAdd: () => context.read<AppFlow>().addMenuToCart(visible[i]),
             ),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 40)),
@@ -99,7 +117,7 @@ class _StoreMenuScreenState extends State<StoreMenuScreen> {
 class _Hero extends StatelessWidget {
   const _Hero({required this.store, required this.onBack});
 
-  final StoreSummary store;
+  final Restaurant store;
   final VoidCallback onBack;
 
   @override
@@ -156,7 +174,7 @@ class _Hero extends StatelessWidget {
 class _StoreInfo extends StatelessWidget {
   const _StoreInfo({required this.store});
 
-  final StoreSummary store;
+  final Restaurant store;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -186,9 +204,13 @@ class _StoreInfo extends StatelessWidget {
                       const SizedBox(width: 4),
                       Text('리뷰 ${store.rating.toStringAsFixed(1)}',
                           style: AppText.btn2(color: AppColors.gray800)),
-                      const SizedBox(width: 4),
-                      Text('(${store.reviewCount})',
-                          style: AppText.btn3(color: AppColors.gray600)),
+                      // 리뷰 수는 응답에 없다. 없는 값을 (0) 으로 그리면
+                      // "리뷰 0개" 로 읽혀서, 값이 있을 때만 붙인다.
+                      if (store.reviewCount != null) ...[
+                        const SizedBox(width: 4),
+                        Text('(${store.reviewCount})',
+                            style: AppText.btn3(color: AppColors.gray600)),
+                      ],
                     ],
                   ),
                 ),
@@ -240,9 +262,17 @@ class _StoreInfo extends StatelessWidget {
 }
 
 class _ProductCard extends StatelessWidget {
-  const _ProductCard({required this.menu, required this.onAdd});
+  const _ProductCard({
+    required this.menu,
+    required this.inCart,
+    required this.onAdd,
+  });
 
-  final MenuItem menu;
+  final Menu menu;
+
+  /// 장바구니에 담긴 수량. 0이면 표시하지 않는다.
+  final int inCart;
+
   final VoidCallback onAdd;
 
   @override
@@ -255,11 +285,27 @@ class _ProductCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(menu.name, style: AppText.sub2()),
+                  Row(
+                    children: [
+                      Flexible(child: Text(menu.name, style: AppText.sub2())),
+                      // MEDIUM/HOT 이면 고추 뱃지 (명세 items[] 비고).
+                      if (menu.isSpicy) ...[
+                        const SizedBox(width: 4),
+                        _SpiceBadge(level: menu.spiceLevel),
+                      ],
+                    ],
+                  ),
                   Text('${wonFormat(menu.price)}원', style: AppText.sub2()),
                   const SizedBox(height: 8),
-                  Text(menu.options,
+                  // 분석 응답과 달리 여기엔 description 이 있다 — 처음 보는 메뉴를
+                  // 고르는 화면이라 "이게 뭐지" 를 알려줘야 한다 (명세 2번 비고).
+                  Text(menu.description,
                       style: AppText.body2(color: AppColors.gray600)),
+                  if (inCart > 0) ...[
+                    const SizedBox(height: 8),
+                    Text('담은 수량 $inCart개',
+                        style: AppText.caption(color: AppColors.primary500)),
+                  ],
                 ],
               ),
             ),
@@ -301,6 +347,26 @@ class _ProductCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      );
+}
+
+/// 매운 메뉴 표시. `spiceLevel` 이 MEDIUM/HOT 일 때만 붙는다.
+class _SpiceBadge extends StatelessWidget {
+  const _SpiceBadge({required this.level});
+
+  final SpiceLevel level;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: AppColors.primary500.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: Text(
+          '🌶 ${level.title}',
+          style: AppText.caption(color: AppColors.primary500),
         ),
       );
 }

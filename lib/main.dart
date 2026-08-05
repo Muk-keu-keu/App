@@ -9,6 +9,7 @@ import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'app_flow.dart';
 import 'env.dart';
 import 'screens/analyze_screen.dart';
+import 'screens/cart_screen.dart';
 import 'screens/combo_list_screen.dart';
 import 'screens/combo_result_screen.dart';
 import 'screens/home/order_history_screen.dart';
@@ -16,10 +17,10 @@ import 'screens/home/yogiyo_home_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/keyword_select_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/order_done_screen.dart';
 import 'screens/store_menu_screen.dart';
 import 'screens/yogijokbo/post_compose_screen.dart';
 import 'screens/yogijokbo/post_detail_screen.dart';
-import 'screens/yogijokbo/post_order_screen.dart';
 import 'screens/yogijokbo/yogijokbo_home_screen.dart';
 import 'theme.dart';
 
@@ -136,14 +137,36 @@ class _RootScreenState extends State<RootScreen> {
         AppStage.combo => const ComboResultScreen(),
         AppStage.comboList => const ComboListScreen(),
         AppStage.storeMenu => const StoreMenuScreen(),
+        AppStage.cart => _CartStage(),
+        AppStage.orderDone => const OrderDoneScreen(),
         AppStage.failed => const _FailedScreen(),
         AppStage.jokboHome => const YogijokboHomeScreen(),
         AppStage.jokboDetail => const PostDetailScreen(),
-        AppStage.jokboOrder => const PostOrderScreen(),
+        // "나도 주문하기" 도 같은 장바구니 화면이다. 남의 조합을 복사해 온
+        // 장바구니라 구조가 같고, 돌아갈 곳과 주문 불가 안내만 다르다.
+        AppStage.jokboOrder => _JokboOrderStage(),
         AppStage.jokboCompose => const PostComposeScreen(),
       },
     );
   }
+}
+
+/// 분석 결과에서 온 장바구니. 뒤로 가면 조합 카드로 돌아간다.
+class _CartStage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => CartScreen(
+        onBack: () => context.read<AppFlow>().backToCombo(),
+      );
+}
+
+/// 요기족보 "나도 주문하기" 로 온 장바구니.
+class _JokboOrderStage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => CartScreen(
+        title: '주문하기',
+        unavailable: context.watch<AppFlow>().orderUnavailable,
+        onBack: () => context.read<AppFlow>().backToPostDetail(),
+      );
 }
 
 class _FailedScreen extends StatelessWidget {

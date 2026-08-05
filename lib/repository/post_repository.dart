@@ -23,9 +23,12 @@ abstract class PostRepository {
 
   /// 3. POST v1/posts — multipart. 서버는 postId 만 돌려준다.
   ///
-  /// 조합 내용을 보내지 않는다. [orderId] 만 보내면 서버가 주문 스냅샷에서 읽어 붙인다.
+  /// 조합 내용을 보내지 않는다. [checkoutId] 만 보내면 서버가 결제 스냅샷에서
+  /// 읽어 붙인다. 가게가 여러 곳인 결제였으면 글도 묶음 조합으로 만들어진다.
+  ///
+  /// 본문 키 이름은 `orderId` 다 — 명세 비고 "API 에 나가는 orderId 는 checkout_id 다".
   Future<String> create({
-    required String orderId,
+    required int checkoutId,
     required String title,
     required String body,
     List<String> imagePaths = const [],
@@ -179,14 +182,14 @@ class MockPostRepository implements PostRepository {
 
   @override
   Future<String> create({
-    required String orderId,
+    required int checkoutId,
     required String title,
     required String body,
     List<String> imagePaths = const [],
   }) async {
     await _wait;
 
-    // 서버는 orderId 로 주문 스냅샷을 읽어 조합을 붙인다. mock 은 그럴 주문
+    // 서버는 checkoutId 로 결제 스냅샷을 읽어 조합을 붙인다. mock 은 그럴 결제
     // 저장소가 없어 첫 샘플의 조합을 빌려 쓴다. 서버가 붙으면 사라질 코드다.
     final template = _posts.first;
     final post = YogijokboPost(
@@ -194,7 +197,7 @@ class MockPostRepository implements PostRepository {
       title: title,
       body: body,
       author: const PostAuthor(id: 'me', nickname: '나'),
-      combo: template.combo.copy(),
+      stores: [for (final s in template.stores) s.copy()],
       createdAt: DateTime.now(),
       imagePaths: imagePaths,
       source: template.source,
@@ -206,8 +209,8 @@ class MockPostRepository implements PostRepository {
 
   // ── 시안 데이터 ────────────────────────────────────────────────────────────
   // Figma "요기족보" 섹션의 홈 목록·조합 상세·주문하기 화면에 나오는 값 그대로다.
-  // 가격은 주문하기 화면 기준: 로제 닭발 16,000 + 치즈볼 2,000×2 = 주문 20,000,
-  // 배달비 3,000 을 더해 결제 23,000 이 된다.
+  // 첫 글은 매장 하나, 두 번째 글은 **매장 두 곳**이다 — 회의(2026-08-04)에서 족보를
+  // 묶음 조합 단위로 바꿨으므로, 목록·상세·주문 화면이 둘 다 그려지는지 봐야 한다.
 
   static const _author1 = PostAuthor(id: 'user_01', nickname: '배고픈 요기요');
   static const _author2 = PostAuthor(id: 'user_02', nickname: '문복희팬');
@@ -232,50 +235,59 @@ class MockPostRepository implements PostRepository {
           ),
           likeCount: 12,
           commentCount: 4,
-          combo: ComboRecommendation(
-            store: const StoreSummary(
-              id: 'dujjim-jamsil',
-              name: '두찜-잠실새내점',
-              rating: 4.2,
-              reviewCount: 312,
-              distanceKm: 3.2,
-              deliveryMinutes: 40,
-              imagePath: 'assets/images/store_dujjim.png',
-              minimumOrderAmount: 14000,
-              deliveryFee: 3000,
-              similarity: 1,
+          // 로제 닭발 16,000 + 치즈볼 2,000×2 = 음식값 20,000,
+          // 배달비 3,000 을 더해 결제 23,000.
+          stores: [
+            StoreCart(
+              restaurant: const Restaurant(
+                restaurantId: 201,
+                name: '두찜-잠실새내점',
+                foodCategory: FoodCategory.korean,
+                area: '잠실동',
+                rating: 4.2,
+                reviewCount: 312,
+                etaMin: 40,
+                deliveryFee: 3000,
+                minOrderPrice: 14000,
+                distanceKm: 3.2,
+                imagePath: 'assets/images/store_dujjim.png',
+              ),
+              lines: [
+                CartLine(
+                  menuId: 201001,
+                  name: '[원조 K 로제] 로제 닭발',
+                  menuType: MenuType.main,
+                  price: 16000,
+                  quantity: 1,
+                  imagePath: 'assets/images/menu_rose_dakbal.png',
+                  spiceLevel: SpiceLevel.hot,
+                  spiceAdjustable: true,
+                  selectedSpice: SpiceLevel.medium,
+                  options: const [
+                    MenuOption(group: '뼈 / 순살 선택', name: '순살', price: 0, selected: true),
+                    MenuOption(group: '사리 추가', name: '분모자', price: 0, selected: true),
+                    MenuOption(group: '토핑 추가', name: '치즈몽땅', price: 0, selected: true),
+                    MenuOption(group: '사리 추가', name: '납작당면', price: 3000),
+                  ],
+                ),
+                CartLine(
+                  menuId: 201002,
+                  name: '[사이드] 치즈볼',
+                  menuType: MenuType.side,
+                  price: 2000,
+                  quantity: 2,
+                  imagePath: 'assets/images/menu_cheese_ball.png',
+                ),
+              ],
             ),
-            items: [
-              ComboItem(
-                id: 'rose-dakbal',
-                name: '[원조 K 로제] 로제 닭발',
-                options: '순살, 보통맛, 분모자로 변경, 치즈몽땅 추가, [리뷰 이벤트] 납작당면 추가',
-                unitPrice: 16000,
-                quantity: 1,
-                imagePath: 'assets/images/menu_rose_dakbal.png',
-                selectedSpice: SpiceSelection.medium,
-                selectedOptions: [
-                  SelectedOption(name: '순살', price: 0),
-                  SelectedOption(name: '분모자로 변경', price: 0),
-                  SelectedOption(name: '치즈몽땅 추가', price: 0),
-                ],
-              ),
-              ComboItem(
-                id: 'cheese-ball',
-                name: '[사이드] 치즈볼',
-                options: '모짜렐라 치즈 가득한 쫀득 치즈볼',
-                unitPrice: 2000,
-                quantity: 2,
-                imagePath: 'assets/images/menu_cheese_ball.png',
-              ),
-            ],
-          ),
+          ],
         ),
         YogijokboPost(
           id: 'post_02K3M',
-          title: '신상 치르르 치킨 미침',
+          title: '신상 치르르 치킨에 까르보불닭 조합',
           body: '문복희 따라서 까르보 불닭이랑 같이 먹었는데\n'
-              '느끼한거 불닭이 다 잡아줘서 의외로 잘 어울림',
+              '느끼한거 불닭이 다 잡아줘서 의외로 잘 어울림\n'
+              '두 가게에서 시켜야 하는데 한 번에 결제되니까 편해요',
           author: _author2,
           createdAt: DateTime(2026, 7, 5),
           imagePaths: const ['assets/images/store_dujjim.png'],
@@ -289,38 +301,62 @@ class MockPostRepository implements PostRepository {
           // 배달 권역 밖 매장. "내 위치에서 가능한 조합만" 필터가 동작하는지 보이려면
           // 목록에 걸러지는 항목이 하나는 있어야 한다.
           orderableHere: false,
-          combo: ComboRecommendation(
-            store: const StoreSummary(
-              id: 'kfc-yongsan',
-              name: 'KFC-용산아이파크몰점',
-              rating: 4.5,
-              reviewCount: 892,
-              distanceKm: 8.4,
-              deliveryMinutes: 55,
-              imagePath: 'assets/images/store_dujjim.png',
-              minimumOrderAmount: 12000,
-              deliveryFee: 2500,
-              similarity: 1,
+          // 매장 두 곳 조합. 배달비가 2,500 + 2,000 으로 두 번 붙는다.
+          stores: [
+            StoreCart(
+              restaurant: const Restaurant(
+                restaurantId: 202,
+                name: 'KFC-용산아이파크몰점',
+                foodCategory: FoodCategory.chicken,
+                area: '한강로동',
+                rating: 4.5,
+                reviewCount: 892,
+                etaMin: 55,
+                deliveryFee: 2500,
+                minOrderPrice: 12000,
+                distanceKm: 8.4,
+                imagePath: 'assets/images/store_dujjim.png',
+              ),
+              lines: [
+                CartLine(
+                  menuId: 202001,
+                  name: '핫크리스피 치르르치킨',
+                  menuType: MenuType.main,
+                  price: 12000,
+                  quantity: 1,
+                  imagePath: 'assets/images/menu_rose_dakbal.png',
+                  options: const [
+                    MenuOption(group: '조각 수', name: '2조각', price: 0, selected: true),
+                  ],
+                ),
+              ],
             ),
-            items: [
-              ComboItem(
-                id: 'chireureu',
-                name: '핫크리스피 치르르치킨',
-                options: '2조각, 콜라 변경',
-                unitPrice: 12000,
-                quantity: 1,
-                imagePath: 'assets/images/menu_rose_dakbal.png',
+            StoreCart(
+              restaurant: const Restaurant(
+                restaurantId: 203,
+                name: '편의점 배달-용산점',
+                foodCategory: FoodCategory.snack,
+                area: '한강로동',
+                rating: 4.1,
+                reviewCount: 120,
+                etaMin: 25,
+                deliveryFee: 2000,
+                minOrderPrice: 5000,
+                distanceKm: 1.2,
+                imagePath: 'assets/images/store_dujjim.png',
               ),
-              ComboItem(
-                id: 'carbo',
-                name: '까르보불닭볶음면',
-                options: '컵라면',
-                unitPrice: 2500,
-                quantity: 1,
-                imagePath: 'assets/images/menu_cheese_ball.png',
-              ),
-            ],
-          ),
+              lines: [
+                CartLine(
+                  menuId: 203001,
+                  name: '까르보불닭볶음면',
+                  menuType: MenuType.main,
+                  price: 2500,
+                  quantity: 2,
+                  imagePath: 'assets/images/menu_cheese_ball.png',
+                ),
+              ],
+            ),
+          ],
         ),
       ];
 

@@ -10,8 +10,11 @@ library;
 
 /// 링크 출처. 서버가 재수집 전략을 고르는 데 쓴다.
 ///
-/// 문자열 값은 대문자 스네이크다. `docs/api-yogijokbo.md` 의 공통 규칙
+/// 문자열 값은 대문자 스네이크다. `docs/api-spec.md` 의 공통 규칙
 /// "enum 은 대문자 스네이크" 를 따른다.
+///
+/// 명세의 `source.platform` 은 `INSTAGRAM` | `YOUTUBE` 두 값만 받는다. [other] 는
+/// 서버로 보낼 수 없는 값이고, 앱이 분석을 시작하기 전에 걸러내기 위한 판정용이다.
 enum SourcePlatform {
   instagram('INSTAGRAM'),
   youtube('YOUTUBE'),
@@ -19,8 +22,11 @@ enum SourcePlatform {
 
   const SourcePlatform(this.wire);
 
-  /// 서버로 보내는 값.
+  /// 서버로 보내는 값. [other] 는 명세에 없어 보낼 수 없다.
   final String wire;
+
+  /// 명세가 받는 플랫폼인지. false 면 분석 자체를 시작하지 않는다.
+  bool get isSupported => this != SourcePlatform.other;
 
   /// 호스트로 판별한다. 단축 도메인(youtu.be)도 함께 본다.
   static SourcePlatform fromUrl(Uri url) {
@@ -68,10 +74,12 @@ class AnalysisSource {
         rawText: rawText,
       );
 
-  /// 서버 `POST /api/v1/analyses` 의 `source` 에 그대로 들어갈 형태.
+  /// 서버 `POST v1/analyses` 의 `source` 에 그대로 들어갈 형태.
+  ///
+  /// 필드 순서는 명세 표와 같게 둔다 — 사람이 요청 로그를 명세와 나란히 볼 때 편하다.
   Map<String, dynamic> toJson() => {
-        'url': url,
         'platform': platform.wire,
+        'url': url,
         'rawText': rawText,
       };
 }

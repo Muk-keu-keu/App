@@ -65,8 +65,8 @@ class _PostComposeScreenState extends State<PostComposeScreen> {
   @override
   Widget build(BuildContext context) {
     final flow = context.watch<AppFlow>();
-    final combo = flow.composeCombo;
-    if (combo == null) return const SizedBox.shrink();
+    final cart = flow.composeCart;
+    if (cart == null) return const SizedBox.shrink();
 
     return Container(
       color: AppColors.bg,
@@ -81,9 +81,9 @@ class _PostComposeScreenState extends State<PostComposeScreen> {
               padding: EdgeInsets.zero,
               children: [
                 if (flow.composeSource != null)
-                  _VideoSection(source: flow.composeSource!, combo: combo),
+                  _VideoSection(source: flow.composeSource!, cart: cart),
                 _MenuToggle(
-                  combo: combo,
+                  cart: cart,
                   expanded: _menuExpanded,
                   onToggle: () => setState(() => _menuExpanded = !_menuExpanded),
                 ),
@@ -104,38 +104,49 @@ class _PostComposeScreenState extends State<PostComposeScreen> {
 }
 
 class _VideoSection extends StatelessWidget {
-  const _VideoSection({required this.source, required this.combo});
+  const _VideoSection({required this.source, required this.cart});
 
   final PostSource source;
-  final ComboRecommendation combo;
+  final Cart cart;
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        color: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        child: DsVideoSummary(
-          thumbnail: RemoteOrAssetImage(
-            imageUrl: combo.items.isEmpty ? null : combo.items.first.imageUrl,
-            assetPath: combo.store.imagePath,
-            size: 100,
-            radius: 0,
-          ),
-          videoTitle: source.title,
-          creatorName: combo.store.name,
+  Widget build(BuildContext context) {
+    final firstLine = cart.allLines.isEmpty ? null : cart.allLines.first;
+    return Container(
+      width: double.infinity,
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      child: DsVideoSummary(
+        thumbnail: RemoteOrAssetImage(
+          imageUrl: source.thumbnailUrl ?? firstLine?.imageUrl,
+          assetPath: firstLine?.imagePath ?? 'assets/images/store_dujjim.png',
+          size: 100,
+          radius: 0,
         ),
-      );
+        videoTitle: source.title,
+        // 가게가 여러 곳이면 "외 N곳" 으로 줄인다.
+        creatorName: switch (cart.restaurantNames.length) {
+          0 => '',
+          1 => cart.restaurantNames.first,
+          final n => '${cart.restaurantNames.first} 외 ${n - 1}곳',
+        },
+      ),
+    );
+  }
 }
 
 /// "주문한 메뉴" — 눌러서 펼친다. 시안 기본은 접힌 상태다.
+///
+/// 가게가 여러 곳인 결제였으면 가게 이름을 소제목으로 끼워 넣는다. 회의에서 족보를
+/// 묶음 조합 단위로 바꿨으니, 어느 가게 메뉴인지 글에도 남아야 한다.
 class _MenuToggle extends StatelessWidget {
   const _MenuToggle({
-    required this.combo,
+    required this.cart,
     required this.expanded,
     required this.onToggle,
   });
 
-  final ComboRecommendation combo;
+  final Cart cart;
   final bool expanded;
   final VoidCallback onToggle;
 
@@ -162,31 +173,41 @@ class _MenuToggle extends StatelessWidget {
               ),
             ),
             if (expanded)
-              for (final item in combo.items) ...[
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    RemoteOrAssetImage(
-                      imageUrl: item.imageUrl,
-                      assetPath: item.imagePath,
-                      size: 48,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(item.name,
-                              style: AppText.sub2().copyWith(letterSpacing: -0.4)),
-                          const SizedBox(height: 4),
-                          Text(item.options,
-                              style: AppText.caption(color: AppColors.gray600)),
-                        ],
+              for (final store in cart.stores) ...[
+                // 가게가 한 곳이면 소제목이 군더더기다.
+                if (cart.storeCount > 1) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    store.restaurant.name,
+                    style: AppText.caption(color: AppColors.gray600),
+                  ),
+                ],
+                for (final item in store.lines) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      RemoteOrAssetImage(
+                        imageUrl: item.imageUrl,
+                        assetPath: item.imagePath,
+                        size: 48,
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(item.name,
+                                style: AppText.sub2().copyWith(letterSpacing: -0.4)),
+                            const SizedBox(height: 4),
+                            Text(item.optionsText,
+                                style: AppText.caption(color: AppColors.gray600)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
           ],
         ),

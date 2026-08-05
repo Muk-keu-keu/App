@@ -13,7 +13,34 @@ class Env {
 
   static Future<void> load() => dotenv.load(fileName: '.env');
 
-  static String get geminiApiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
+  /// 값 하나를 읽는다. **`load()` 전에 불려도 던지지 않는다.**
+  ///
+  /// `dotenv.env` 는 초기화 전에 접근하면 `NotInitializedError` 를 던진다.
+  /// 단위 테스트는 에셋을 못 읽어 `load()` 를 부르지 않는데, [AppFlow] 생성자가
+  /// [hasApiBaseUrl] 로 저장소를 고르기 때문에 그 자리에서 앱이 죽었다.
+  /// 값이 없는 것과 아직 안 읽은 것을 같게 다루는 편이 안전하다 — 둘 다 "설정 없음" 이다.
+  static String _read(String key) {
+    try {
+      return dotenv.env[key] ?? '';
+    } on Object {
+      return '';
+    }
+  }
+
+  static String get geminiApiKey => _read('GEMINI_API_KEY');
+
+  /// 백엔드 주소. `https://host` 또는 `http://192.168.0.10:8080`.
+  ///
+  /// 비어 있으면 앱이 더미 데이터로 돈다. 백엔드가 아직 없는 동안 시연이 멈추지
+  /// 않게 하려는 것이고, 서버가 올라오면 이 값만 채우면 실제 API 를 쓴다.
+  /// 자리표시자(`YOUR_`)가 들어와도 비어 있는 것으로 본다.
+  static String get apiBaseUrl {
+    final value = _read('API_BASE_URL').trim();
+    return isUsableKey(value) ? value : '';
+  }
+
+  /// 실제 서버를 쓸 수 있는 상태인지.
+  static bool get hasApiBaseUrl => apiBaseUrl.isNotEmpty;
 
   /// 쓸 수 있는 키가 들어왔는지.
   ///

@@ -287,7 +287,10 @@ class _ActionRow extends StatelessWidget {
       );
 }
 
-/// 조합에 담긴 메뉴. 매장 이름을 누르면 매장 메뉴로 넘어간다.
+/// 조합에 담긴 메뉴. 매장 이름을 누르면 그 매장 메뉴로 넘어간다.
+///
+/// 회의(2026-08-04) 이후 글 하나에 매장이 여러 곳일 수 있다. 매장마다 섹션을
+/// 나눠 그린다 — 한 목록에 섞어 놓으면 어느 가게에서 시키는 메뉴인지 알 수 없다.
 class _MenuSection extends StatelessWidget {
   const _MenuSection({required this.post});
 
@@ -301,44 +304,52 @@ class _MenuSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            GestureDetector(
-              onTap: () => context.read<AppFlow>().openStoreMenu(post.combo),
-              behavior: HitTestBehavior.opaque,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(post.combo.store.name, style: AppText.sub2()),
-                  const RotatedBox(quarterTurns: 2, child: DsChevron.left()),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            const DsDivider(color: AppColors.gray300),
-            for (final item in post.combo.items) ...[
-              const SizedBox(height: 16),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  RemoteOrAssetImage(
-                    imageUrl: item.imageUrl,
-                    assetPath: item.imagePath,
-                    size: 48,
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(item.name,
-                            style: AppText.sub2().copyWith(letterSpacing: -0.4)),
-                        const SizedBox(height: 4),
-                        Text(item.options,
-                            style: AppText.caption(color: AppColors.gray600)),
-                      ],
+            for (var s = 0; s < post.stores.length; s++) ...[
+              if (s > 0) const SizedBox(height: 24),
+              GestureDetector(
+                onTap: () => context
+                    .read<AppFlow>()
+                    .openStoreMenu(post.stores[s].restaurantId),
+                behavior: HitTestBehavior.opaque,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(post.stores[s].restaurant.name,
+                          style: AppText.sub2()),
                     ),
-                  ),
-                ],
+                    const RotatedBox(quarterTurns: 2, child: DsChevron.left()),
+                  ],
+                ),
               ),
+              const SizedBox(height: 16),
+              const DsDivider(color: AppColors.gray300),
+              for (final item in post.stores[s].lines) ...[
+                const SizedBox(height: 16),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    RemoteOrAssetImage(
+                      imageUrl: item.imageUrl,
+                      assetPath: item.imagePath,
+                      size: 48,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item.name,
+                              style: AppText.sub2().copyWith(letterSpacing: -0.4)),
+                          const SizedBox(height: 4),
+                          Text(item.optionsText,
+                              style: AppText.caption(color: AppColors.gray600)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
           ],
         ),

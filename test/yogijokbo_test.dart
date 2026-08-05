@@ -42,10 +42,22 @@ void main() {
 
     test('조합 금액은 주문금액 + 배달비다 — 시안의 결제 23,000원', () async {
       final post = await MockPostRepository().detail('post_01H8X');
-      final combo = post!.combo;
-      expect(combo.itemsTotal, 20000); // 로제닭발 16,000 + 치즈볼 2,000×2
-      expect(combo.store.deliveryFee, 3000);
-      expect(combo.payableTotal, 23000);
+      expect(post!.stores, hasLength(1));
+      expect(post.itemsTotal, 20000); // 로제닭발 16,000 + 치즈볼 2,000×2
+      expect(post.stores.first.deliveryFee, 3000);
+      expect(post.payableTotal, 23000);
+    });
+
+    test('매장이 여러 곳인 글은 배달비가 가게마다 붙는다', () async {
+      // 회의(2026-08-04)에서 족보를 묶음 조합 단위로 바꿨다.
+      final post = await MockPostRepository().detail('post_02K3M');
+      expect(post!.stores, hasLength(2));
+      expect(post.restaurantNames, hasLength(2));
+      expect(post.storeSummary, contains('외 1곳'));
+
+      final deliveryTotal =
+          post.stores.fold(0, (sum, s) => sum + s.deliveryFee);
+      expect(post.payableTotal, post.itemsTotal + deliveryTotal);
     });
   });
 
@@ -160,19 +172,27 @@ void main() {
   });
 
   group('나도 주문하기', () {
-    test('주문 화면의 수량 변경이 게시글 스냅샷을 건드리지 않는다', () async {
-      // api-yogijokbo.md 2번 비고 — combo 는 작성 시점 스냅샷이라 보존돼야 한다.
+    test('장바구니 수량 변경이 게시글 스냅샷을 건드리지 않는다', () async {
+      // api-yogijokbo.md 2번 비고 — 조합은 작성 시점 스냅샷이라 보존돼야 한다.
       final flow = makeFlow();
       await flow.openPost('post_01H8X');
       await flow.startReorder();
 
-      final itemId = flow.orderCombo!.items.first.id;
-      final snapshotQuantity = flow.selectedPost!.combo.items.first.quantity;
+      final store = flow.cart.stores.first;
+      final menuId = store.lines.first.menuId;
+      final snapshotQuantity = flow.selectedPost!.stores.first.lines.first.quantity;
 
-      flow.changeOrderQuantity(itemId: itemId, delta: 2);
+      flow.changeCartQuantity(
+        restaurantId: store.restaurantId,
+        menuId: menuId,
+        delta: 2,
+      );
 
-      expect(flow.orderCombo!.items.first.quantity, snapshotQuantity + 2);
-      expect(flow.selectedPost!.combo.items.first.quantity, snapshotQuantity);
+      expect(flow.cart.stores.first.lines.first.quantity, snapshotQuantity + 2);
+      expect(
+        flow.selectedPost!.stores.first.lines.first.quantity,
+        snapshotQuantity,
+      );
     });
 
     test('수량을 0으로 내리면 항목이 빠진다', () async {
@@ -180,11 +200,35 @@ void main() {
       await flow.openPost('post_01H8X');
       await flow.startReorder();
 
-      final before = flow.orderCombo!.items.length;
-      final itemId = flow.orderCombo!.items.first.id;
-      flow.changeOrderQuantity(itemId: itemId, delta: -1); // 1 → 0
+      final store = flow.cart.stores.first;
+      final before = store.lines.length;
+      flow.changeCartQuantity(
+        restaurantId: store.restaurantId,
+        menuId: store.lines.first.menuId,
+        delta: -1, // 1 → 0
+      );
 
-      expect(flow.orderCombo!.items, hasLength(before - 1));
+      expect(flow.cart.stores.first.lines, hasLength(before - 1));
+    });
+
+    test('매장이 여러 곳인 글은 그대로 여러 가게 장바구니가 된다', () async {
+      final flow = makeFlow();
+      await flow.openPost('post_02K3M');
+      await flow.startReorder();
+
+      expect(flow.cart.storeCount, 2);
+      expect(flow.cart.deliveryFeeTotal, 4500); // 2,500 + 2,000
+    });
+
+    test('출처 영상이 주문 요청에 실린다', () async {
+      final flow = makeFlow();
+      await flow.openPost('post_01H8X');
+      await flow.startReorder();
+
+      final json = flow.cart.toOrderJson();
+      final source = json['source'] as Map<String, dynamic>;
+      expect(source['platform'], 'YOUTUBE');
+      expect(source['title'], contains('로제닭발'));
     });
 
     test('배달 불가 매장이면 주문 불가로 표시한다', () async {
@@ -196,15 +240,14 @@ void main() {
       expect(flow.orderUnavailable, isTrue);
     });
 
-    test('뒤로 가면 주문 상태가 정리된다', () async {
+    test('뒤로 가면 주문 불가 표시가 정리된다', () async {
       final flow = makeFlow();
-      await flow.openPost('post_01H8X');
+      await flow.openPost('post_02K3M');
       await flow.startReorder();
 
       flow.backToPostDetail();
 
       expect(flow.stage, AppStage.jokboDetail);
-      expect(flow.orderCombo, isNull);
       expect(flow.orderUnavailable, isFalse);
     });
   });
@@ -217,14 +260,14 @@ void main() {
       // 작성 화면은 분석 결과 조합을 받아 열린다.
       final seed = await repo.detail('post_01H8X');
       flow.selectedPost = seed;
-      // 명세 3번: 조합 내용을 보내지 않는다. orderId 하나로 서버가 붙인다.
-      flow.composeOrderId = 'order_5001';
+      // 명세 3번: 조합 내용을 보내지 않는다. checkoutId 하나로 서버가 붙인다.
+      flow.composeCheckoutId = 7002;
 
       await flow.submitPost(title: '내 로제닭발 조합', body: '치즈 두 배가 정답');
 
       expect(flow.stage, AppStage.jokboDetail);
       expect(flow.selectedPost?.title, '내 로제닭발 조합');
-      expect(flow.composeOrderId, isNull); // 작성 상태는 비워진다
+      expect(flow.composeCheckoutId, isNull); // 작성 상태는 비워진다
 
       final page = await repo.list(sort: PostSort.latest);
       expect(page.items.first.title, '내 로제닭발 조합');
@@ -235,12 +278,12 @@ void main() {
       final flow = AppFlow(locationService: const _NoLocation(), postRepository: repo);
       final seed = await repo.detail('post_01H8X');
       flow.selectedPost = seed;
-      flow.composeOrderId = 'order_5001';
+      flow.composeCheckoutId = 7002;
 
       await flow.submitPost(title: '   ', body: '본문만 있음');
 
       // 작성 상태가 남아 있어야 화면에 머문다. 비워지면 상세로 넘어가 버린다.
-      expect(flow.composeOrderId, 'order_5001');
+      expect(flow.composeCheckoutId, 7002);
       expect(flow.stage, isNot(AppStage.jokboDetail));
     });
   });

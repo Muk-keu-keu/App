@@ -1,70 +1,94 @@
-/// 메뉴 옵션. Figma "옵션 변경" (node 681:6050) 이 쓰는 구조다.
+/// 메뉴 옵션 하나.
 ///
-/// 요기요 실제 주문서와 같은 모양이다 — 메뉴 하나에 옵션 그룹이 여러 개 있고,
-/// 그룹마다 필수/선택이 갈리며 선택지마다 추가금이 붙는다.
-/// API 로는 GET /stores/{storeId}/menu 응답의 `optionGroups`.
+/// 회의(2026-08-04)에서 별도 옵션 테이블을 없애고 `menu.options` JSON 배열로
+/// 단순화했다. 그래서 그룹/선택지 2단 구조가 아니라 **평평한 목록**이고,
+/// `group` 은 묶어 그릴 라벨일 뿐이다 (없으면 null).
+///
+/// 세 자리에서 같은 모양을 쓴다 — 명세 비고 "menu.options 와 같은 모양이라
+/// 프론트가 변환할 것이 없다".
+/// - `menu.options` (GET menus)
+/// - `items[].options` (POST analyses 응답) — `selected` 가 붙어 온다
+/// - `items[].selectedOptions` (POST/GET orders) — 고른 것만, `selected` 없음
 library;
 
-/// 주문에 실제로 담긴 옵션 하나. API `combo.items[].selectedOptions[]`.
-class SelectedOption {
-  const SelectedOption({required this.name, required this.price});
-
-  final String name;
-  final int price;
-}
-
-/// 주문에 담긴 맵기. API `combo.items[].selectedSpice` — nullable 3단계다.
-///
-/// 시안의 "매운맛 5단계" 는 매장이 파는 옵션 그룹이라 [SelectedOption] 으로 들어간다.
-/// 이 값은 그와 별개로 서버가 요약해 두는 필드다.
-enum SpiceSelection {
-  none('NONE'),
-  medium('MEDIUM'),
-  hot('HOT');
-
-  const SpiceSelection(this.wire);
-
-  final String wire;
-
-  static SpiceSelection? fromWire(String? value) {
-    if (value == null) return null;
-    for (final s in values) {
-      if (s.wire == value.toUpperCase()) return s;
-    }
-    return null;
-  }
-}
-
-class MenuOptionChoice {
-  const MenuOptionChoice({
-    required this.id,
+class MenuOption {
+  const MenuOption({
     required this.name,
-    this.extraPrice = 0,
+    required this.price,
+    this.group,
+    this.selected = false,
   });
 
-  final String id;
+  /// 묶어 그릴 라벨. `소스 선택` 처럼. 없으면 null 이고 그때는 라벨 없이 나열한다.
+  final String? group;
+
   final String name;
 
   /// 추가금. 0이면 화면에 "+0원"으로 그대로 보인다(시안 동일).
-  final int extraPrice;
+  final int price;
+
+  /// 이미 체크된 상태인지. 분석·메뉴 응답에만 있고 주문 요청에는 담지 않는다.
+  final bool selected;
+
+  MenuOption copyWith({bool? selected}) => MenuOption(
+        group: group,
+        name: name,
+        price: price,
+        selected: selected ?? this.selected,
+      );
+
+  /// 같은 옵션인지. 서버가 id 를 주지 않아 group+name 이 사실상의 키다.
+  bool isSameAs(MenuOption other) => group == other.group && name == other.name;
+
+  factory MenuOption.fromJson(Map<String, dynamic> json) => MenuOption(
+        // `group` 은 없으면 null 이고, 키 자체가 빠지지는 않는다 (명세 규칙).
+        group: json['group'] as String?,
+        name: (json['name'] ?? '') as String,
+        price: ((json['price'] ?? 0) as num).toInt(),
+        selected: (json['selected'] ?? false) as bool,
+      );
+
+  /// 주문 요청의 `selectedOptions[]` 형태. `selected` 는 담지 않는다 —
+  /// 고른 것만 보내므로 전부 true 여서 실어 보낼 의미가 없다.
+  Map<String, dynamic> toJson() => {
+        'group': group,
+        'name': name,
+        'price': price,
+      };
+
+  static List<MenuOption> listFrom(Object? raw) => switch (raw) {
+        final List list => [
+            for (final e in list)
+              if (e is Map<String, dynamic>) MenuOption.fromJson(e),
+          ],
+        _ => const [],
+      };
 }
 
+/// 옵션 변경 시트가 `group` 으로 묶어 그리기 위한 묶음.
+///
+/// 라벨이 없는 옵션들(`group == null`)은 하나의 무제 묶음으로 모은다.
+/// 서버가 준 순서를 유지한다 — 순서가 곧 디자이너가 정한 노출 순서다.
 class MenuOptionGroup {
-  const MenuOptionGroup({
-    required this.id,
-    required this.name,
-    required this.choices,
-    this.isRequired = true,
-  });
+  const MenuOptionGroup({required this.label, required this.options});
 
-  final String id;
-  final String name;
-  final List<MenuOptionChoice> choices;
+  /// null 이면 라벨 없이 옵션만 나열한다.
+  final String? label;
 
-  /// 필수면 분홍 "필수" 배지, 아니면 회색 "선택" 배지가 붙는다.
-  final bool isRequired;
+  final List<MenuOption> options;
 
-  /// 시안은 그룹마다 라디오 버튼이라 항상 하나만 고른다.
-  /// 선택 그룹도 마찬가지여서 기본값으로 첫 선택지를 쓴다.
-  MenuOptionChoice get defaultChoice => choices.first;
+  static List<MenuOptionGroup> groupBy(List<MenuOption> options) {
+    final order = <String?>[];
+    final buckets = <String?, List<MenuOption>>{};
+    for (final o in options) {
+      if (!buckets.containsKey(o.group)) {
+        order.add(o.group);
+        buckets[o.group] = [];
+      }
+      buckets[o.group]!.add(o);
+    }
+    return [
+      for (final key in order) MenuOptionGroup(label: key, options: buckets[key]!),
+    ];
+  }
 }
