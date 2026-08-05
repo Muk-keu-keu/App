@@ -7,8 +7,12 @@
 
 1. 인스타 릴스에서 **공유 → 먹방요기**
 2. 취향 설정 (1인/비건모드, 맵기, 도착 시간)
-3. 링크의 제목·설명·썸네일 수집 → **Gemini 가 음식점·음식종류·지역·메뉴 추출**
-4. 추출 결과로 조합 구성 → 매장 카드와 메뉴를 보여주고 요기요로 연결
+3. 링크의 제목·설명·썸네일 수집 → **Gemini 가 메뉴·브랜드·카테고리 추출**
+4. 추출 결과를 `POST v1/analyses` 로 보내 매장·메뉴 매칭 결과를 받는다
+5. 여러 매장을 한 장바구니에 담아 **한 번에 결제** (`POST v1/orders`)
+
+한 영상에 가게가 두 곳(엽떡 + 명랑핫도그) 나오면 카드도 두 장이고, 그 둘이 한
+장바구니에 담긴다. 배달은 가게마다 따로 가지만 결제는 한 번이다.
 
 ## 시작하기
 
@@ -16,6 +20,7 @@
 # 1) 환경변수 파일 만들기 (커밋되지 않음)
 cp .env.example .env
 #    .env 의 GEMINI_API_KEY 에 실제 키를 넣는다. 값은 팀 채널에서 공유.
+#    API_BASE_URL 은 백엔드가 올라오면 채운다. 비워 두면 더미 데이터로 돈다.
 #    ⚠️ 복사만 하고 값을 안 채우면 자리표시자(YOUR_GEMINI_API_KEY)가 그대로
 #       앱에 번들돼 AI 분석이 매번 실패한다(Gemini 가 400 을 준다).
 #       한 번 겪었던 문제라 앱이 이 경우를 감지해 알려주지만, 빌드 전에 확인하는 게 낫다.
@@ -40,14 +45,29 @@ Gemini 키는 [aistudio.google.com/apikey](https://aistudio.google.com/apikey) �
 ```
 lib/
   main.dart              앱 진입점. 공유 링크 수신과 화면 전환
-  app_flow.dart          상태관리(ChangeNotifier). 분석 파이프라인
+  app_flow.dart          상태관리(ChangeNotifier). 분석·장바구니·결제
   env.dart               .env 접근
-  models/                도메인 모델 (= 백엔드 API 스키마 초안)
-  services/              Gemini 호출, 링크 메타데이터 수집
-  repository/            조합 추천 데이터 소스
-  screens/               화면 6개 + 시트 2개
-  widgets/               공용 위젯
+  api/                   HTTP 계층. api_client(인증·에러) + mukbang_api(엔드포인트)
+  models/                도메인 모델 (= docs/api-spec.md 와 1:1)
+  services/              Gemini 호출, 링크 메타데이터 수집, 위치
+  repository/            Api* 구현체 + Mock* 더미 (서버 없이도 돈다)
+  screens/               화면 + 시트
+  widgets/               공용 위젯·디자인 시스템
 ```
+
+## 백엔드 없이 돌리기
+
+`.env` 의 `API_BASE_URL` 이 비어 있으면 `Mock*Repository` 가 더미 데이터를
+돌려준다. 백엔드 작업이 끝나기 전에 화면을 확인하려고 남겨 둔 경로이고,
+서버가 올라오면 `API_BASE_URL` 만 채우면 `Api*Repository` 로 바뀐다.
+코드는 손대지 않는다.
+
+## API 명세
+
+- `docs/api-spec.md` — 분석·매장·주문·회원 (노션 "API 명세서(수정완료)" 사본)
+- `docs/api-yogijokbo.md` — 요기족보
+
+모델을 고치면 해당 문서도 함께 고친다. 백엔드와의 계약이다.
 
 ## 공유 시트 수신
 
