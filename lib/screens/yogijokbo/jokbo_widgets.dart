@@ -274,3 +274,76 @@ class SourceVideoCard extends StatelessWidget {
         ),
       );
 }
+
+/// 족보 작성·수정이 함께 쓰는 입력칸.
+///
+/// 회색 판 안에 글자수 카운터가 함께 들어간다. 한 줄짜리는 오른쪽에, 여러 줄짜리는
+/// 오른쪽 아래에 붙는다. 두 화면이 같은 칸을 그리므로 한 곳에 둔다 — 나눠 두면
+/// 글자수 제한이 화면마다 어긋난다.
+class JokboTextField extends StatelessWidget {
+  const JokboTextField({
+    super.key,
+    required this.controller,
+    required this.hint,
+    required this.maxLength,
+    this.height = 44,
+    this.multiline = false,
+  });
+
+  final TextEditingController controller;
+  final String hint;
+  final int maxLength;
+  final double height;
+  final bool multiline;
+
+  @override
+  Widget build(BuildContext context) {
+    final counter = Text(
+      '${controller.text.characters.length}/$maxLength',
+      style: AppText.btn3(color: AppColors.gray500),
+    );
+
+    final field = TextField(
+      controller: controller,
+      maxLength: maxLength,
+      maxLines: multiline ? null : 1,
+      expands: multiline,
+      textAlignVertical: TextAlignVertical.top,
+      style: AppText.body2().copyWith(letterSpacing: -0.35),
+      decoration: InputDecoration(
+        isDense: true,
+        border: InputBorder.none,
+        counterText: '',
+        hintText: hint,
+        hintStyle: AppText.body2(color: AppColors.gray600)
+            .copyWith(letterSpacing: -0.35),
+      ),
+    );
+
+    return Container(
+      height: height,
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.gray200,
+        borderRadius: BorderRadius.circular(AppRadius.chip),
+      ),
+      child: multiline
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(child: field),
+                const SizedBox(height: 8),
+                counter,
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(child: field),
+                const SizedBox(width: 8),
+                counter,
+              ],
+            ),
+    );
+  }
+}

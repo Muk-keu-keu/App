@@ -1,0 +1,155 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../app_flow.dart';
+import '../../theme.dart';
+import 'jokbo_widgets.dart';
+
+/// Figma "족보 수정" (node 922:2734).
+///
+/// 게시물 헤더의 점 아이콘 → "수정하기" 로 들어온다. 작성 화면과 달리 조합은
+/// 손댈 수 없다 — 조합은 결제 스냅샷이라 글쓴이가 바꿀 수 있는 값이 아니다.
+/// 그래서 제목과 본문만 있고, 하단 CTA 대신 헤더 오른쪽의 "저장" 을 쓴다.
+class PostEditScreen extends StatefulWidget {
+  const PostEditScreen({super.key});
+
+  static const titleMax = 20;
+  static const bodyMax = 400;
+
+  @override
+  State<PostEditScreen> createState() => _PostEditScreenState();
+}
+
+class _PostEditScreenState extends State<PostEditScreen> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _bodyController;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 지금 값을 채워 둔다. 빈 칸으로 열면 수정이 아니라 새로 쓰는 것처럼 보인다.
+    final post = context.read<AppFlow>().selectedPost;
+    _titleController = TextEditingController(text: post?.title ?? '')
+      ..addListener(_onChanged);
+    _bodyController = TextEditingController(text: post?.body ?? '')
+      ..addListener(_onChanged);
+  }
+
+  /// 글자수 카운터와 저장 버튼 활성 상태가 입력에 따라 다시 그려져야 한다.
+  void _onChanged() => setState(() {});
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _bodyController.dispose();
+    super.dispose();
+  }
+
+  bool get _canSave => !_saving && _titleController.text.trim().isNotEmpty;
+
+  Future<void> _save() async {
+    if (!_canSave) return;
+    setState(() => _saving = true);
+    await context.read<AppFlow>().savePostEdit(
+          title: _titleController.text,
+          body: _bodyController.text,
+        );
+    if (mounted) setState(() => _saving = false);
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+        color: Colors.white,
+        child: Column(
+          children: [
+            _EditHeader(
+              onClose: () => context.read<AppFlow>().cancelPostEdit(),
+              onSave: _canSave ? _save : null,
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+                children: [
+                  JokboTextField(
+                    controller: _titleController,
+                    hint: '제목을 입력해주세요',
+                    maxLength: PostEditScreen.titleMax,
+                  ),
+                  const SizedBox(height: 16),
+                  JokboTextField(
+                    controller: _bodyController,
+                    hint: '본문을 입력해주세요',
+                    maxLength: PostEditScreen.bodyMax,
+                    height: 189,
+                    multiline: true,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+/// ✕ 족보 수정 저장. 시안의 헤더는 뒤로가기가 아니라 닫기다 —
+/// 수정은 상세 위에 얹힌 화면이라 되돌아갈 단계가 하나뿐이다.
+class _EditHeader extends StatelessWidget {
+  const _EditHeader({required this.onClose, required this.onSave});
+
+  final VoidCallback onClose;
+  final VoidCallback? onSave;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        color: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: SafeArea(
+          bottom: false,
+          child: SizedBox(
+            height: 32,
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: onClose,
+                  behavior: HitTestBehavior.opaque,
+                  child: const SizedBox(
+                    width: 64,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Icon(Icons.close, size: 24),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    '족보 수정',
+                    textAlign: TextAlign.center,
+                    style: AppText.sub1(),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: onSave,
+                  behavior: HitTestBehavior.opaque,
+                  child: SizedBox(
+                    width: 64,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        '저장',
+                        style: AppText.btn2(
+                          color: onSave == null
+                              ? AppColors.gray500
+                              : AppColors.primary500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}

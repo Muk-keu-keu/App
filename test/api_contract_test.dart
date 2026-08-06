@@ -105,15 +105,18 @@ void main() {
       expect(await repo.detail(postId), isNotNull);
     });
 
-    test('작성 후 그 postId 의 상세로 이동한다', () async {
+    test('작성 후 주문내역으로 돌아가고 postId 를 돌려준다', () async {
       final repo = MockPostRepository(delay: Duration.zero);
       final flow = makeFlow(repo);
       flow.composeCheckoutId = 7002;
 
-      await flow.submitPost(title: '내 조합', body: '본문');
+      final postId = await flow.submitPost(title: '내 조합', body: '본문');
 
-      expect(flow.stage, AppStage.jokboDetail);
-      expect(flow.selectedPost?.title, '내 조합');
+      // 화면 이동은 시안 952:5089 대로 주문내역이다. 방금 쓴 글로는
+      // 토스트의 "보러가기" 로만 가므로, 그 이동에 쓸 id 가 나와야 한다.
+      expect(flow.stage, AppStage.orders);
+      expect(postId, isNotNull);
+      expect(await repo.detail(postId!), isNotNull);
     });
   });
 

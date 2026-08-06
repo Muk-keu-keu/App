@@ -253,7 +253,7 @@ void main() {
   });
 
   group('족보 작성', () {
-    test('공유하면 목록 맨 앞에 오고 바로 그 글이 열린다', () async {
+    test('공유하면 목록 맨 앞에 오고 주문내역으로 돌아간다', () async {
       final repo = MockPostRepository();
       final flow = AppFlow(locationService: const _NoLocation(), postRepository: repo);
 
@@ -263,14 +263,23 @@ void main() {
       // 명세 3번: 조합 내용을 보내지 않는다. checkoutId 하나로 서버가 붙인다.
       flow.composeCheckoutId = 7002;
 
-      await flow.submitPost(title: '내 로제닭발 조합', body: '치즈 두 배가 정답');
+      final postId =
+          await flow.submitPost(title: '내 로제닭발 조합', body: '치즈 두 배가 정답');
 
-      expect(flow.stage, AppStage.jokboDetail);
-      expect(flow.selectedPost?.title, '내 로제닭발 조합');
+      // 시안 952:5089 — 공유하면 방금 쓴 글이 아니라 주문내역으로 간다.
+      // 그 글로 가는 길은 화면이 띄우는 토스트의 "보러가기" 뿐이라,
+      // 여기서는 이동할 수 있도록 postId 를 돌려주는지까지만 본다.
+      expect(flow.stage, AppStage.orders);
+      expect(postId, isNotNull);
       expect(flow.composeCheckoutId, isNull); // 작성 상태는 비워진다
 
       final page = await repo.list(sort: PostSort.latest);
       expect(page.items.first.title, '내 로제닭발 조합');
+
+      // "보러가기" 가 하는 일. 돌려받은 id 로 그 글이 열려야 한다.
+      await flow.openPost(postId!);
+      expect(flow.stage, AppStage.jokboDetail);
+      expect(flow.selectedPost?.title, '내 로제닭발 조합');
     });
 
     test('제목이 비면 공유하지 않는다', () async {
@@ -285,6 +294,78 @@ void main() {
       // 작성 상태가 남아 있어야 화면에 머문다. 비워지면 상세로 넘어가 버린다.
       expect(flow.composeCheckoutId, 7002);
       expect(flow.stage, isNot(AppStage.jokboDetail));
+    });
+  });
+
+  // 시안 922:2734. 서버 엔드포인트가 아직 없어 저장소는 mock 뿐이지만,
+  // 화면이 기대하는 상태 변화는 여기서 잠가 둔다.
+  group('족보 수정·삭제', () {
+    Future<AppFlow> openedPost(MockPostRepository repo) async {
+      final flow = AppFlow(locationService: const _NoLocation(), postRepository: repo);
+      await flow.openJokbo();
+      await flow.openPost('post_01H8X');
+      return flow;
+    }
+
+    test('수정하면 상세와 목록의 제목이 함께 바뀐다', () async {
+      final repo = MockPostRepository();
+      final flow = await openedPost(repo);
+
+      flow.openPostEdit();
+      expect(flow.stage, AppStage.jokboEdit);
+
+      await flow.savePostEdit(title: '고친 제목', body: '고친 본문');
+
+      // 저장하면 상세로 돌아간다.
+      expect(flow.stage, AppStage.jokboDetail);
+      expect(flow.selectedPost?.title, '고친 제목');
+      expect(flow.selectedPost?.body, '고친 본문');
+
+      // 목록에 떠 있던 같은 글도 맞춰져야 한다. 안 그러면 뒤로 갔을 때
+      // 옛 제목이 남아 저장이 안 된 것처럼 보인다.
+      final listed = flow.posts.where((p) => p.id == 'post_01H8X');
+      expect(listed.first.title, '고친 제목');
+
+      // 저장소에도 남아 다시 받아도 같은 값이어야 한다.
+      expect((await repo.detail('post_01H8X'))?.title, '고친 제목');
+    });
+
+    test('제목이 비면 저장하지 않는다', () async {
+      final repo = MockPostRepository();
+      final flow = await openedPost(repo);
+      final before = flow.selectedPost!.title;
+
+      flow.openPostEdit();
+      await flow.savePostEdit(title: '   ', body: '본문만');
+
+      expect(flow.selectedPost?.title, before);
+      expect(flow.stage, AppStage.jokboEdit); // 화면에 머문다
+    });
+
+    test('게시물을 지우면 목록에서 빠지고 목록 화면으로 나간다', () async {
+      final repo = MockPostRepository();
+      final flow = await openedPost(repo);
+
+      await flow.deleteCurrentPost();
+
+      // 돌아갈 상세가 없어졌으므로 목록으로 나간다.
+      expect(flow.stage, AppStage.jokboHome);
+      expect(flow.selectedPost, isNull);
+      expect(flow.posts.where((p) => p.id == 'post_01H8X'), isEmpty);
+      expect(await repo.detail('post_01H8X'), isNull);
+    });
+
+    test('댓글을 지우면 목록과 카운트가 함께 줄어든다', () async {
+      final repo = MockPostRepository();
+      final flow = await openedPost(repo);
+
+      final before = flow.postComments.length;
+      expect(before, greaterThan(0));
+
+      await flow.deleteComment(flow.postComments.first.id);
+
+      expect(flow.postComments.length, before - 1);
+      expect(flow.selectedPost?.commentCount, before - 1);
     });
   });
 

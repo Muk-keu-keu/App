@@ -113,8 +113,12 @@ class YogijokboPost {
   });
 
   final String id;
-  final String title;
-  final String body;
+
+  /// 글쓴이가 고칠 수 있다 (시안 922:2734 "족보 수정"). 조합은 결제 스냅샷이라
+  /// 그대로지만 제목·본문은 바뀐다.
+  String title;
+  String body;
+
   final PostAuthor author;
 
   /// 작성 시점 조합 스냅샷. 매장이 가격을 올려도 예전 글은 그때 모습대로 보인다.

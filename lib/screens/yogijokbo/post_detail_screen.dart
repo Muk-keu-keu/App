@@ -7,6 +7,7 @@ import '../../models/post.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../../widgets/ds.dart';
+import '../../widgets/overlays.dart';
 
 /// Figma "조합 상세" (node 681:8105).
 ///
@@ -114,6 +115,32 @@ class _Profile extends StatelessWidget {
   final PostAuthor author;
   final String dateText;
 
+  /// 헤더 점 아이콘 → 수정하기 / 삭제하기 (시안 922:2734 —
+  /// "게시물 헤더의 우측 점 아이콘 선택시 하단에 나타남").
+  Future<void> _openMenu(BuildContext context) async {
+    final flow = context.read<AppFlow>();
+    final picked = await AppActionSheet.show(
+      context,
+      items: const [
+        AppActionSheetItem(label: '수정하기', value: 'edit'),
+        AppActionSheetItem(label: '삭제하기', value: 'delete', destructive: true),
+      ],
+    );
+
+    if (picked == 'edit') {
+      flow.openPostEdit();
+      return;
+    }
+    if (picked != 'delete' || !context.mounted) return;
+
+    final ok = await AppConfirmDialog.show(
+      context,
+      title: '게시물을 삭제할까요?',
+      message: '삭제한 게시물은 복구할 수 없어요.',
+    );
+    if (ok) await flow.deleteCurrentPost();
+  }
+
   @override
   Widget build(BuildContext context) => Row(
         children: [
@@ -137,6 +164,18 @@ class _Profile extends StatelessWidget {
                 Text(author.nickname, style: AppText.sub2(color: AppColors.gray800)),
                 Text(dateText, style: AppText.caption(color: AppColors.gray600)),
               ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () => _openMenu(context),
+            behavior: HitTestBehavior.opaque,
+            child: const Padding(
+              padding: EdgeInsets.only(left: 12),
+              child: Icon(
+                Icons.more_vert,
+                size: 20,
+                color: AppColors.gray600,
+              ),
             ),
           ),
         ],
@@ -384,10 +423,40 @@ class _CommentSection extends StatelessWidget {
       );
 }
 
-class _CommentItem extends StatelessWidget {
+class _CommentItem extends StatefulWidget {
   const _CommentItem({required this.comment});
 
   final PostComment comment;
+
+  @override
+  State<_CommentItem> createState() => _CommentItemState();
+}
+
+class _CommentItemState extends State<_CommentItem> {
+  /// 메뉴를 점 아이콘 바로 아래에 띄우기 위한 기준점.
+  final _anchorKey = GlobalKey();
+
+  PostComment get comment => widget.comment;
+
+  /// 댓글 점 아이콘 → 삭제하기 (시안 922:2734 — "댓글의 점 아이콘 선택 시").
+  Future<void> _openMenu() async {
+    final flow = context.read<AppFlow>();
+    final picked = await AppOverflowMenu.show(
+      context,
+      anchorKey: _anchorKey,
+      items: const [
+        AppActionSheetItem(label: '삭제하기', value: 'delete', destructive: true),
+      ],
+    );
+    if (picked != 'delete' || !mounted) return;
+
+    final ok = await AppConfirmDialog.show(
+      context,
+      title: '댓글을 삭제할까요?',
+      message: '삭제한 댓글은 복구할 수 없어요.',
+    );
+    if (ok) await flow.deleteComment(comment.id);
+  }
 
   @override
   Widget build(BuildContext context) => Column(
@@ -419,8 +488,19 @@ class _CommentItem extends StatelessWidget {
                   ],
                 ),
               ),
-              // 신고·삭제 메뉴는 연결될 화면이 아직 없어 자리만 지킨다.
-              const Icon(Icons.more_horiz, size: 20, color: AppColors.gray500),
+              GestureDetector(
+                key: _anchorKey,
+                onTap: _openMenu,
+                behavior: HitTestBehavior.opaque,
+                child: const Padding(
+                  padding: EdgeInsets.only(left: 8),
+                  child: Icon(
+                    Icons.more_horiz,
+                    size: 20,
+                    color: AppColors.gray500,
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 8),

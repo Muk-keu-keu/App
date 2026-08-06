@@ -8,6 +8,8 @@ import '../../models/post.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../../widgets/ds.dart';
+import '../../widgets/overlays.dart';
+import 'jokbo_widgets.dart';
 
 /// Figma "조합 공유" (node 681:7992).
 ///
@@ -55,11 +57,25 @@ class _PostComposeScreenState extends State<PostComposeScreen> {
   Future<void> _submit() async {
     if (!_canSubmit) return;
     setState(() => _submitting = true);
-    await context.read<AppFlow>().submitPost(
-          title: _titleController.text,
-          body: _bodyController.text,
-        );
-    if (mounted) setState(() => _submitting = false);
+
+    final flow = context.read<AppFlow>();
+    final postId = await flow.submitPost(
+      title: _titleController.text,
+      body: _bodyController.text,
+    );
+
+    if (!mounted) return;
+    setState(() => _submitting = false);
+
+    // 공유가 끝나면 [AppFlow.submitPost] 가 주문내역으로 옮겨 놓는다.
+    // 방금 쓴 글로 가는 길은 이 토스트에만 있다 (시안 952:5089).
+    if (postId == null) return;
+    AppToast.show(
+      context,
+      message: '요기족보를 공유했습니다.',
+      actionLabel: '보러가기',
+      onAction: () => flow.openPost(postId),
+    );
   }
 
   @override
@@ -237,13 +253,13 @@ class _FormSection extends StatelessWidget {
           children: [
             Text('먹방 속 조합, 어땠나요?', style: AppText.sub2()),
             const SizedBox(height: 16),
-            _Field(
+            JokboTextField(
               controller: titleController,
               hint: '제목을 입력해주세요',
               maxLength: titleMax,
             ),
             const SizedBox(height: 16),
-            _Field(
+            JokboTextField(
               controller: bodyController,
               hint: '본문을 입력해주세요',
               maxLength: bodyMax,
@@ -258,75 +274,6 @@ class _FormSection extends StatelessWidget {
           ],
         ),
       );
-}
-
-/// 시안의 입력칸. 회색 판 안에 글자수 카운터가 함께 들어간다.
-/// 한 줄짜리는 오른쪽에, 여러 줄짜리는 오른쪽 아래에 붙는다.
-class _Field extends StatelessWidget {
-  const _Field({
-    required this.controller,
-    required this.hint,
-    required this.maxLength,
-    this.height = 44,
-    this.multiline = false,
-  });
-
-  final TextEditingController controller;
-  final String hint;
-  final int maxLength;
-  final double height;
-  final bool multiline;
-
-  @override
-  Widget build(BuildContext context) {
-    final counter = Text(
-      '${controller.text.characters.length}/$maxLength',
-      style: AppText.btn3(color: AppColors.gray500),
-    );
-
-    final field = TextField(
-      controller: controller,
-      maxLength: maxLength,
-      maxLines: multiline ? null : 1,
-      expands: multiline,
-      textAlignVertical: TextAlignVertical.top,
-      style: AppText.body2().copyWith(letterSpacing: -0.35),
-      decoration: InputDecoration(
-        isDense: true,
-        border: InputBorder.none,
-        counterText: '',
-        hintText: hint,
-        hintStyle: AppText.body2(color: AppColors.gray600)
-            .copyWith(letterSpacing: -0.35),
-      ),
-    );
-
-    return Container(
-      height: height,
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.gray200,
-        borderRadius: BorderRadius.circular(AppRadius.chip),
-      ),
-      child: multiline
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(child: field),
-                const SizedBox(height: 8),
-                counter,
-              ],
-            )
-          : Row(
-              children: [
-                Expanded(child: field),
-                const SizedBox(width: 8),
-                counter,
-              ],
-            ),
-    );
-  }
 }
 
 /// 사진 첨부. 촬영·선택이 이번 범위가 아니라 추가 버튼 자리만 시안대로 둔다.

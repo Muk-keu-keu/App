@@ -49,6 +49,24 @@ abstract class PostRepository {
 
   /// 7. POST v1/posts/{postId}/comments — 201 CREATED, 본문 없음.
   Future<void> addComment(String postId, String body);
+
+  // ── 명세에 없는 것들 ────────────────────────────────────────────────────────
+  // 아래 셋은 시안(922:2734)에 화면이 있는데 `docs/api-yogijokbo.md` 에는
+  // 엔드포인트가 없다. 그 문서의 확인 필요 항목 "대댓글·수정·삭제" 가 아직 열려
+  // 있다. 경로가 정해지면 Api 구현만 채우면 되도록 자리를 먼저 만들어 둔다.
+
+  /// 족보 수정. 제목과 본문만 고친다 — 조합은 결제 스냅샷이라 바뀌지 않는다.
+  Future<void> updatePost(
+    String postId, {
+    required String title,
+    required String body,
+  });
+
+  /// 게시물 삭제. 되돌릴 수 없다.
+  Future<void> deletePost(String postId);
+
+  /// 댓글 삭제. 되돌릴 수 없다.
+  Future<void> deleteComment(String postId, String commentId);
 }
 
 class MockPostRepository implements PostRepository {
@@ -154,6 +172,38 @@ class MockPostRepository implements PostRepository {
         createdAt: DateTime.now(),
       ),
     );
+    for (final post in _posts) {
+      if (post.id == postId) post.commentCount = list.length;
+    }
+  }
+
+  @override
+  Future<void> updatePost(
+    String postId, {
+    required String title,
+    required String body,
+  }) async {
+    await _wait;
+    for (final post in _posts) {
+      if (post.id != postId) continue;
+      post.title = title;
+      post.body = body;
+    }
+  }
+
+  @override
+  Future<void> deletePost(String postId) async {
+    await _wait;
+    _cache = [for (final p in _posts) if (p.id != postId) p];
+    _comments.remove(postId);
+  }
+
+  @override
+  Future<void> deleteComment(String postId, String commentId) async {
+    await _wait;
+    final list = _comments[postId];
+    if (list == null) return;
+    list.removeWhere((c) => c.id == commentId);
     for (final post in _posts) {
       if (post.id == postId) post.commentCount = list.length;
     }
