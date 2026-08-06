@@ -655,6 +655,11 @@ class AppFlow extends ChangeNotifier {
         // 키가 거부됐다. 재시도해도 같은 결과라 즉시 포기한다.
         _fail(_keyProblemMessage);
         return;
+      } on GeminiRequestException catch (e) {
+        // 우리가 보낸 요청이 잘못됐다. 재시도가 소용없는 건 키 문제와 같지만
+        // 사용자가 할 수 있는 일이 없고, 키를 의심하게 두면 원인을 놓친다.
+        _fail(_requestProblemMessage(e));
+        return;
       } catch (_) {
         // 그 밖의 실패(네트워크·타임아웃)는 1회 자동 재시도
       }
@@ -1022,6 +1027,15 @@ class AppFlow extends ChangeNotifier {
   /// 개발·디버그 빌드에서는 원인을 그대로 알려준다. 이 화면이 "잠시 후 다시
   /// 시도해 주세요"로 보이면 네트워크 문제로 오해해 시연 중에 원인을 못 찾는다.
   /// 릴리즈 빌드에서는 사용자에게 `.env` 를 말할 수 없으니 담당자 확인을 안내한다.
+  /// 요청이 잘못됐을 때. 사용자가 고칠 수 있는 게 없으므로 밖으로는 일반 안내를 준다.
+  ///
+  /// 디버그 빌드에서는 Gemini 가 준 설명을 그대로 보여준다. 이게 없으면 스키마
+  /// 오류가 "AI 분석에 실패했어요" 로만 보여서, 네트워크 문제인지 우리 버그인지
+  /// 화면만 보고는 구분할 수 없다.
+  static String _requestProblemMessage(GeminiRequestException e) => kDebugMode
+      ? 'AI 요청이 거부됐어요 (HTTP ${e.statusCode}).\n${e.message}'
+      : 'AI 분석에 실패했어요.\n담당자에게 문의해 주세요.';
+
   static String get _keyProblemMessage => kDebugMode
       ? 'Gemini API 키가 설정되지 않았어요.\n'
           '.env 의 GEMINI_API_KEY 를 실제 키로 채우고 다시 빌드해 주세요.'

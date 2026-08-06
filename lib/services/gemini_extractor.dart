@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/enums.dart';
@@ -149,6 +150,27 @@ class GeminiAuthException implements Exception {
   String toString() => 'GeminiAuthException(HTTP $statusCode) — API 키를 확인하세요';
 }
 
+/// 우리가 보낸 요청이 잘못됐을 때 (`400 INVALID_ARGUMENT`).
+///
+/// 키와 무관한 400 이다. 재시도해도 같은 결과라는 점은 [GeminiAuthException] 과
+/// 같지만 고칠 곳이 다르다 — 이쪽은 우리 코드의 버그다.
+///
+/// 이 예외를 나눈 이유가 있다. responseSchema 의 enum 에 빈 문자열이 들어가
+/// 요청이 통째로 거부되던 때, 400 을 전부 키 문제로 보고하는 바람에 화면이
+/// "AI 분석을 쓸 수 없어요" 만 띄웠다. 키는 멀쩡했는데 키를 의심하느라 원인을
+/// 찾는 데 한참 걸렸다. 서버가 준 설명을 [message] 에 그대로 들고 온다.
+class GeminiRequestException implements Exception {
+  const GeminiRequestException(this.statusCode, this.message);
+
+  final int statusCode;
+
+  /// Gemini 가 준 `error.message` 원문.
+  final String message;
+
+  @override
+  String toString() => 'GeminiRequestException(HTTP $statusCode) — $message';
+}
+
 /// Google Gemini generateContent 를 raw HTTP 로 호출한다.
 /// responseMimeType + responseSchema 로 응답이 항상 스키마에 맞는 JSON 이 되도록 강제한다.
 class GeminiExtractor {
@@ -161,7 +183,8 @@ class GeminiExtractor {
     'name', 'brandName', 'restaurantName', 'foodCategory', 'description', 'options',
   ];
 
-  static const Map<String, dynamic> _dishSchema = {
+  @visibleForTesting
+  static const Map<String, dynamic> dishSchema = {
     'type': 'OBJECT',
     'properties': {
       'name': {'type': 'STRING'},
@@ -170,11 +193,18 @@ class GeminiExtractor {
       // 빈 문자열은 ExtractedDish._nullIfBlank 가 null 로 되돌린다.
       'brandName': {'type': 'STRING'},
       'restaurantName': {'type': 'STRING'},
+      // 판단 불가는 빈 문자열이 아니라 UNKNOWN 이다.
+      //
+      // responseSchema 의 enum 에 빈 문자열을 넣으면 Gemini 가 요청 자체를 거부한다
+      // (`400 INVALID_ARGUMENT — enum[9]: cannot be empty`). 다른 필드처럼 빈
+      // 문자열로 통일하려다 이 화면 전체가 죽어 있었다.
+      //
+      // UNKNOWN 은 FoodCategory 에 없는 값이라 `fromWire` 가 null 로 돌려준다.
       'foodCategory': {
         'type': 'STRING',
         'enum': [
           ...['KOREAN', 'CHINESE', 'JAPANESE', 'WESTERN', 'SNACK'],
-          ...['CHICKEN', 'PIZZA', 'ASIAN', 'CAFE_DESSERT', ''],
+          ...['CHICKEN', 'PIZZA', 'ASIAN', 'CAFE_DESSERT', 'UNKNOWN'],
         ],
       },
       'description': {'type': 'STRING'},
@@ -187,10 +217,12 @@ class GeminiExtractor {
     'propertyOrdering': _dishFields,
   };
 
-  static const Map<String, dynamic> _responseSchema = {
+  /// 서버가 이 스키마를 거부하면 화면 전체가 죽는다. 테스트가 모양을 지킨다.
+  @visibleForTesting
+  static const Map<String, dynamic> responseSchema = {
     'type': 'OBJECT',
     'properties': {
-      'dishes': {'type': 'ARRAY', 'items': _dishSchema},
+      'dishes': {'type': 'ARRAY', 'items': dishSchema},
       'keywords': {
         'type': 'ARRAY',
         'items': {'type': 'STRING'},
@@ -213,7 +245,7 @@ dishes: 영상에 나온 음식들을 등장 순서대로. 각 항목은
       영상에 가게가 안 나오면 빈 문자열.
   · restaurantName: 지점까지 붙은 상호명 (예: "엽기떡볶이 강남점"). 모르면 빈 문자열.
   · foodCategory: KOREAN, CHINESE, JAPANESE, WESTERN, SNACK, CHICKEN, PIZZA,
-      ASIAN, CAFE_DESSERT 중 하나. 판단 불가면 빈 문자열.
+      ASIAN, CAFE_DESSERT 중 하나. 판단 불가면 UNKNOWN.
   · description: 그 음식의 맛과 식감만 한 줄로, 30~50자.
       "쫄깃한 밀떡에 매운 양념을 넉넉히 버무린 떡볶이" 처럼 쓰세요.
       "인생 맛집", "꼭 드세요" 같은 홍보·감상 문구는 넣지 마세요.
@@ -251,7 +283,7 @@ $text
             ],
             'generationConfig': {
               'responseMimeType': 'application/json',
-              'responseSchema': _responseSchema,
+              'responseSchema': responseSchema,
               'temperature': 0,
             },
           }),
@@ -259,12 +291,19 @@ $text
         .timeout(const Duration(seconds: 30));
 
     if (response.statusCode != 200) {
+      final detail = _errorMessage(response.bodyBytes);
+
       // 키 문제는 재시도해도 절대 안 된다. 호출한 쪽이 구분해서 바로 포기하도록
       // 별도 예외로 던진다. 그냥 재시도하면 실패까지 걸리는 시간만 두 배가 된다.
-      if (_isAuthFailure(response.statusCode)) {
+      if (_isAuthFailure(response.statusCode, detail)) {
         throw GeminiAuthException(response.statusCode);
       }
-      throw Exception('Gemini HTTP ${response.statusCode}');
+      // 400 인데 키 문제가 아니면 우리가 보낸 요청이 잘못된 것이다. 이것도
+      // 재시도가 소용없지만 고칠 곳이 다르므로 다른 예외로 던진다.
+      if (response.statusCode == 400) {
+        throw GeminiRequestException(response.statusCode, detail);
+      }
+      throw Exception('Gemini HTTP ${response.statusCode} — $detail');
     }
 
     final json = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
@@ -275,9 +314,35 @@ $text
     return parseResponse(raw);
   }
 
-  /// Gemini 는 키가 틀리면 400, 권한 문제면 401·403 을 준다.
-  static bool _isAuthFailure(int statusCode) =>
-      statusCode == 400 || statusCode == 401 || statusCode == 403;
+  /// 권한 문제면 401·403 이다. 400 은 본문을 봐야 안다.
+  ///
+  /// Gemini 는 키가 틀려도 400 을 준다(`API key not valid`). 그런데 우리가 보낸
+  /// 요청이 잘못됐을 때도 400 이라, 상태 코드만 보고 키 탓을 하면 멀쩡한 키를
+  /// 의심하게 된다. 실제로 그런 일이 있었다 — 아래 문구가 있을 때만 키 문제로 본다.
+  static bool _isAuthFailure(int statusCode, String detail) {
+    if (statusCode == 401 || statusCode == 403) return true;
+    if (statusCode != 400) return false;
+    final lower = detail.toLowerCase();
+    return lower.contains('api key') || lower.contains('api_key');
+  }
+
+  /// 오류 본문에서 `error.message` 를 꺼낸다. JSON 이 아니어도 터지지 않는다.
+  static String _errorMessage(List<int> bodyBytes) {
+    try {
+      final decoded = jsonDecode(utf8.decode(bodyBytes));
+      if (decoded is Map && decoded['error'] is Map) {
+        final message = (decoded['error'] as Map)['message'];
+        if (message != null) return '$message'.trim();
+      }
+    } catch (_) {
+      // 본문이 JSON 이 아니면 아래에서 원문을 짧게 준다.
+    }
+    try {
+      return utf8.decode(bodyBytes).trim();
+    } catch (_) {
+      return '';
+    }
+  }
 
   /// responseSchema 로 유효한 JSON 이 보장되지만, 방어적으로 앞뒤 잡음을 제거하고 파싱한다.
   static ExtractionResult parseResponse(String answer) {
