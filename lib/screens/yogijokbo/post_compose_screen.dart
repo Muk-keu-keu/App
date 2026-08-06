@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_flow.dart';
@@ -270,32 +269,7 @@ class _FormSection extends StatelessWidget {
             Text('사진 첨부',
                 style: AppText.sub2().copyWith(letterSpacing: 0)),
             const SizedBox(height: 12),
-            const _PhotoRow(),
-          ],
-        ),
-      );
-}
-
-/// 사진 첨부. 촬영·선택이 이번 범위가 아니라 추가 버튼 자리만 시안대로 둔다.
-class _PhotoRow extends StatelessWidget {
-  const _PhotoRow();
-
-  @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppColors.gray200,
-                border: Border.all(color: AppColors.gray400),
-                borderRadius: BorderRadius.circular(AppRadius.chip),
-              ),
-              child: SvgPicture.asset(DsIcons.camera, width: 24, height: 24),
-            ),
+            const JokboPhotoRow(),
           ],
         ),
       );

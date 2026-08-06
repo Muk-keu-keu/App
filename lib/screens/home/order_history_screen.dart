@@ -132,9 +132,9 @@ class _OrderCard extends StatelessWidget {
                 RemoteOrAssetImage(
                   imageUrl: order.thumbnailUrl,
                   assetPath: 'assets/images/store_dujjim.png',
-                  size: 56,
+                  size: 48,
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 13),
                 Expanded(
                   child: Text(
                     order.sourceVideoTitle,
@@ -152,7 +152,7 @@ class _OrderCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     order.countText,
-                    style: AppText.caption(color: AppColors.gray600),
+                    style: AppText.caption(color: AppColors.gray700),
                   ),
                 ),
                 GestureDetector(
@@ -164,13 +164,9 @@ class _OrderCard extends StatelessWidget {
                     children: [
                       Text(
                         '상세보기',
-                        style: AppText.caption(color: AppColors.primary500),
+                        style: AppText.btn3(color: AppColors.primary500),
                       ),
-                      const Icon(
-                        Icons.chevron_right,
-                        size: 16,
-                        color: AppColors.primary500,
-                      ),
+                      const DsChevron.right(color: AppColors.primary500),
                     ],
                   ),
                 ),
@@ -223,8 +219,9 @@ class _OrderCard extends StatelessWidget {
 
 /// `[지점명] 메뉴, 메뉴` 를 가게마다 한 줄씩 (시안 857:4509 Content 주석).
 ///
-/// 지점명은 진하게, 메뉴는 흐리게 그린다. 한 줄에 둘이 섞여 있어 굵기로
-/// 나누지 않으면 어디까지가 가게 이름인지 읽히지 않는다.
+/// 지점명과 메뉴가 굵기·크기·색으로 나뉜다. 한 줄에 둘이 섞여 있어 구분이 없으면
+/// 어디까지가 가게 이름인지 읽히지 않는다. 지점명은 줄지 않고 메뉴 쪽만 잘린다 —
+/// 어느 가게인지가 먼저다.
 class _MenuSummaryBox extends StatelessWidget {
   const _MenuSummaryBox({required this.summary});
 
@@ -236,28 +233,30 @@ class _MenuSummaryBox extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: AppColors.gray200,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.chip),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             for (var i = 0; i < summary.length; i++) ...[
               if (i > 0) const SizedBox(height: 4),
-              Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: '[${summary[i].storeName}] ',
-                      style: AppText.caption(color: AppColors.gray800),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '[${summary[i].storeName}]',
+                    style: AppText.btn2(color: AppColors.gray800),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      summary[i].menuNames.join(', '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.caption(color: AppColors.gray700),
                     ),
-                    TextSpan(
-                      text: summary[i].menuNames.join(', '),
-                      style: AppText.caption(color: AppColors.gray600),
-                    ),
-                  ],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ],
           ],

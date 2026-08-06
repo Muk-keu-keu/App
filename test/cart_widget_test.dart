@@ -172,7 +172,10 @@ void main() {
 
     expect(flow.cart.storeCount, 2);
 
-    await tester.tap(find.byIcon(Icons.close).first);
+    // 엽기떡볶이(101) 의 ✕.
+    const removeFirst = ValueKey('remove-store-101');
+
+    await tester.tap(find.byKey(removeFirst));
     await tester.pumpAndSettle();
 
     expect(find.text('이 매장을 삭제할까요?'), findsOneWidget);
@@ -183,12 +186,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(flow.cart.storeCount, 2);
 
-    await tester.tap(find.byIcon(Icons.close).first);
+    await tester.tap(find.byKey(removeFirst));
     await tester.pumpAndSettle();
     await tester.tap(find.text('삭제하기'));
     await tester.pumpAndSettle();
 
     expect(flow.cart.storeCount, 1);
+    expect(find.byKey(removeFirst), findsNothing);
   });
 
   testWidgets('최소 주문을 못 넘기면 버튼이 이유를 알려주고 막힌다', (tester) async {

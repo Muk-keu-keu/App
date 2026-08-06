@@ -22,12 +22,11 @@ class AppColors {
   static const gray700 = Color(0xFF575757);
   static const gray800 = Color(0xFF2B2B2B);
 
-  /// 되돌릴 수 없는 동작(삭제)의 버튼 색.
+  /// 되돌릴 수 없는 동작(삭제)의 색. Figma 변수 이름이 그대로 `alert` 다.
   ///
-  /// 시안의 삭제 alert 는 요기요 핑크가 아니라 별도의 빨강을 쓴다. 결제·주문 같은
-  /// 정상 동작과 같은 색이면 실수로 누르기 쉬워서 구분한 것으로 보인다.
-  /// Figma 변수로 승격되지 않은 값이라 시안에서 눈으로 딴 근사치다.
-  static const danger = Color(0xFFE93B32);
+  /// 요기요 핑크가 아닌 별도의 빨강이다. 결제·주문 같은 정상 동작과 같은 색이면
+  /// 실수로 누르기 쉬워서 구분한 것으로 보인다.
+  static const alert = Color(0xFFE31818);
 
   /// 페이지 배경
   static const bg = Color(0xFFF2F2F2);

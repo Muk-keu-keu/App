@@ -472,31 +472,47 @@ ColorFilter _tint(Color color) => ColorFilter.mode(color, BlendMode.srcIn);
 /// Figma `icon/chevron` — 아래 방향은 왼쪽 화살표를 반시계로 90° 돌린 것이다
 /// (시안 컴포넌트도 같은 벡터를 회전해 쓴다).
 class DsChevron extends StatelessWidget {
-  const DsChevron.left({super.key, this.color = Colors.black}) : _down = false;
-  const DsChevron.down({super.key, this.color = AppColors.gray800}) : _down = true;
+  const DsChevron.left({super.key, this.color = Colors.black})
+      : _dir = _ChevronDir.left;
+  const DsChevron.down({super.key, this.color = AppColors.gray800})
+      : _dir = _ChevronDir.down;
+
+  /// "상세보기 >" · 토스트의 "보러가기 >" 가 쓰는 오른쪽 꺾쇠 (시안 icon/chevron).
+  const DsChevron.right({super.key, this.color = AppColors.gray800})
+      : _dir = _ChevronDir.right;
 
   final Color color;
-  final bool _down;
+  final _ChevronDir _dir;
+
+  bool get _small => _dir != _ChevronDir.left;
 
   @override
   Widget build(BuildContext context) {
-    // 시안 치수: left 는 20 프레임 안에 8×14, down 은 16 프레임 안에 10×6(회전 전 6×10).
+    // 시안 치수: left 는 20 프레임 안에 8×14, down·right 는 16 프레임 안에 6×10.
     final leaf = SvgPicture.asset(
       DsIcons.chevron,
-      width: _down ? 6 : 8,
-      height: _down ? 10 : 14,
+      width: _small ? 6 : 8,
+      height: _small ? 10 : 14,
       fit: BoxFit.fill,
       colorFilter: _tint(color),
     );
+    // 에셋은 왼쪽 꺾쇠 하나뿐이라 돌려 쓴다.
+    final turns = switch (_dir) {
+      _ChevronDir.left => 0,
+      _ChevronDir.down => 3,
+      _ChevronDir.right => 2,
+    };
     return SizedBox(
-      width: _down ? 16 : 20,
-      height: _down ? 16 : 20,
+      width: _small ? 16 : 20,
+      height: _small ? 16 : 20,
       child: Center(
-        child: _down ? RotatedBox(quarterTurns: 3, child: leaf) : leaf,
+        child: turns == 0 ? leaf : RotatedBox(quarterTurns: turns, child: leaf),
       ),
     );
   }
 }
+
+enum _ChevronDir { left, down, right }
 
 // ── Checkbox ─────────────────────────────────────────────────────────────────
 

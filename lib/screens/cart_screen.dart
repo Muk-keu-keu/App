@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../app_flow.dart';
@@ -197,11 +198,13 @@ class _StoreSection extends StatelessWidget {
             children: [
               Expanded(child: Text(store.restaurant.name, style: AppText.sub1())),
               GestureDetector(
+                // 매장마다 ✕ 가 하나씩이라 테스트가 특정 매장을 집으려면 키가 필요하다.
+                key: ValueKey('remove-store-${store.restaurantId}'),
                 onTap: () => _confirmRemove(context),
                 behavior: HitTestBehavior.opaque,
-                child: const Padding(
-                  padding: EdgeInsets.only(left: 12),
-                  child: Icon(Icons.close, size: 20, color: AppColors.gray800),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: SvgPicture.asset(DsIcons.close, width: 20, height: 20),
                 ),
               ),
             ],

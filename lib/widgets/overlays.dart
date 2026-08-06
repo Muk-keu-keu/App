@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../theme.dart';
+import 'ds.dart';
 
 /// 시안 04_최종화면의 alert · action sheet · overflow menu · toast.
 ///
@@ -10,7 +12,7 @@ import '../theme.dart';
 ///
 /// 삭제 확인은 전부 [AppConfirmDialog] 하나를 지난다.
 
-/// 되돌릴 수 없는 동작 앞에 세우는 확인 창.
+/// 되돌릴 수 없는 동작 앞에 세우는 확인 창 (시안 925:3648, 335×163).
 ///
 /// `true` 를 돌려주면 사용자가 실행을 골랐다는 뜻이다. 바깥을 눌러 닫으면
 /// `null` 이 오므로 호출부는 `== true` 로 본다 — 실수로 닫은 것을 실행으로
@@ -52,27 +54,25 @@ class AppConfirmDialog extends StatelessWidget {
   Widget build(BuildContext context) => Dialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 40),
+        // 시안 폭 335 = 390 - 27.5 × 2.
+        insetPadding: const EdgeInsets.symmetric(horizontal: 27.5),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+          padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: AppText.sub1(), textAlign: TextAlign.center),
-              const SizedBox(height: 8),
-              Text(
-                message,
-                style: AppText.body2(color: AppColors.gray600),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
+              Text(title, style: AppText.sub1()),
+              const SizedBox(height: 4),
+              Text(message, style: AppText.body1(color: AppColors.gray600)),
+              const SizedBox(height: 20),
               Row(
                 children: [
                   Expanded(
                     child: _DialogButton(
                       label: cancelLabel,
                       background: AppColors.gray200,
-                      foreground: AppColors.gray800,
+                      style: AppText.body1(color: AppColors.gray800),
                       onTap: () => Navigator.of(context).pop(false),
                     ),
                   ),
@@ -80,8 +80,8 @@ class AppConfirmDialog extends StatelessWidget {
                   Expanded(
                     child: _DialogButton(
                       label: confirmLabel,
-                      background: AppColors.danger,
-                      foreground: Colors.white,
+                      background: AppColors.alert,
+                      style: AppText.btn1(color: Colors.white),
                       onTap: () => Navigator.of(context).pop(true),
                     ),
                   ),
@@ -97,13 +97,13 @@ class _DialogButton extends StatelessWidget {
   const _DialogButton({
     required this.label,
     required this.background,
-    required this.foreground,
+    required this.style,
     required this.onTap,
   });
 
   final String label;
   final Color background;
-  final Color foreground;
+  final TextStyle style;
   final VoidCallback onTap;
 
   @override
@@ -115,14 +115,14 @@ class _DialogButton extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: background,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
           ),
-          child: Text(label, style: AppText.btn2(color: foreground)),
+          child: Text(label, style: style),
         ),
       );
 }
 
-/// 액션시트 한 줄.
+/// 액션시트·오버플로 메뉴의 한 줄.
 class AppActionSheetItem {
   const AppActionSheetItem({
     required this.label,
@@ -132,16 +132,17 @@ class AppActionSheetItem {
 
   final String label;
 
-  /// 고르면 [AppActionSheet.show] 가 돌려줄 값.
+  /// 고르면 `show` 가 돌려줄 값.
   final String value;
 
-  /// 되돌릴 수 없는 동작이면 true. 빨갛게 그린다.
+  /// 되돌릴 수 없는 동작이면 true. 액션시트에서만 빨갛게 그린다 —
+  /// 오버플로 메뉴는 시안이 삭제도 검정으로 두었다.
   final bool destructive;
 }
 
-/// 게시물 헤더의 점 아이콘에서 올라오는 시트 (시안 922:2734).
+/// 게시물 헤더의 점 아이콘에서 올라오는 시트 (시안 922:2720, 350×181).
 ///
-/// 취소는 [items] 와 떨어진 별도 카드다. 실행 항목 바로 옆에 붙어 있으면
+/// 취소는 [items] 와 12px 떨어진 별도 카드다. 실행 항목 바로 옆에 붙어 있으면
 /// 삭제를 누르려다 취소를 누르는 일이 잦다.
 class AppActionSheet {
   const AppActionSheet._();
@@ -156,15 +157,17 @@ class AppActionSheet {
         backgroundColor: Colors.transparent,
         builder: (sheetContext) => SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            // 시안 폭 350 = 390 - 20 × 2.
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  clipBehavior: Clip.antiAlias,
                   child: Column(
                     children: [
                       for (var i = 0; i < items.length; i++) ...[
@@ -176,9 +179,11 @@ class AppActionSheet {
                           ),
                         _SheetRow(
                           label: items[i].label,
-                          color: items[i].destructive
-                              ? AppColors.danger
-                              : AppColors.gray800,
+                          style: AppText.body1(
+                            color: items[i].destructive
+                                ? AppColors.alert
+                                : AppColors.gray800,
+                          ),
                           onTap: () =>
                               Navigator.of(sheetContext).pop(items[i].value),
                         ),
@@ -186,15 +191,15 @@ class AppActionSheet {
                     ],
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: _SheetRow(
                     label: cancelLabel,
-                    color: AppColors.gray800,
+                    style: AppText.btn1(color: AppColors.gray800),
                     onTap: () => Navigator.of(sheetContext).pop(),
                   ),
                 ),
@@ -208,12 +213,12 @@ class AppActionSheet {
 class _SheetRow extends StatelessWidget {
   const _SheetRow({
     required this.label,
-    required this.color,
+    required this.style,
     required this.onTap,
   });
 
   final String label;
-  final Color color;
+  final TextStyle style;
   final VoidCallback onTap;
 
   @override
@@ -224,76 +229,102 @@ class _SheetRow extends StatelessWidget {
           width: double.infinity,
           height: 56,
           alignment: Alignment.center,
-          child: Text(label, style: AppText.btn2(color: color)),
+          child: Text(label, style: style),
         ),
       );
 }
 
 /// 댓글의 점 아이콘에서 나오는 작은 메뉴 (시안 922:2734, 120×36).
 ///
-/// 액션시트가 아니라 누른 자리 옆에 뜨는 알약 하나다. 항목이 '삭제하기'
-/// 하나뿐이라 시트를 올리면 과하다.
+/// 항목이 '삭제하기' 하나뿐이라 시트를 올리면 과하다. 누른 자리 아래에 붙인다.
+/// 시안이 글자를 검정으로 두었다 — 알약 하나에 삭제뿐이라 빨강까지 쓰지 않는다.
+///
+/// `showMenu` 를 쓰지 않는 이유는 그쪽이 자체 수직 패딩을 넣어 시안의 36 높이가
+/// 나오지 않아서다.
 class AppOverflowMenu {
   const AppOverflowMenu._();
 
-  /// [anchor] 는 점 아이콘의 RenderBox. 그 아래에 메뉴를 붙인다.
+  /// [anchorKey] 는 점 아이콘의 키. 그 오른쪽 아래에 메뉴를 붙인다.
   static Future<String?> show(
     BuildContext context, {
     required GlobalKey anchorKey,
     required List<AppActionSheetItem> items,
   }) {
     final box = anchorKey.currentContext?.findRenderObject() as RenderBox?;
-    final overlay =
+    final overlayBox =
         Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (box == null || overlay == null) return Future<String?>.value();
+    if (box == null || overlayBox == null) return Future<String?>.value();
 
-    final origin = box.localToGlobal(box.size.bottomRight(Offset.zero),
-        ancestor: overlay);
+    final corner = box.localToGlobal(
+      box.size.bottomRight(Offset.zero),
+      ancestor: overlayBox,
+    );
 
-    return showMenu<String>(
+    return showDialog<String>(
       context: context,
-      color: Colors.white,
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      position: RelativeRect.fromLTRB(
-        origin.dx - 120,
-        origin.dy,
-        overlay.size.width - origin.dx,
-        0,
-      ),
-      items: [
-        for (final item in items)
-          PopupMenuItem<String>(
-            value: item.value,
-            height: 36,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  item.label,
-                  style: AppText.caption(
-                    color: item.destructive
-                        ? AppColors.danger
-                        : AppColors.gray800,
-                  ),
+      barrierColor: Colors.transparent,
+      builder: (dialogContext) => Stack(
+        children: [
+          Positioned(
+            // 오른쪽 끝을 아이콘에 맞추고 4px 아래로 띄운다.
+            left: corner.dx - 120,
+            top: corner.dy + 4,
+            width: 120,
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF4A4A4A).withValues(alpha: 0.25),
+                      blurRadius: 10,
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Icon(
-                  Icons.delete_outline,
-                  size: 16,
-                  color:
-                      item.destructive ? AppColors.danger : AppColors.gray800,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final item in items)
+                      GestureDetector(
+                        onTap: () =>
+                            Navigator.of(dialogContext).pop(item.value),
+                        behavior: HitTestBehavior.opaque,
+                        child: Container(
+                          height: 36,
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 12),
+                          child: Row(
+                            mainAxisAlignment:
+                                MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                item.label,
+                                style:
+                                    AppText.body2(color: AppColors.gray800),
+                              ),
+                              SvgPicture.asset(
+                                DsIcons.delete,
+                                width: 20,
+                                height: 20,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-/// 화면 하단에 잠깐 떴다 사라지는 알림 (시안 952:5089).
+/// 화면 하단에 잠깐 떴다 사라지는 알림 (시안 952:5089, 350×40).
 ///
 /// 조합을 공유하면 주문내역으로 돌아가고 이걸 띄운다. 방금 쓴 글로 바로
 /// 넘기지 않는 이유는 시안이 그렇게 정해서다 — 대신 [actionLabel] 로 갈 수 있게 둔다.
@@ -316,12 +347,12 @@ class AppToast {
         SnackBar(
           duration: duration,
           behavior: SnackBarBehavior.floating,
-          backgroundColor: AppColors.gray800,
+          backgroundColor: Colors.black.withValues(alpha: 0.8),
           elevation: 0,
           margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
           ),
           content: Row(
             children: [
@@ -343,13 +374,9 @@ class AppToast {
                     children: [
                       Text(
                         actionLabel,
-                        style: AppText.btn3(color: Colors.white),
+                        style: AppText.btn3(color: AppColors.gray200),
                       ),
-                      const Icon(
-                        Icons.chevron_right,
-                        size: 16,
-                        color: Colors.white,
-                      ),
+                      const DsChevron.right(color: AppColors.gray200),
                     ],
                   ),
                 ),

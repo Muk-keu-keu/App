@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_flow.dart';
 import '../../theme.dart';
+import '../../widgets/ds.dart';
 import 'jokbo_widgets.dart';
 
 /// Figma "족보 수정" (node 922:2734).
@@ -69,7 +71,7 @@ class _PostEditScreenState extends State<PostEditScreen> {
             ),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
                 children: [
                   JokboTextField(
                     controller: _titleController,
@@ -81,9 +83,14 @@ class _PostEditScreenState extends State<PostEditScreen> {
                     controller: _bodyController,
                     hint: '본문을 입력해주세요',
                     maxLength: PostEditScreen.bodyMax,
-                    height: 189,
+                    height: 148,
                     multiline: true,
                   ),
+                  const SizedBox(height: 12),
+                  Text('사진 첨부',
+                      style: AppText.sub2().copyWith(letterSpacing: 0)),
+                  const SizedBox(height: 12),
+                  const JokboPhotoRow(),
                 ],
               ),
             ),
@@ -114,11 +121,15 @@ class _EditHeader extends StatelessWidget {
                 GestureDetector(
                   onTap: onClose,
                   behavior: HitTestBehavior.opaque,
-                  child: const SizedBox(
+                  child: SizedBox(
                     width: 64,
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: Icon(Icons.close, size: 24),
+                      child: SvgPicture.asset(
+                        DsIcons.close,
+                        width: 20,
+                        height: 20,
+                      ),
                     ),
                   ),
                 ),

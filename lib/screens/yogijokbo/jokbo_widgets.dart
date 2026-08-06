@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/post.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
+import '../../widgets/ds.dart';
 
 /// 조합의 출처 영상 배지.
 ///
@@ -269,6 +271,33 @@ class SourceVideoCard extends StatelessWidget {
                   PostAuthorRow(author: author, size: 22),
                 ],
               ),
+            ),
+          ],
+        ),
+      );
+}
+
+/// 사진 첨부 줄. 촬영·선택이 이번 범위가 아니라 추가 버튼 자리만 시안대로 둔다.
+///
+/// 작성(681:7992)과 수정(925:3676) 두 화면에 같은 모양으로 들어간다.
+class JokboPhotoRow extends StatelessWidget {
+  const JokboPhotoRow({super.key});
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.gray200,
+                border: Border.all(color: AppColors.gray400),
+                borderRadius: BorderRadius.circular(AppRadius.chip),
+              ),
+              child: SvgPicture.asset(DsIcons.camera, width: 24, height: 24),
             ),
           ],
         ),
