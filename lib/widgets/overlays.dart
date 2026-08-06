@@ -1,0 +1,361 @@
+import 'package:flutter/material.dart';
+
+import '../theme.dart';
+
+/// 시안 04_최종화면의 alert · action sheet · overflow menu · toast.
+///
+/// 넷 다 화면 위에 잠깐 떠 있다가 사라지는 것들이라 한 파일에 모았다. 화면마다
+/// 따로 만들면 같은 모달이 조금씩 다르게 생기고, 되돌릴 수 없는 동작(삭제)의
+/// 확인 문구가 화면마다 달라진다.
+///
+/// 삭제 확인은 전부 [AppConfirmDialog] 하나를 지난다.
+
+/// 되돌릴 수 없는 동작 앞에 세우는 확인 창.
+///
+/// `true` 를 돌려주면 사용자가 실행을 골랐다는 뜻이다. 바깥을 눌러 닫으면
+/// `null` 이 오므로 호출부는 `== true` 로 본다 — 실수로 닫은 것을 실행으로
+/// 해석하지 않기 위해서다.
+class AppConfirmDialog extends StatelessWidget {
+  const AppConfirmDialog({
+    super.key,
+    required this.title,
+    required this.message,
+    this.confirmLabel = '삭제하기',
+    this.cancelLabel = '취소',
+  });
+
+  final String title;
+  final String message;
+  final String confirmLabel;
+  final String cancelLabel;
+
+  static Future<bool> show(
+    BuildContext context, {
+    required String title,
+    required String message,
+    String confirmLabel = '삭제하기',
+    String cancelLabel = '취소',
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (_) => AppConfirmDialog(
+        title: title,
+        message: message,
+        confirmLabel: confirmLabel,
+        cancelLabel: cancelLabel,
+      ),
+    );
+    return result == true;
+  }
+
+  @override
+  Widget build(BuildContext context) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title, style: AppText.sub1(), textAlign: TextAlign.center),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                style: AppText.body2(color: AppColors.gray600),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: _DialogButton(
+                      label: cancelLabel,
+                      background: AppColors.gray200,
+                      foreground: AppColors.gray800,
+                      onTap: () => Navigator.of(context).pop(false),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _DialogButton(
+                      label: confirmLabel,
+                      background: AppColors.danger,
+                      foreground: Colors.white,
+                      onTap: () => Navigator.of(context).pop(true),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+class _DialogButton extends StatelessWidget {
+  const _DialogButton({
+    required this.label,
+    required this.background,
+    required this.foreground,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color background;
+  final Color foreground;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          height: 52,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(label, style: AppText.btn2(color: foreground)),
+        ),
+      );
+}
+
+/// 액션시트 한 줄.
+class AppActionSheetItem {
+  const AppActionSheetItem({
+    required this.label,
+    required this.value,
+    this.destructive = false,
+  });
+
+  final String label;
+
+  /// 고르면 [AppActionSheet.show] 가 돌려줄 값.
+  final String value;
+
+  /// 되돌릴 수 없는 동작이면 true. 빨갛게 그린다.
+  final bool destructive;
+}
+
+/// 게시물 헤더의 점 아이콘에서 올라오는 시트 (시안 922:2734).
+///
+/// 취소는 [items] 와 떨어진 별도 카드다. 실행 항목 바로 옆에 붙어 있으면
+/// 삭제를 누르려다 취소를 누르는 일이 잦다.
+class AppActionSheet {
+  const AppActionSheet._();
+
+  static Future<String?> show(
+    BuildContext context, {
+    required List<AppActionSheetItem> items,
+    String cancelLabel = '취소',
+  }) =>
+      showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: Colors.transparent,
+        builder: (sheetContext) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < items.length; i++) ...[
+                        if (i > 0)
+                          const Divider(
+                            height: 1,
+                            thickness: 1,
+                            color: AppColors.gray300,
+                          ),
+                        _SheetRow(
+                          label: items[i].label,
+                          color: items[i].destructive
+                              ? AppColors.danger
+                              : AppColors.gray800,
+                          onTap: () =>
+                              Navigator.of(sheetContext).pop(items[i].value),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: _SheetRow(
+                    label: cancelLabel,
+                    color: AppColors.gray800,
+                    onTap: () => Navigator.of(sheetContext).pop(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+}
+
+class _SheetRow extends StatelessWidget {
+  const _SheetRow({
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          width: double.infinity,
+          height: 56,
+          alignment: Alignment.center,
+          child: Text(label, style: AppText.btn2(color: color)),
+        ),
+      );
+}
+
+/// 댓글의 점 아이콘에서 나오는 작은 메뉴 (시안 922:2734, 120×36).
+///
+/// 액션시트가 아니라 누른 자리 옆에 뜨는 알약 하나다. 항목이 '삭제하기'
+/// 하나뿐이라 시트를 올리면 과하다.
+class AppOverflowMenu {
+  const AppOverflowMenu._();
+
+  /// [anchor] 는 점 아이콘의 RenderBox. 그 아래에 메뉴를 붙인다.
+  static Future<String?> show(
+    BuildContext context, {
+    required GlobalKey anchorKey,
+    required List<AppActionSheetItem> items,
+  }) {
+    final box = anchorKey.currentContext?.findRenderObject() as RenderBox?;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (box == null || overlay == null) return Future<String?>.value();
+
+    final origin = box.localToGlobal(box.size.bottomRight(Offset.zero),
+        ancestor: overlay);
+
+    return showMenu<String>(
+      context: context,
+      color: Colors.white,
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      position: RelativeRect.fromLTRB(
+        origin.dx - 120,
+        origin.dy,
+        overlay.size.width - origin.dx,
+        0,
+      ),
+      items: [
+        for (final item in items)
+          PopupMenuItem<String>(
+            value: item.value,
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  item.label,
+                  style: AppText.caption(
+                    color: item.destructive
+                        ? AppColors.danger
+                        : AppColors.gray800,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.delete_outline,
+                  size: 16,
+                  color:
+                      item.destructive ? AppColors.danger : AppColors.gray800,
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// 화면 하단에 잠깐 떴다 사라지는 알림 (시안 952:5089).
+///
+/// 조합을 공유하면 주문내역으로 돌아가고 이걸 띄운다. 방금 쓴 글로 바로
+/// 넘기지 않는 이유는 시안이 그렇게 정해서다 — 대신 [actionLabel] 로 갈 수 있게 둔다.
+class AppToast {
+  const AppToast._();
+
+  static void show(
+    BuildContext context, {
+    required String message,
+    String? actionLabel,
+    VoidCallback? onAction,
+    Duration duration = const Duration(seconds: 4),
+  }) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          duration: duration,
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.gray800,
+          elevation: 0,
+          margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          content: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  message,
+                  style: AppText.body2(color: Colors.white),
+                ),
+              ),
+              if (actionLabel != null && onAction != null)
+                GestureDetector(
+                  onTap: () {
+                    messenger.hideCurrentSnackBar();
+                    onAction();
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        actionLabel,
+                        style: AppText.btn3(color: Colors.white),
+                      ),
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 16,
+                        color: Colors.white,
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+  }
+}
