@@ -484,5 +484,5 @@ nextCursor              : String (다음 페이지 없으면 null)
 | `reviewCount` | 응답에 없다. 시안은 평점 옆에 리뷰 수를 보여준다 |
 | 요기족보 다중 매장 | `api-yogijokbo.md` 는 아직 단일 매장(`combo.store`)이다. `stores[]` 로 바뀌는지, 그 모양이 주문 상세와 같은지 확인 필요 |
 | 결제 완료 후 이동 | `orderId` 를 주지 않으므로 완료 화면은 목록으로만 갈 수 있다. 상세로 보내려면 `orderIds` 추가 필요 |
-| **주문내역 카드에 메뉴 이름** | 시안(731:5325)은 카드에 매장명 + **메뉴 이름 2줄**을 그리는데, `GET v1/orders` 는 `restaurantNames` 와 `totalPrice` 만 준다. 목록에서 메뉴를 그리려면 카드마다 상세를 한 번씩 더 불러야 하고, 그건 "목록에는 조합 전체를 내리지 않는다" 는 명세와 충돌한다. 앱은 지금 메뉴 이름 대신 금액을 보여둔다. 목록에 `menuSummary` 를 추가할지, 시안을 금액 표기로 바꿀지 정해야 한다 |
+| **`GET v1/orders` 에 `menuSummary` 추가** | 시안 857:4509 가 카드에 `[지점명] 메뉴, 메뉴` 와 "N개 매장 · 총 N개 메뉴" 를 그린다. 목록 응답에는 `restaurantNames` 와 `totalPrice` 뿐이라 메뉴 이름을 알 수 없고, 카드마다 상세를 더 부르는 건 "목록에는 조합 전체를 내리지 않는다" 는 명세와 충돌한다. 필요한 모양: `menuSummary: [{ storeName, menuNames[] }]`. 앱 모델(`OrderSummary.menuSummary`)은 이미 이 키를 읽고, 없으면 그 줄을 그리지 않는다 |
 | `INSTAGRAM`/`YOUTUBE` 외 링크 | `source.platform` 이 두 값뿐이다. 앱은 그 밖의 링크를 분석 전에 막는다 |

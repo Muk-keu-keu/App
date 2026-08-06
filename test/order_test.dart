@@ -433,6 +433,55 @@ void main() {
     });
   });
 
+  // 시안 857:4509 — 카드가 "N개 매장 · 총 N개 메뉴" 와
+  // "[지점명] 메뉴, 메뉴" 를 그린다.
+  group('주문내역 카드 요약', () {
+    OrderSummary summaryFrom(Map<String, dynamic> json) =>
+        OrderSummary.fromJson(json);
+
+    test('menuSummary 가 오면 매장 수와 메뉴 수를 센다', () {
+      final order = summaryFrom({
+        'checkoutId': 7002,
+        'orderedAt': '2026-07-22T19:22:10+09:00',
+        'restaurantNames': ['두찜 - 잠실새내점', '공차 - 송파점'],
+        'totalPrice': 50000,
+        'menuSummary': [
+          {
+            'storeName': '두찜 - 잠실새내점',
+            'menuNames': ['[원조 K로제] 로제 닭발', '[사이드] 치즈볼'],
+          },
+          {
+            'storeName': '공차 - 송파점',
+            'menuNames': ['얼그레이 말차 밀크티'],
+          },
+        ],
+      });
+
+      expect(order.storeCount, 2);
+      expect(order.menuCount, 3);
+      expect(order.countText, '2개 매장 · 총 3개 메뉴');
+      expect(
+        order.menuSummary.first.line,
+        '[두찜 - 잠실새내점] [원조 K로제] 로제 닭발, [사이드] 치즈볼',
+      );
+    });
+
+    // 서버가 아직 menuSummary 를 내려주지 않는다. 그 상태에서도 카드가
+    // 깨지지 않고 아는 만큼만 보여줘야 한다.
+    test('menuSummary 가 없으면 매장 수만 쓴다', () {
+      final order = summaryFrom({
+        'checkoutId': 7001,
+        'orderedAt': '2026-07-16T12:10:03+09:00',
+        'restaurantNames': ['엽기떡볶이 - 잠실점'],
+        'totalPrice': 12500,
+      });
+
+      expect(order.menuSummary, isEmpty);
+      expect(order.menuCount, 0);
+      expect(order.countText, '1개 매장');
+    });
+  });
+
   group('분석 전 링크 검사', () {
     test('인스타·유튜브가 아닌 링크는 분석하지 않는다', () async {
       // 명세의 source.platform 은 두 값만 받는다.

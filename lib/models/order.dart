@@ -63,6 +63,24 @@ enum SourceKind {
   }
 }
 
+/// 주문내역 카드의 `[지점명] 메뉴, 메뉴` 한 줄 (시안 857:4509 Content 주석).
+class OrderStoreMenus {
+  const OrderStoreMenus({required this.storeName, required this.menuNames});
+
+  final String storeName;
+  final List<String> menuNames;
+
+  /// `[두찜 - 잠실새내점] [원조 K로제] 로제 닭발, [사이드] 치즈볼`
+  String get line => '[$storeName] ${menuNames.join(', ')}';
+
+  factory OrderStoreMenus.fromJson(Map<String, dynamic> json) => OrderStoreMenus(
+        storeName: '${json['storeName'] ?? json['restaurantName'] ?? ''}',
+        menuNames: [
+          for (final e in (json['menuNames'] ?? const []) as List) '$e',
+        ],
+      );
+}
+
 /// 결제 목록의 카드 하나. `GET v1/orders` 의 `orders[]`.
 ///
 /// 목록은 조합 전체를 내리지 않는다. 메뉴·옵션·금액은 상세에서 받는다.
@@ -73,6 +91,7 @@ class OrderSummary {
     required this.restaurantNames,
     required this.totalPrice,
     this.source,
+    this.menuSummary = const [],
   });
 
   final int checkoutId;
@@ -83,6 +102,26 @@ class OrderSummary {
   final List<String> restaurantNames;
 
   final int totalPrice;
+
+  /// 가게별 메뉴 이름. 시안이 카드에 요구하는 값이다.
+  ///
+  /// **현재 `GET v1/orders` 응답에는 없다** (`docs/api-spec.md` 확인 필요 항목).
+  /// 목록에서 카드마다 상세를 한 번씩 더 부르는 건 "목록에는 조합 전체를 내리지
+  /// 않는다" 는 명세와 충돌하므로, 서버가 이 필드를 목록에 실어 주는 쪽으로 정해야 한다.
+  /// 비어 있으면 카드는 이 줄을 그리지 않는다 — 값이 올 때까지 화면이 깨지지 않는다.
+  final List<OrderStoreMenus> menuSummary;
+
+  /// 가게 수. 메뉴 요약이 오면 그쪽을 믿는다.
+  int get storeCount =>
+      menuSummary.isNotEmpty ? menuSummary.length : restaurantNames.length;
+
+  /// 총 메뉴 수. 요약이 없으면 셀 수 없어 0이다.
+  int get menuCount => menuSummary.fold(0, (sum, s) => sum + s.menuNames.length);
+
+  /// `2개 매장 · 총 3개 메뉴`. 메뉴 수를 모르면 매장 수만 쓴다.
+  String get countText => menuCount > 0
+      ? '$storeCount개 매장 · 총 $menuCount개 메뉴'
+      : '$storeCount개 매장';
 
   /// 카드 제목 자리. 가게가 여러 곳이면 "외 N곳" 으로 줄인다.
   String get storeSummary => switch (restaurantNames.length) {
@@ -112,6 +151,10 @@ class OrderSummary {
           for (final e in (json['restaurantNames'] ?? const []) as List) '$e',
         ],
         totalPrice: ((json['totalPrice'] ?? 0) as num).toInt(),
+        menuSummary: [
+          for (final e in (json['menuSummary'] ?? const []) as List)
+            if (e is Map<String, dynamic>) OrderStoreMenus.fromJson(e),
+        ],
       );
 }
 

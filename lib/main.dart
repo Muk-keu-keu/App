@@ -12,6 +12,7 @@ import 'screens/analyze_screen.dart';
 import 'screens/cart_screen.dart';
 import 'screens/combo_list_screen.dart';
 import 'screens/combo_result_screen.dart';
+import 'screens/home/order_detail_screen.dart';
 import 'screens/home/order_history_screen.dart';
 import 'screens/home/yogiyo_home_screen.dart';
 import 'screens/home_screen.dart';
@@ -21,6 +22,7 @@ import 'screens/order_done_screen.dart';
 import 'screens/store_menu_screen.dart';
 import 'screens/yogijokbo/post_compose_screen.dart';
 import 'screens/yogijokbo/post_detail_screen.dart';
+import 'screens/yogijokbo/post_edit_screen.dart';
 import 'screens/yogijokbo/yogijokbo_home_screen.dart';
 import 'theme.dart';
 
@@ -131,6 +133,7 @@ class _RootScreenState extends State<RootScreen> {
         AppStage.login => const LoginScreen(),
         AppStage.yogiyoHome => const YogiyoHomeScreen(),
         AppStage.orders => const OrderHistoryScreen(),
+        AppStage.orderDetail => const OrderDetailScreen(),
         AppStage.home => const HomeScreen(),
         AppStage.keyword => const KeywordSelectScreen(),
         AppStage.analyzing => const AnalyzeScreen(),
@@ -146,6 +149,7 @@ class _RootScreenState extends State<RootScreen> {
         // 장바구니라 구조가 같고, 돌아갈 곳과 주문 불가 안내만 다르다.
         AppStage.jokboOrder => _JokboOrderStage(),
         AppStage.jokboCompose => const PostComposeScreen(),
+        AppStage.jokboEdit => const PostEditScreen(),
       },
     );
   }

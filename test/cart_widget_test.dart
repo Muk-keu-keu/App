@@ -163,6 +163,34 @@ void main() {
     expect(find.text('22,500원'), findsWidgets);
   });
 
+  // 시안 868:5757 — 매장 헤더의 ✕ 는 바로 지우지 않고 먼저 물어본다.
+  // 담긴 메뉴가 통째로 사라지는 동작이라 되돌릴 수 없다.
+  testWidgets('매장 ✕ 는 확인을 받고 나서 지운다', (tester) async {
+    final flow = await analyzedFlow();
+    flow.openCartFromAnalysis();
+    await pumpScreen(tester, CartScreen(onBack: () {}), flow);
+
+    expect(flow.cart.storeCount, 2);
+
+    await tester.tap(find.byIcon(Icons.close).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('이 매장을 삭제할까요?'), findsOneWidget);
+    expect(find.text('담긴 메뉴가 모두 삭제돼요.'), findsOneWidget);
+
+    // 취소하면 그대로 남아 있어야 한다.
+    await tester.tap(find.text('취소'));
+    await tester.pumpAndSettle();
+    expect(flow.cart.storeCount, 2);
+
+    await tester.tap(find.byIcon(Icons.close).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('삭제하기'));
+    await tester.pumpAndSettle();
+
+    expect(flow.cart.storeCount, 1);
+  });
+
   testWidgets('최소 주문을 못 넘기면 버튼이 이유를 알려주고 막힌다', (tester) async {
     final flow = await analyzedFlow();
     flow.openCartFromAnalysis();

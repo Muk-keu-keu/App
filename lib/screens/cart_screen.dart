@@ -7,6 +7,7 @@ import '../models/combo.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/ds.dart';
+import '../widgets/overlays.dart';
 import 'menu_option_sheet.dart';
 
 /// 장바구니. **여러 매장을 한 번에 결제하는 화면**이다.
@@ -55,10 +56,8 @@ class CartScreen extends StatelessWidget {
                   // 매장이 여러 곳이면 배달이 따로 간다는 걸 미리 알려 준다.
                   // 배달비가 두 번 붙는 이유를 결제 단계에서 처음 보면 놀란다.
                   if (cart.storeCount > 1) _MultiStoreNotice(count: cart.storeCount),
-                  for (final store in cart.stores) ...[
-                    const SizedBox(height: 16),
-                    _StoreSection(store: store),
-                  ],
+                  const SizedBox(height: 16),
+                  _StoreList(cart: cart),
                   const SizedBox(height: 16),
                   _PaymentSummary(cart: cart),
                 ],
@@ -138,11 +137,50 @@ class _MultiStoreNotice extends StatelessWidget {
       );
 }
 
-/// 매장 하나의 섹션. 이름 → 메뉴들 → 그 가게 소계.
+/// 매장들을 한 덩어리로 잇는다 (시안 838:4249 — "여러개의 매장을 동시에
+/// 주문하는 경우 그냥 리스트로 쭉 이어지게").
+///
+/// 매장마다 카드를 띄우면 결제가 매장 수만큼 나뉘어 보인다. 실제로는 한 번의
+/// 결제이므로 흰 판 하나 위에 구분선으로만 나눈다.
+class _StoreList extends StatelessWidget {
+  const _StoreList({required this.cart});
+
+  final Cart cart;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        color: Colors.white,
+        child: Column(
+          children: [
+            for (var i = 0; i < cart.stores.length; i++) ...[
+              if (i > 0) const DsDivider(color: AppColors.gray300),
+              _StoreSection(store: cart.stores[i]),
+            ],
+          ],
+        ),
+      );
+}
+
+/// 매장 하나의 섹션. 이름 → 메뉴들 → 메뉴 추가하기.
+///
+/// 가게별 소계는 시안에 없다. 결제는 한 번이고 합계는 아래 [_PaymentSummary]
+/// 한 곳에서만 보여 준다. 최소 주문 금액을 못 넘긴 안내만 남긴다 — 그게 없으면
+/// 결제 버튼이 왜 막혀 있는지 이 자리에서 알 수 없다.
 class _StoreSection extends StatelessWidget {
   const _StoreSection({required this.store});
 
   final StoreCart store;
+
+  Future<void> _confirmRemove(BuildContext context) async {
+    final flow = context.read<AppFlow>();
+    final ok = await AppConfirmDialog.show(
+      context,
+      title: '이 매장을 삭제할까요?',
+      message: '담긴 메뉴가 모두 삭제돼요.',
+    );
+    if (ok) flow.removeStoreFromCart(store.restaurantId);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -159,11 +197,11 @@ class _StoreSection extends StatelessWidget {
             children: [
               Expanded(child: Text(store.restaurant.name, style: AppText.sub1())),
               GestureDetector(
-                onTap: () => flow.removeStoreFromCart(store.restaurantId),
+                onTap: () => _confirmRemove(context),
                 behavior: HitTestBehavior.opaque,
-                child: Text(
-                  '삭제',
-                  style: AppText.caption(color: AppColors.gray600),
+                child: const Padding(
+                  padding: EdgeInsets.only(left: 12),
+                  child: Icon(Icons.close, size: 20, color: AppColors.gray800),
                 ),
               ),
             ],
@@ -207,58 +245,17 @@ class _StoreSection extends StatelessWidget {
           ],
           const SizedBox(height: 16),
           DsAddMenuButton(onTap: () => flow.openStoreMenu(store.restaurantId)),
-          const SizedBox(height: 16),
-          _StoreSubtotal(store: store),
+          if (store.shortfallText != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              store.shortfallText!,
+              style: AppText.caption(color: AppColors.primary500),
+            ),
+          ],
         ],
       ),
     );
   }
-}
-
-/// 그 가게의 소계. 최소 주문 금액을 못 넘겼으면 얼마 더 담아야 하는지 알려 준다.
-class _StoreSubtotal extends StatelessWidget {
-  const _StoreSubtotal({required this.store});
-
-  final StoreCart store;
-
-  @override
-  Widget build(BuildContext context) => Column(
-        children: [
-          _row('주문 금액', store.itemsTotal),
-          const SizedBox(height: 8),
-          _row('배달비', store.deliveryFee),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('소계', style: AppText.btn2()),
-              Text('${wonFormat(store.subtotal)}원', style: AppText.btn2()),
-            ],
-          ),
-          if (store.shortfallText != null) ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                store.shortfallText!,
-                style: AppText.caption(color: AppColors.primary500),
-              ),
-            ),
-          ],
-        ],
-      );
-
-  Widget _row(String label, int amount) => Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label,
-              style: AppText.body2(color: AppColors.gray700)
-                  .copyWith(letterSpacing: -0.35)),
-          Text('${wonFormat(amount)}원',
-              style: AppText.body2(color: AppColors.gray700)
-                  .copyWith(letterSpacing: -0.35)),
-        ],
-      );
 }
 
 /// 전체 결제 금액. 서버로 보내지 않는 값이고 화면에만 쓴다.

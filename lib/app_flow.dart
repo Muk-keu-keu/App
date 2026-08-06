@@ -20,6 +20,7 @@ enum AppStage {
   login, // 로그인 (앱 첫 진입)
   yogiyoHome, // 요기요 메인 홈 (배너·검색·카테고리·요기족보 차트)
   orders, // 결제 내역 (요기족보 작성 진입점)
+  orderDetail, // 주문내역 상세 (상세보기)
   home, // 공유 안내
   keyword, // 취향 설정
   analyzing, // 분석 중
@@ -33,6 +34,7 @@ enum AppStage {
   jokboDetail, // 조합 상세
   jokboOrder, // 나도 주문하기
   jokboCompose, // 족보 작성 (조합 공유)
+  jokboEdit, // 족보 수정 (제목·본문만)
 }
 
 /// 화면 전환과 분석·주문 파이프라인.
@@ -165,6 +167,26 @@ class AppFlow extends ChangeNotifier {
 
   /// 이 결제로 이미 족보를 썼는지. 서버가 알려주지 않아 앱이 기억한 값이다.
   bool isPostedToJokbo(int checkoutId) => _orderRepository.isPostedToJokbo(checkoutId);
+
+  /// "상세보기" 로 연 결제 상세 (시안 857:4509). null 이면 아직 안 받았다.
+  OrderDetail? orderDetail;
+
+  /// 주문내역 카드의 "상세보기" — `GET v1/orders/{checkoutId}`.
+  ///
+  /// 목록 응답에는 메뉴·옵션·금액이 없어서 상세를 따로 받아야 한다.
+  /// 먼저 화면을 띄우고 받는다 — 응답을 기다리는 동안 목록에 머물면 버튼이
+  /// 안 눌린 것처럼 보인다.
+  Future<void> openOrderDetail(int checkoutId) async {
+    orderDetail = null;
+    _setStage(AppStage.orderDetail);
+    orderDetail = await _orderRepository.detail(checkoutId);
+    notifyListeners();
+  }
+
+  void closeOrderDetail() {
+    orderDetail = null;
+    _setStage(AppStage.orders);
+  }
 
   /// 결제 내역에서 족보 작성으로. 그 결제의 조합과 출처 영상을 그대로 들고 간다.
   Future<void> composeFromOrder(OrderSummary order) async {
@@ -860,6 +882,71 @@ class AppFlow extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ── 게시물 수정·삭제 (시안 922:2734) ────────────────────────────────────────
+
+  /// 게시물 헤더의 점 아이콘 → "수정하기". 상세에서만 들어온다.
+  void openPostEdit() {
+    if (selectedPost == null) return;
+    _setStage(AppStage.jokboEdit);
+  }
+
+  void cancelPostEdit() => _setStage(AppStage.jokboDetail);
+
+  /// 족보 수정 저장. 조합은 결제 스냅샷이라 제목·본문만 바뀐다.
+  Future<void> savePostEdit({
+    required String title,
+    required String body,
+  }) async {
+    final post = selectedPost;
+    final trimmed = title.trim();
+    if (post == null || trimmed.isEmpty) return;
+
+    await _postRepository.updatePost(
+      post.id,
+      title: trimmed,
+      body: body.trim(),
+    );
+
+    // 목록에도 같은 글이 떠 있다. 다시 받지 않고 그 자리에서 맞춘다 —
+    // 수정 후 목록으로 돌아갔을 때 옛 제목이 남아 있으면 저장이 안 된 것처럼 보인다.
+    post.title = trimmed;
+    post.body = body.trim();
+    for (final list in [posts, popularPosts]) {
+      for (final p in list) {
+        if (p.id != post.id) continue;
+        p.title = post.title;
+        p.body = post.body;
+      }
+    }
+
+    _setStage(AppStage.jokboDetail);
+  }
+
+  /// 게시물 삭제. 돌아갈 상세가 없어지므로 목록으로 나간다.
+  Future<void> deleteCurrentPost() async {
+    final post = selectedPost;
+    if (post == null) return;
+
+    await _postRepository.deletePost(post.id);
+    posts = [for (final p in posts) if (p.id != post.id) p];
+    popularPosts = [for (final p in popularPosts) if (p.id != post.id) p];
+    selectedPost = null;
+    postComments = [];
+    commentsNextCursor = null;
+    _setStage(AppStage.jokboHome);
+  }
+
+  /// 댓글 삭제. 카운트는 남은 댓글 수로 다시 센다.
+  Future<void> deleteComment(String commentId) async {
+    final post = selectedPost;
+    if (post == null) return;
+
+    await _postRepository.deleteComment(post.id, commentId);
+    await loadComments(post.id);
+    post.commentCount = postComments.length;
+    notifyListeners();
+  }
+
   /// "나도 주문하기".
   ///
   /// 전용 API 가 없다 (api-yogijokbo.md "나도 주문하기 흐름"). 게시글의 조합이 이미
@@ -902,9 +989,18 @@ class AppFlow extends ChangeNotifier {
   /// (api-yogijokbo.md 3번 흐름).
   ///
   /// 조합 내용은 보내지 않는다. checkoutId 만 보내면 서버가 결제 스냅샷에서 읽어 붙인다.
-  Future<void> submitPost({required String title, required String body}) async {
+  /// 조합을 공유한다. 성공하면 만들어진 `postId` 를 돌려준다.
+  ///
+  /// 공유 후에는 **주문내역으로 돌아간다** (시안 952:5089 — "조합 공유하기 선택 시
+  /// 주문내역 화면으로 넘어가고 하단 토스트 알림"). 예전에는 방금 쓴 글을 바로
+  /// 열었는데, 작성은 주문내역에서 시작하므로 왔던 자리로 돌려보내는 쪽으로 바뀌었다.
+  /// 쓴 글로 가고 싶으면 토스트의 "보러가기" 를 쓴다 — 그 이동은 화면이 맡는다.
+  Future<String?> submitPost({
+    required String title,
+    required String body,
+  }) async {
     final checkoutId = composeCheckoutId;
-    if (checkoutId == null || title.trim().isEmpty) return;
+    if (checkoutId == null || title.trim().isEmpty) return null;
 
     final postId = await _postRepository.create(
       checkoutId: checkoutId,
@@ -917,7 +1013,8 @@ class AppFlow extends ChangeNotifier {
     composeCart = null;
     composeSource = null;
     composeCheckoutId = null;
-    await openPost(postId);
+    await openOrders();
+    return postId;
   }
 
   /// 키 문제일 때 보여줄 문구.

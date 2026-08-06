@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_flow.dart';
-import '../../models/cart.dart';
 import '../../models/order.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
@@ -133,38 +132,54 @@ class _OrderCard extends StatelessWidget {
                 RemoteOrAssetImage(
                   imageUrl: order.thumbnailUrl,
                   assetPath: 'assets/images/store_dujjim.png',
-                  size: 80,
+                  size: 56,
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 가게가 여러 곳인 결제는 이름을 모두 보여준다.
-                        // 한 영상 보고 한 번에 시킨 것이라는 사실이 여기서 드러난다.
-                        for (final name in order.restaurantNames)
-                          Text(name, style: AppText.sub2()),
-                        const SizedBox(height: 4),
-                        if (order.sourceVideoTitle.isNotEmpty)
-                          Text(
-                            order.sourceVideoTitle,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppText.body2(color: AppColors.gray700),
-                          ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${wonFormat(order.totalPrice)}원',
-                          style: AppText.btn2(color: AppColors.gray800),
-                        ),
-                      ],
-                    ),
+                  child: Text(
+                    order.sourceVideoTitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.sub2(),
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            // "2개 매장 · 총 3개 메뉴" + 상세보기 (시안 857:4509).
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    order.countText,
+                    style: AppText.caption(color: AppColors.gray600),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () =>
+                      context.read<AppFlow>().openOrderDetail(order.checkoutId),
+                  behavior: HitTestBehavior.opaque,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '상세보기',
+                        style: AppText.caption(color: AppColors.primary500),
+                      ),
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 16,
+                        color: AppColors.primary500,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (order.menuSummary.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _MenuSummaryBox(summary: order.menuSummary),
+            ],
             const SizedBox(height: 12),
             Row(
               children: [
@@ -204,6 +219,50 @@ class _OrderCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// `[지점명] 메뉴, 메뉴` 를 가게마다 한 줄씩 (시안 857:4509 Content 주석).
+///
+/// 지점명은 진하게, 메뉴는 흐리게 그린다. 한 줄에 둘이 섞여 있어 굵기로
+/// 나누지 않으면 어디까지가 가게 이름인지 읽히지 않는다.
+class _MenuSummaryBox extends StatelessWidget {
+  const _MenuSummaryBox({required this.summary});
+
+  final List<OrderStoreMenus> summary;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.gray200,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < summary.length; i++) ...[
+              if (i > 0) const SizedBox(height: 4),
+              Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: '[${summary[i].storeName}] ',
+                      style: AppText.caption(color: AppColors.gray800),
+                    ),
+                    TextSpan(
+                      text: summary[i].menuNames.join(', '),
+                      style: AppText.caption(color: AppColors.gray600),
+                    ),
+                  ],
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ],
+        ),
+      );
 }
 
 class _Empty extends StatelessWidget {
