@@ -1,8 +1,8 @@
 /// 주문 가능 여부를 판단할 사용자 위치.
 ///
-/// 승중님 API 두 곳이 좌표를 요구한다 (`docs/api-yogijokbo.md` 미해결 5번).
-/// - `GET /api/v1/posts` 의 `orderableOnly=true` → `lat` `lng` 필수
-/// - `POST /api/v1/posts/{postId}/reorder` → body `lat` `lng`
+/// `GET v1/posts` 가 `orderableOnly=true` 일 때 `lat` `lng` 를 필수로 받는다.
+/// 서버는 그 좌표에서 반경 5km 안에 가게가 있는지로 `orderableHere` 를 판정하고,
+/// false 인 글은 목록에서 빼고 내려준다 (`docs/api-yogijokbo.md`).
 library;
 
 /// 좌표를 어떻게 얻었는지. 화면 표기와 디버깅에 쓴다.

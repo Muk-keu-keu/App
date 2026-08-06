@@ -14,7 +14,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| Base | `/api/` |
+| Base | `{API_BASE_URL}/` — `.env` 의 `API_BASE_URL` |
 | 인증 헤더 | `Authorization: Bearer {accessToken}` |
 | 페이지네이션 | cursor 기반. `cursor`, `size` (기본 20) |
 | 시간 | `DateTime` |
