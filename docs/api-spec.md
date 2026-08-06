@@ -378,16 +378,16 @@ API 에 나가는 `orderId` 는 `checkout_id` 다. DB 의 `order_id` 는 내부 
 
 | 권한 | Method | 기능 | End Point |
 | --- | --- | --- | --- |
-| ALL | POST | 로그인 | `v1/auth/login` |
+| ALL | POST | 로그인 | `v1/users/login` |
 | ALL | POST | 회원가입 | `v1/users/signup` |
-| ALL | POST | 토큰 재발급 | `v1/auth/reissue` |
-| USER | POST | 로그아웃 | `v1/auth/logout` |
+| ALL | POST | 토큰 재발급 | `v1/users/reissue-token` |
+| USER | POST | 로그아웃 | `v1/users/logout` |
 | USER | GET | 내 정보 조회 | `v1/users/me` |
 | USER | PATCH | 내 정보 수정 | `v1/users/me` |
 | USER | GET | 내가 쓴 요기족보 글 목록 | `v1/users/me/posts` |
 | USER | GET | 내 주문 내역 조회 | `v1/users/me/orders` |
 
-### POST v1/auth/login
+### POST v1/users/login
 
 Request `{ "email": "...", "password": "..." }`
 
@@ -399,12 +399,12 @@ Response `accessToken`, `refreshToken`, `user.userId`(UUID), `user.nickname`,
 Request `{ email, password, nickname }` → `accessToken`, `refreshToken`.
 `409 U002` 이메일 중복. 시연에서는 노출하지 않는다.
 
-### POST v1/auth/reissue
+### POST v1/users/reissue-token
 
 Request `{ refreshToken }` → `accessToken`.
 `accessToken` 만료 24h 로 두고 미구현 가능.
 
-### POST v1/auth/logout
+### POST v1/users/logout
 
 `204 No Content`. 클라이언트 토큰 삭제로 대체 가능.
 
