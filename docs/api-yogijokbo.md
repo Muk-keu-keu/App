@@ -15,7 +15,7 @@
 | 항목 | 값 |
 | --- | --- |
 | Base | `/api/` |
-| 인증 헤더 | `User-Id: Long` |
+| 인증 헤더 | `Authorization: Bearer {accessToken}` |
 | 페이지네이션 | cursor 기반. `cursor`, `size` (기본 20) |
 | 시간 | `DateTime` |
 
@@ -46,7 +46,7 @@ GET v1/posts
 Header
 
 ```
-User-Id: Long
+Authorization: Bearer {accessToken}
 ```
 
 Query Parameter
@@ -122,7 +122,7 @@ GET v1/posts/{postId}
 Header
 
 ```
-User-Id: Long
+Authorization: Bearer {accessToken}
 ```
 
 Path Variable
@@ -236,7 +236,7 @@ POST v1/posts
 Header
 
 ```
-User-Id: Long
+Authorization: Bearer {accessToken}
 Content-Type: multipart/form-data
 ```
 
@@ -274,7 +274,7 @@ Part 2 — `images` (file)
 
 ```
 POST v1/posts
-User-Id: 1
+Authorization: Bearer {accessToken}
 Content-Type: multipart/form-data; boundary=----X
 
 ------X
@@ -382,7 +382,7 @@ POST v1/posts/{postId}/likes
 Header
 
 ```
-User-Id: Long
+Authorization: Bearer {accessToken}
 ```
 
 Path Variable
@@ -431,7 +431,7 @@ DELETE v1/posts/{postId}/likes
 Header
 
 ```
-User-Id: Long
+Authorization: Bearer {accessToken}
 ```
 
 Path Variable
@@ -537,7 +537,7 @@ POST v1/posts/{postId}/comments
 Header
 
 ```
-User-Id: Long
+Authorization: Bearer {accessToken}
 ```
 
 Path Variable
@@ -601,7 +601,6 @@ localStorage 가 없다. 장바구니는 `AppFlow` 가 메모리로 들고 있�
 
 | 항목 | 내용 |
 | --- | --- |
-| 인증 헤더 이름 | Request 는 `User-Id`, 2번 응답 설명은 `X-User-Id`. 어느 쪽인지 확정 필요 |
 | 목록의 본문 | 1번 응답에 `body`(또는 미리보기)가 없다. Figma 목록 카드는 본문 2줄을 보여준다 |
 | 상세의 `orderableHere` | 1번에만 있고 2번에는 없다. 상세에서 "나도 주문하기" 가능 여부를 판단할 근거가 없다 |
 | ~~`selectedSpice` 3단계~~ | **닫힘.** 회의(2026-08-04)에서 맵기를 3단계(`NONE`/`MEDIUM`/`HOT`)로 통일했다. 시안의 "매운맛 5단계" 옵션 그룹은 없애고, `spiceAdjustable` 이 true 인 메뉴에만 3버튼을 그린다 |

@@ -1,8 +1,8 @@
 /// HTTP 계층. 모든 서버 호출이 이 파일을 지난다.
 ///
-/// 인증 헤더가 한 곳에만 있는 게 중요하다. 명세 표는 `User-Id`, Request example 은
-/// `X-User-Id` 로 섞여 있어 example 쪽으로 통일했다 (`docs/api-spec.md` 확인 필요 항목).
-/// 나중에 로그인이 붙어 `Authorization: Bearer` 로 바뀌어도 고칠 자리는 [_headers] 하나다.
+/// 인증은 `Authorization: Bearer <accessToken>` 이다. 초기 명세에 `X-User-Id` 로
+/// 적혀 있었으나 서버가 토큰 인증으로 구현되어 그쪽에 맞췄다.
+/// 헤더를 만드는 자리는 [_headers] 하나뿐이다.
 library;
 
 import 'dart:async';
@@ -58,7 +58,7 @@ class ApiNotConfiguredException implements Exception {
 class ApiClient {
   ApiClient({
     required this.baseUrl,
-    this.userId = 1,
+    this.accessToken,
     http.Client? httpClient,
     this.timeout = const Duration(seconds: 15),
   }) : _http = httpClient ?? http.Client();
@@ -66,18 +66,24 @@ class ApiClient {
   /// `https://host/` 까지. 끝의 `/` 는 있어도 없어도 된다.
   final String baseUrl;
 
-  /// `X-User-Id` 로 나갈 값. 로그인이 붙으면 토큰으로 바뀐다.
-  int userId;
+  /// 로그인으로 받은 액세스 토큰. 로그인 전에는 null 이다.
+  ///
+  /// 회원가입·로그인·토큰 재발급은 인증 없이 부르는 자리라 토큰이 없어야 정상이다.
+  /// 그래서 없을 때 헤더를 아예 빼고, `Bearer null` 같은 값을 보내지 않는다.
+  String? accessToken;
 
   final Duration timeout;
   final http.Client _http;
 
   bool get isConfigured => baseUrl.trim().isNotEmpty;
 
+  /// 토큰을 들고 있는지. 로그인 여부와 같은 뜻이다.
+  bool get isAuthenticated => (accessToken ?? '').trim().isNotEmpty;
+
   Map<String, String> get _headers => {
         'content-type': 'application/json',
         'accept': 'application/json',
-        'X-User-Id': '$userId',
+        if (isAuthenticated) 'Authorization': 'Bearer ${accessToken!.trim()}',
       };
 
   Uri _uri(String path, [Map<String, dynamic>? query]) {

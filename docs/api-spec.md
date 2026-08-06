@@ -11,17 +11,17 @@
 | 항목 | 값 |
 | --- | --- |
 | Base | `{API_BASE_URL}/` — `.env` 의 `API_BASE_URL` |
-| 인증 헤더 | `X-User-Id: Long` |
+| 인증 헤더 | `Authorization: Bearer {accessToken}` |
 | enum | 대문자 스네이크 |
 | 페이지네이션 | cursor 방식. `{ items \| orders, nextCursor }`, 다음 없으면 `nextCursor: null` |
 | 금액 | 전부 정수(원) |
 
-인증 헤더는 명세 표에 `User-Id` 와 `X-User-Id` 가 섞여 있다. Request example 이
-모두 `X-User-Id` 라 그쪽으로 통일했다 (`lib/api/api_client.dart` 한 곳에서 정의).
-
-Users 명세는 `accessToken` / `refreshToken` 을 돌려주므로 최종적으로는 Bearer
-인증이 된다. 그때는 `X-User-Id` 를 `Authorization` 으로 바꾸면 되고, 바꿀 자리는
+초안에는 인증 헤더가 `User-Id` 와 `X-User-Id` 로 섞여 있었으나, 서버가 토큰 인증으로
+구현되어 `Authorization: Bearer` 로 확정했다. 헤더를 만드는 자리는
 `ApiClient._headers` 하나다.
+
+회원가입 · 로그인 · 토큰 재발급은 인증 없이 부른다. 나머지 엔드포인트는 토큰이 없으면
+`401 AUTHENTICATION_REQUIRED` 를 돌려준다.
 
 ## 공용 오브젝트
 
@@ -95,7 +95,7 @@ totalPrice     subtotal 합                           ← 결제 예상액
 
 ```
 POST v1/analyses
-X-User-Id: 1
+Authorization: Bearer {accessToken}
 ```
 
 | 필드 | 타입 | 비고 |
@@ -191,7 +191,7 @@ combos : List         비슷한 다른 가게. comboScore 내림차순, 개수 �
 
 ```
 GET v1/restaurants/101/menus
-X-User-Id: 1
+Authorization: Bearer {accessToken}
 ```
 
 ### Response `200 OK`
@@ -227,7 +227,7 @@ menus : List
 
 ```
 GET v1/orders?size=20
-X-User-Id: 1
+Authorization: Bearer {accessToken}
 ```
 
 Query: `cursor` String (선택), `size` Integer (기본 20)
@@ -273,7 +273,7 @@ Query: `cursor` String (선택), `size` Integer (기본 20)
 
 ```
 GET v1/orders/7002
-X-User-Id: 1
+Authorization: Bearer {accessToken}
 ```
 
 ### Response `200 OK`
@@ -309,7 +309,7 @@ totalPrice : Integer
 
 ```
 POST v1/orders
-X-User-Id: 1
+Authorization: Bearer {accessToken}
 ```
 
 ### Request Body
@@ -480,7 +480,6 @@ nextCursor              : String (다음 페이지 없으면 null)
 | 항목 | 내용 |
 | --- | --- |
 | 주문 목록이 두 벌 | `GET v1/orders` (checkoutId · restaurantNames) 와 `GET v1/users/me/orders` (orderId · storeName 단일)가 서로 다른 모양이다. 다중 매장을 담는 건 앞쪽뿐이라 앱은 `GET v1/orders` 를 쓴다. 뒤쪽은 폐기인지 확인 필요 |
-| 인증 헤더 | 표는 `User-Id`, example 은 `X-User-Id`. `X-User-Id` 로 구현했다 |
 | `isPostedToJokbo` | `v1/users/me/orders` 에만 있다. `GET v1/orders` 에는 없어 "이미 족보에 공유했는지" 를 결제 목록에서 알 수 없다 |
 | `reviewCount` | 응답에 없다. 시안은 평점 옆에 리뷰 수를 보여준다 |
 | 요기족보 다중 매장 | `api-yogijokbo.md` 는 아직 단일 매장(`combo.store`)이다. `stores[]` 로 바뀌는지, 그 모양이 주문 상세와 같은지 확인 필요 |
