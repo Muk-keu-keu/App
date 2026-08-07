@@ -7,15 +7,20 @@ import '../models/combo.dart';
 import '../theme.dart';
 import '../widgets/ds.dart';
 
-/// Figma "옵션 변경" (node 681:6050).
+/// Figma "옵션 변경" — 개정 시안 925:4037.
 ///
-/// 회의(2026-08-04) 이후 구조가 두 군데 바뀌었다.
+/// **그룹마다 하나씩 고르는 라디오다.** 회의(2026-08-04)에서 평평한 체크박스
+/// 목록으로 갔다가 개정 시안에서 라디오로 돌아왔다. `group` 이 곧 라디오 그룹이고,
+/// 서버가 `selected` 로 내려준 값이 처음 선택으로 들어온다.
 ///
-/// 1. 옵션이 **평평한 목록**이 됐다. 그룹마다 라디오로 하나씩 고르는 게 아니라,
-///    `group` 은 묶어 그릴 라벨일 뿐이고 각 옵션을 체크박스로 켜고 끈다.
-///    서버가 `selected` 로 이미 체크된 상태를 내려준다.
-/// 2. 맵기가 옵션에서 빠졌다. `spiceAdjustable` 이 true 인 메뉴만 3버튼을 그리고,
-///    고른 값은 `selectedSpice` 로 따로 나간다. 시안의 "매운맛 5단계" 는 없앴다.
+/// **서버로 나가는 모양은 그대로 `selectedOptions[]` 배열이다.** 그룹당 하나씩
+/// 담기므로 항목 수가 그룹 수를 넘지 않을 뿐, 요청 스키마는 바뀌지 않았다.
+/// 다만 "그룹당 최대 1개" 라는 제약이 화면에만 있고 명세에는 없다 — 서버가 같은
+/// 그룹의 옵션을 두 개 받아도 막지 않는다는 뜻이라 백엔드와 맞춰야 한다.
+///
+/// 맵기는 여전히 옵션 밖이다. `spiceAdjustable` 인 메뉴만 3버튼을 그리고 고른 값은
+/// `selectedSpice` 로 따로 나간다. 개정 시안의 "매운맛 5단계" 그룹은 제목만 5단계고
+/// 선택지는 3개뿐이라 옛 라벨이 남은 것으로 보고 기존 결정을 유지했다.
 class MenuOptionSheet extends StatefulWidget {
   const MenuOptionSheet({
     super.key,
@@ -77,9 +82,14 @@ class _MenuOptionSheetState extends State<MenuOptionSheet> {
           if (_checked.contains(_keyOf(o))) o,
       ];
 
-  void _toggle(MenuOption option) => setState(() {
-        final key = _keyOf(option);
-        if (!_checked.remove(key)) _checked.add(key);
+  /// 그룹 안에서 하나만 고른다 (개정 시안 925:4128 — 체크박스가 라디오로 바뀌었다).
+  ///
+  /// 같은 그룹의 다른 선택을 먼저 지우고 넣는다. 이미 고른 것을 다시 눌러도
+  /// 해제하지 않는다 — 라디오는 "고르지 않음" 상태가 없다.
+  void _pick(MenuOption option) => setState(() {
+        final group = option.group ?? '';
+        _checked.removeWhere((key) => key.startsWith('$group|'));
+        _checked.add(_keyOf(option));
       });
 
   @override
@@ -121,8 +131,8 @@ class _MenuOptionSheetState extends State<MenuOptionSheet> {
                     const DsDivider(color: AppColors.gray300),
                   _Group(
                     group: groups[i],
-                    isChecked: (o) => _checked.contains(_keyOf(o)),
-                    onToggle: _toggle,
+                    isSelected: (o) => _checked.contains(_keyOf(o)),
+                    onPick: _pick,
                   ),
                 ],
                 if (groups.isEmpty && !widget.line.spiceAdjustable)
@@ -270,13 +280,13 @@ class _SpiceSection extends StatelessWidget {
 class _Group extends StatelessWidget {
   const _Group({
     required this.group,
-    required this.isChecked,
-    required this.onToggle,
+    required this.isSelected,
+    required this.onPick,
   });
 
   final MenuOptionGroup group;
-  final bool Function(MenuOption) isChecked;
-  final ValueChanged<MenuOption> onToggle;
+  final bool Function(MenuOption) isSelected;
+  final ValueChanged<MenuOption> onPick;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -286,23 +296,17 @@ class _Group extends StatelessWidget {
           children: [
             // 라벨이 없는 옵션(`group == null`)은 제목 줄 없이 바로 나열한다.
             if (group.label != null) ...[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(group.label!, style: AppText.sub2(color: AppColors.gray800)),
-                  const SizedBox(width: 4),
-                  // 옵션은 전부 선택이다 — 명세에 필수 여부 필드가 없다.
-                  const DsRequirementBadge(isRequired: false),
-                ],
-              ),
+              // 개정 시안의 그룹 제목은 글자 하나뿐이다. 라디오라 하나는 반드시
+              // 골라진 상태이므로 "선택" 뱃지가 알려 줄 것이 없어졌다.
+              Text(group.label!, style: AppText.sub2(color: AppColors.gray800)),
               const SizedBox(height: 16),
             ],
             for (var i = 0; i < group.options.length; i++) ...[
               if (i > 0) const SizedBox(height: 12),
               _Row(
                 option: group.options[i],
-                isOn: isChecked(group.options[i]),
-                onTap: () => onToggle(group.options[i]),
+                isOn: isSelected(group.options[i]),
+                onTap: () => onPick(group.options[i]),
               ),
             ],
           ],
@@ -327,8 +331,9 @@ class _Row extends StatelessWidget {
             Expanded(
               child: Row(
                 children: [
-                  DsCheckbox(isOn: isOn),
-                  const SizedBox(width: 8),
+                  // 개정 시안(925:4128)에서 체크박스가 라디오로 바뀌었다.
+                  DsRadio(isOn: isOn),
+                  const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       option.name,
