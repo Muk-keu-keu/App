@@ -421,6 +421,32 @@ class AppFlow extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 조합 카드에서 옵션을 바꾼다 (시안 925:4243).
+  ///
+  /// [updateLineOptions] 는 장바구니에 이미 있는 줄만 고친다. 조합 카드는 담기
+  /// 전 화면이라 그 줄이 장바구니에 없어 아무 일도 일어나지 않는다. 그래서 조합
+  /// 쪽을 직접 고치고, 그 매장을 이미 담아 뒀으면 장바구니도 함께 맞춘다 —
+  /// 한쪽만 바뀌면 카드와 담아 둔 내용이 어긋난다.
+  void updateSuggestionLineOptions({
+    required ComboSuggestion suggestion,
+    required int menuId,
+    required List<MenuOption> chosen,
+    SpiceLevel? spice,
+  }) {
+    for (final line in suggestion.items) {
+      if (line.menuId != menuId) continue;
+      line.applySelection(chosen);
+      if (spice != null) line.selectedSpice = spice;
+    }
+    updateLineOptions(
+      restaurantId: suggestion.restaurant.restaurantId,
+      menuId: menuId,
+      chosen: chosen,
+      spice: spice,
+    );
+    notifyListeners();
+  }
+
   /// 출처 영상을 주문 요청에 실을 형태로. 분석에 쓴 링크를 그대로 재사용한다.
   OrderSource? _cartSource() {
     final s = source;

@@ -21,15 +21,21 @@ class MenuOptionSheet extends StatefulWidget {
     super.key,
     required this.restaurantId,
     required this.line,
+    this.suggestion,
   });
 
   final int restaurantId;
   final CartLine line;
 
+  /// 조합 카드에서 열었으면 그 조합. 장바구니에 담기 전이라 고친 값을 넣을 곳이
+  /// 장바구니가 아니라 이 조합이다 (시안 925:4243 — 카드 안에도 "옵션 변경" 이 있다).
+  final ComboSuggestion? suggestion;
+
   static Future<void> show(
     BuildContext context, {
     required int restaurantId,
     required CartLine line,
+    ComboSuggestion? suggestion,
   }) {
     final flow = context.read<AppFlow>();
     return showModalBottomSheet<void>(
@@ -40,7 +46,11 @@ class MenuOptionSheet extends StatefulWidget {
         value: flow,
         child: FractionallySizedBox(
           heightFactor: 0.92,
-          child: MenuOptionSheet(restaurantId: restaurantId, line: line),
+          child: MenuOptionSheet(
+            restaurantId: restaurantId,
+            line: line,
+            suggestion: suggestion,
+          ),
         ),
       ),
     );
@@ -130,12 +140,25 @@ class _MenuOptionSheetState extends State<MenuOptionSheet> {
           ),
           _BottomCta(
             onApply: () {
-              context.read<AppFlow>().updateLineOptions(
-                    restaurantId: widget.restaurantId,
-                    menuId: widget.line.menuId,
-                    chosen: _selection,
-                    spice: widget.line.spiceAdjustable ? _spice : null,
-                  );
+              final flow = context.read<AppFlow>();
+              final spice = widget.line.spiceAdjustable ? _spice : null;
+              final suggestion = widget.suggestion;
+
+              if (suggestion == null) {
+                flow.updateLineOptions(
+                  restaurantId: widget.restaurantId,
+                  menuId: widget.line.menuId,
+                  chosen: _selection,
+                  spice: spice,
+                );
+              } else {
+                flow.updateSuggestionLineOptions(
+                  suggestion: suggestion,
+                  menuId: widget.line.menuId,
+                  chosen: _selection,
+                  spice: spice,
+                );
+              }
               Navigator.of(context).pop();
             },
           ),

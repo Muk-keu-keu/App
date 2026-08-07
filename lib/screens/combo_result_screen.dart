@@ -8,6 +8,7 @@ import '../models/combo.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/ds.dart';
+import 'menu_option_sheet.dart';
 
 /// Figma "먹방 조합" (node 681:5981).
 ///
@@ -64,7 +65,10 @@ class _ComboResultScreenState extends State<ComboResultScreen> {
                     itemBuilder: (context, i) => Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       child: SingleChildScrollView(
-                        child: _ComboCard(combo: combos[i]),
+                        child: _ComboCard(
+                          combo: combos[i],
+                          selected: i == flow.selectedComboIndex,
+                        ),
                       ),
                     ),
                   ),
@@ -133,35 +137,59 @@ class _TitleArea extends StatelessWidget {
       );
 }
 
+/// 조합 카드 하나 (시안 925:4225).
+///
+/// 지금 보고 있는 카드가 곧 고른 카드다. 시안이 오른쪽 위에 체크를 얹어 그것을
+/// 드러낸다 — 넘기다 보면 뭘 담게 되는지 헷갈리기 쉬운 화면이라 표시가 필요하다.
 class _ComboCard extends StatelessWidget {
-  const _ComboCard({required this.combo});
+  const _ComboCard({required this.combo, required this.selected});
 
   final ComboSuggestion combo;
 
+  /// 지금 페이지에 떠 있는 카드인지. 테두리와 체크가 함께 켜진다.
+  final bool selected;
+
   @override
-  Widget build(BuildContext context) => ClipRRect(
-        borderRadius: const BorderRadius.vertical(
-          top: Radius.circular(16),
-          bottom: Radius.circular(12),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _StoreArea(store: combo.restaurant, brandName: combo.brandName),
-            _MenuList(combo: combo),
-          ],
-        ),
+  Widget build(BuildContext context) => Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                // 안 고른 카드도 자리를 같게 두려고 투명 테두리를 남긴다.
+                // 색만 바뀌면 선택할 때 카드가 2px 씩 움직이지 않는다.
+                color: selected ? AppColors.primary400 : Colors.transparent,
+                width: 2,
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _StoreArea(store: combo.restaurant),
+                _MenuList(combo: combo),
+              ],
+            ),
+          ),
+          if (selected)
+            const Positioned(
+              top: 14,
+              right: 18,
+              child: DsCheckbox(isOn: true, size: 32),
+            ),
+        ],
       );
 }
 
-/// 매장 사진을 흐리게 깔고 그 위에 흰 글씨를 얹는다 (시안 blur 30).
+/// 매장 사진을 흐리게 깔고 그 위에 흰 글씨를 얹는다 (시안 925:4226, blur 30).
+///
+/// 상호 · 별점 · 거리/배달시간 세 줄만 얹는다. "영상 속 {브랜드}" 라벨은 개정
+/// 시안에서 빠졌다 — 영상에 나온 조합이 앞에 오고 헤더가 "먹방 속 조합을
+/// 담았어요" 라고 말하므로 카드마다 다시 적지 않는다.
 class _StoreArea extends StatelessWidget {
-  const _StoreArea({required this.store, this.brandName});
+  const _StoreArea({required this.store});
 
   final Restaurant store;
-
-  /// `exactMatches` 면 브랜드명이 있다. "비슷한 곳" 과 구분해 보여준다.
-  final String? brandName;
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -196,10 +224,6 @@ class _StoreArea extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          brandName == null ? '비슷한 곳' : '영상 속 $brandName',
-                          style: AppText.caption(color: Colors.white),
-                        ),
                         Text(store.name, style: AppText.h3(color: Colors.white)),
                         const SizedBox(height: 4),
                         Row(
@@ -264,11 +288,19 @@ class _MenuList extends StatelessWidget {
                     combo: combo, menuId: item.menuId, delta: -1),
                 onIncrease: () => context.read<AppFlow>().changeSuggestionQuantity(
                     combo: combo, menuId: item.menuId, delta: 1),
-                // 옵션은 장바구니에서 고친다. 여기서 바꿔 두면 어느 조합에
-                // 반영됐는지 알 수 없다 — 이 화면은 아직 담기 전이다.
+                // 개정 시안(925:4243)에 카드 안에도 "옵션 변경" 이 생겼다.
+                // 아직 담기 전이라 고친 값은 장바구니가 아니라 이 조합에 들어간다.
+                onEditOption: item.hasOptions || item.spiceAdjustable
+                    ? () => MenuOptionSheet.show(
+                          context,
+                          restaurantId: combo.restaurant.restaurantId,
+                          line: item,
+                          suggestion: combo,
+                        )
+                    : null,
               ),
               const SizedBox(height: 16),
-              const DsDivider(),
+              const DsDivider(color: AppColors.gray300),
               const SizedBox(height: 16),
             ],
             DsAddMenuButton(
