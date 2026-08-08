@@ -90,6 +90,13 @@
 	     서버 주소는 .env 에 있고 커밋되지 않으므로 여기에 IP 를 적는 예외 목록
 	     (NSExceptionDomains) 대신 전체 허용을 쓴다.
 	     서버에 https 가 붙으면 이 블록을 지운다 — 남겨 두면 앱스토어 심사에서 사유를 요구받는다. -->
+	<!-- 수출 규정 준수. 이 선언이 없으면 업로드한 빌드마다 App Store Connect 가
+	     규정 준수 정보를 물어보고, 답하기 전까지 그 빌드는 TestFlight 테스터에게
+	     배정할 수 없다("사용할 수 있는 빌드 없음" 으로 보인다).
+	     앱이 쓰는 암호화는 Gemini·백엔드 호출의 표준 HTTPS(TLS) 뿐이고 자체 암호화
+	     구현이 없다. 표준 암호화는 면제 대상이므로 false 다. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
