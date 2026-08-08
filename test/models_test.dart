@@ -263,11 +263,18 @@ void main() {
             'totalPrice': 16000,
           },
         ],
-        'combos': [
+        // 서버는 가게 단위로 묶어 주지 않는다. 요리별 후보만 오고,
+        // 가게로 묶는 것은 AnalysisResult.combos 가 한다.
+        'dishResults': [
           {
-            'comboScore': 0.82,
-            'restaurant': {'restaurantId': 102, 'name': '신전떡볶이 성수점'},
-            'items': [],
+            'dishName': '떡볶이',
+            'candidates': [
+              {
+                'restaurant': {'restaurantId': 102, 'name': '신전떡볶이 성수점'},
+                'item': {'menuId': 102001, 'name': '신전떡볶이', 'price': 12000},
+                'score': 0.82,
+              },
+            ],
           },
         ],
       });
@@ -304,6 +311,66 @@ void main() {
       expect(carts, hasLength(2));
       expect(carts[0].itemsTotal, 14000);
       expect(carts[1].itemsTotal, 4000);
+    });
+  });
+
+  // 서버가 가게 단위로 묶어 주지 않으므로, 같은 가게가 여러 요리의 후보에
+  // 나오는지 보고 묶는 것은 앱의 몫이다 (명세: "한 집에서 다 시킬 수 있는지는
+  // 프론트가 판단한다"). 배달비가 한 번만 드는 조합이라 앞에 와야 한다.
+  group('dishResults 를 가게 단위로 묶는다', () {
+    Map<String, dynamic> candidate(int storeId, int menuId, double score) => {
+          'restaurant': {'restaurantId': storeId, 'name': '가게$storeId'},
+          'item': {'menuId': menuId, 'name': '메뉴$menuId', 'price': 10000},
+          'score': score,
+        };
+
+    test('두 요리에 다 나오는 가게가 한 조합으로 묶이고 맨 앞에 온다', () {
+      final result = AnalysisResult.fromJson({
+        'exactMatches': [],
+        'dishResults': [
+          {
+            'dishName': '떡볶이',
+            'candidates': [candidate(1, 11, 0.9), candidate(2, 21, 0.8)],
+          },
+          {
+            'dishName': '핫도그',
+            'candidates': [candidate(2, 22, 0.7)],
+          },
+        ],
+      });
+
+      // 2번 가게가 떡볶이·핫도그를 다 판다 -> 메뉴 2개짜리 조합.
+      final first = result.combos.first;
+      expect(first.id, 2);
+      expect(first.items.map((i) => i.menuId), [21, 22]);
+      // 점수는 후보 점수의 평균이다.
+      expect(first.comboScore, closeTo(0.75, 0.0001));
+
+      // 한 요리만 되는 가게는 뒤로.
+      expect(result.combos.map((c) => c.id), [2, 1]);
+    });
+
+    test('같은 가게에 같은 메뉴가 두 번 오면 한 줄만 담는다', () {
+      final result = AnalysisResult.fromJson({
+        'dishResults': [
+          {'dishName': 'a', 'candidates': [candidate(1, 11, 0.9)]},
+          {'dishName': 'b', 'candidates': [candidate(1, 11, 0.5)]},
+        ],
+      });
+
+      expect(result.combos.single.items, hasLength(1));
+    });
+
+    test('후보가 없으면 조합도 없다', () {
+      final result = AnalysisResult.fromJson({
+        'exactMatches': [],
+        'dishResults': [
+          {'dishName': '떡볶이', 'candidates': []},
+        ],
+      });
+
+      expect(result.combos, isEmpty);
+      expect(result.isEmpty, isTrue);
     });
   });
 

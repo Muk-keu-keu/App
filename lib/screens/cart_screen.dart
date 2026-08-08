@@ -233,15 +233,14 @@ class _StoreSection extends StatelessWidget {
                 menuId: line.menuId,
                 delta: 1,
               ),
-              // 옵션이 없는 메뉴는 버튼을 숨긴다 (명세: 빈 배열이면 숨김).
-              // 맵기만 조절되는 메뉴도 고칠 게 있으니 함께 본다.
-              onEditOption: line.hasOptions || line.spiceAdjustable
-                  ? () => MenuOptionSheet.show(
-                        context,
-                        restaurantId: store.restaurantId,
-                        line: line,
-                      )
-                  : null,
+              // 옵션이 비어도 버튼을 남긴다. 명세가 바뀌었다 — 빈 배열은 그 메뉴에
+              // 옵션이 없다는 뜻이 아니라 영상에서 언급된 게 없다는 뜻이고,
+              // 전체 선택지는 GET menus 로 따로 받는다.
+              onEditOption: () => MenuOptionSheet.show(
+                context,
+                restaurantId: store.restaurantId,
+                line: line,
+              ),
             ),
             const SizedBox(height: 16),
             const DsDivider(color: AppColors.gray300),

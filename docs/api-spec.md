@@ -35,7 +35,7 @@
 | --- | --- |
 | `POST v1/users/signup` · `login` · `reissue-token` | 배포됨 |
 | `GET v1/users/me` | 배포됨 |
-| `POST v1/analyses` | 배포됨. **응답 구조가 이 문서와 다르다** (1번 절) |
+| `POST v1/analyses` | 배포됨. 문서와 일치 (2026-08-08 명세 갱신 반영) |
 | `GET v1/restaurants/{id}/menus` | 배포됨. **`restaurant` 블록이 빠져 있다** (2번 절) |
 | `GET v1/orders` · `GET v1/orders/{id}` · `POST v1/orders` | 배포됨. 명세와 일치 |
 | `v1/posts` (요기족보) | **미배포.** 2026-08-10 예정 |
@@ -75,7 +75,7 @@
 | `spiceLevel` | Enum | `NONE` \| `MEDIUM` \| `HOT`. MEDIUM/HOT 이면 고추 뱃지 |
 | `spiceAdjustable` | Boolean | true 면 순한맛/기본/매운맛 3버튼을 그린다 |
 | `selectedSpice` | Enum, nullable | 백엔드가 골라둔 맵기 |
-| `options` | List | 빈 배열이면 '옵션 변경' 버튼을 숨긴다 |
+| `options` | List | 켜진 옵션만 온다. **빈 배열이어도 '옵션 변경' 버튼을 숨기지 않는다** |
 | `optionsPrice` | Integer | 체크된 옵션 합계 |
 | `lineTotal` | Integer | `(price + optionsPrice) × quantity` |
 
@@ -102,7 +102,8 @@ subtotal       itemsTotal + deliveryFee              ← 그 가게 결제액
 totalPrice     subtotal 합                           ← 결제 예상액
 ```
 
-주문 시점에는 서버가 `menuId` 로 전부 다시 계산한다. **프론트 금액은 믿지 않는다.**
+주문 시점 서버 재계산은 아직 없다. `POST v1/orders` 는 프론트가 보낸 금액을 그대로
+저장하고 한 매장인지 검증도 하지 않는다(해커톤 범위 결정). 프론트가 보낸 값이 곧 기록이다.
 
 ## 1. POST v1/analyses — 영상 링크 분석
 
@@ -173,54 +174,64 @@ Authorization: Bearer {accessToken}
 ### Response `200 OK`
 
 설명용 필드는 담지 않는다. 화면에 그릴 값만 보낸다.
-응답이 두 블록으로 나뉘어 있는 것 자체가 "영상 그 브랜드" 와 "비슷한 곳" 의 구분이다.
 
 ```
 exactMatches : List   영상에 나온 브랜드. 브랜드 수만큼. 없으면 []
   brandName  : String        어느 브랜드 결과인지
   restaurant : Object
   items      : List          그 브랜드에 속한 메뉴만
-  totalPrice : Integer
+  totalPrice : Integer       lineTotal 합. **배달비 미포함**
 
-combos : List         비슷한 다른 가게. comboScore 내림차순, 개수 제한 없음
-  exactMatches 와 같은 모양 + comboScore (brandName 은 없음)
-  comboScore : Double (0~1). 이 순서로 정렬되어 온다
+dishResults : List    요리 하나당 하나. 요리별 후보 가게 목록
+  dishName   : String        요청의 dishes[].name 그대로
+  candidates : List          score 내림차순, 최대 5곳. 없으면 []
+    restaurant : Object
+    item       : Object      그 가게에서 이 요리에 가장 가까운 메뉴 하나
+    score      : Double      유사도 × 0.9 + 옵션 일치 비율 × 0.1
 ```
 
-`comboScore = 평균 유사도 × 0.9 + 옵션 일치 비율 × 0.1`.
-매칭된 메뉴들의 유사도 평균이 기본이고, 영상에서 말한 옵션(분모자 등)을 갖고
-있으면 가산한다. 커버리지는 점수에 넣지 않는다 — `combos` 는 "한 집에서 다 되는
-곳" 을 찾는 게 아니라 관련도 순 목록이다.
+`brandName` 이 있어야 `exactMatches` 에 실린다. null 이면 그 요리는 `dishResults`
+로만 나간다. 브랜드가 반경 안에 여러 지점이면 가장 가까운 지점 하나만 실리고,
+`exactMatches` 에 실린 **지점**은 `candidates` 에서 빠진다(같은 브랜드의 다른
+지점은 남는다).
 
-검색 = 벡터 유사도(`menu.embedding`, 1536차원 cohere) + **반경 5km 고정** +
-맵기·배달시간·고기 제외 필터. 유사도 0.5 미만은 억지 매칭이라 버린다.
-브랜드당 가장 가까운 지점 하나만 남긴다.
+### 가게 단위로 묶어 주지 않는다 — 묶는 건 앱의 몫이다
+
+떡볶이와 치킨을 한 집에서 파는 가게가 거의 없어서, 서버가 "한 집에서 조합 전체"
+로 묶으면 대부분 빈 결과가 된다. 결제도 어차피 가게별로 쪼개져 `checkoutId` 로
+묶이므로 이 구조가 제품과 맞다.
+
+**한 집에서 다 시킬 수 있는지는 프론트가 판단한다.** 같은 `restaurantId` 가 여러
+요리의 `candidates` 에 모두 나오면 그 집에서 다 된다는 뜻이고, 그러면 배달비가 한
+번만 든다. 앱은 `AnalysisResult.combos` 에서 후보를 가게 단위로 묶고, 많이 커버하는
+집을 앞에 놓는다(같은 개수면 점수 평균 순).
+
+### 금액
+
+```
+price          메뉴 정가
+optionsPrice   켜진 옵션 합계
+lineTotal      (price + optionsPrice) × quantity
+totalPrice     lineTotal 합            ← 배달비는 안 들어간다
+```
+
+배달비는 `restaurant.deliveryFee` 에 따로 있고 결제 화면에서 프론트가 더해 그린다.
+
+**주문 시점 서버 재계산은 아직 없다.** `POST v1/orders` 는 프론트가 보낸 금액을
+그대로 저장하고, 한 매장인지 검증도 하지 않는다(해커톤 범위 결정). 그래서 "프론트
+금액은 믿지 않는다" 는 더 이상 사실이 아니다 — 지금은 프론트가 보낸 값이 곧 기록이다.
+
+### item 의 options
+
+**빈 배열이어도 "옵션 변경" 버튼을 숨기면 안 된다.** 그 메뉴에 옵션이 없다는 뜻이
+아니라 영상에서 언급된 것이 없다는 뜻이다. 전체 선택지는
+`GET v1/restaurants/{restaurantId}/menus` 로 받는다.
 
 ### 못 찾았을 때
 
 - 못 찾은 메뉴는 `items` 에서 그냥 빠진다. 별도 안내 필드 없음
 - 유사도·매칭근거는 순위 계산에만 쓰고 응답에 안 담는다
-- 결과가 0개면 에러가 아니라 `200` 으로 빈 배열: `{ "exactMatches": [], "combos": [] }`
-
-### 실제 응답이 다르다 (2026-08-08 확인) — 미해결
-
-배포된 서버는 `combos` 대신 `dishResults` 를 준다. 모양도 다르다.
-
-```
-문서 : { exactMatches[], combos[] }
-       combos[]     = { restaurant, items[], totalPrice, comboScore }
-
-서버 : { exactMatches[], dishResults[] }
-       dishResults[] = { dishName, candidates[] }
-       candidates[]  = { restaurant, item, score }
-```
-
-`combos` 는 **매장 하나에 메뉴 여러 개를 묶은 조합**이고, `dishResults` 는
-**메뉴 하나에 대한 매장 후보 목록**이다. 담는 단위가 달라 앱이 그대로 읽을 수 없다
-(`AnalysisResult.fromJson` 이 `combos` 를 보므로 항상 빈 결과가 된다).
-
-조합 카드 화면이 "한 매장에서 여러 메뉴를 묶어 담는" 구조라 어느 쪽에 맞출지
-정해야 한다. 정해지기 전에는 `.env` 의 `API_BASE_URL` 을 비워 둔다.
+- 결과가 0개면 에러가 아니라 `200` 으로 빈 배열: `{ "exactMatches": [], "dishResults": [] }`
 
 ## 2. GET v1/restaurants/{restaurantId}/menus — 식당 전체 메뉴
 

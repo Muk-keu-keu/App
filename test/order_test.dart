@@ -4,7 +4,6 @@ import 'package:mukbang_ttaradamgi/api/mukbang_api.dart';
 import 'package:mukbang_ttaradamgi/app_flow.dart';
 import 'package:mukbang_ttaradamgi/models/analysis_source.dart';
 import 'package:mukbang_ttaradamgi/models/combo.dart';
-import 'package:mukbang_ttaradamgi/models/menu.dart';
 import 'package:mukbang_ttaradamgi/models/order.dart';
 import 'package:mukbang_ttaradamgi/models/preference.dart';
 import 'package:mukbang_ttaradamgi/repository/combo_repository.dart';

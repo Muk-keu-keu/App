@@ -290,14 +290,12 @@ class _MenuList extends StatelessWidget {
                     combo: combo, menuId: item.menuId, delta: 1),
                 // 개정 시안(925:4243)에 카드 안에도 "옵션 변경" 이 생겼다.
                 // 아직 담기 전이라 고친 값은 장바구니가 아니라 이 조합에 들어간다.
-                onEditOption: item.hasOptions || item.spiceAdjustable
-                    ? () => MenuOptionSheet.show(
-                          context,
-                          restaurantId: combo.restaurant.restaurantId,
-                          line: item,
-                          suggestion: combo,
-                        )
-                    : null,
+                onEditOption: () => MenuOptionSheet.show(
+                  context,
+                  restaurantId: combo.restaurant.restaurantId,
+                  line: item,
+                  suggestion: combo,
+                ),
               ),
               const SizedBox(height: 16),
               const DsDivider(color: AppColors.gray300),
