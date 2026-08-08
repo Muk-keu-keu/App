@@ -5,9 +5,13 @@
          동네 수준 정확도면 충분한 기능이라 대략적인 위치만 허용해도 정상 동작한다. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- allowBackup 을 끈 이유: 로그인 토큰이 SharedPreferences 에 남는다. 백업이
+         켜져 있으면(기본값 true) 그 파일이 클라우드 자동 백업과 `adb backup` 으로
+         기기 밖으로 나간다. 앱이 백업할 만한 다른 데이터가 없어 통째로 끈다. -->
     <application
         android:label="먹방요기"
         android:name="${applicationName}"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
