@@ -23,6 +23,23 @@
 회원가입 · 로그인 · 토큰 재발급은 인증 없이 부른다. 나머지 엔드포인트는 토큰이 없으면
 `401 AUTHENTICATION_REQUIRED` 를 돌려준다.
 
+**없는 경로도 401 을 준다.** 보안 필터가 라우팅보다 먼저 돌아서 오타 난 경로와 권한
+없는 경로가 구분되지 않는다. 404 로 바꿔 달라고 요청해 둘 것 — 이것 때문에 로그인
+경로를 잘못 알고 있던 동안 "서버가 막아 놨다" 로 오진한 적이 있다.
+
+## 배포 상태 (2026-08-08 확인)
+
+실제 서버에 요청해 확인한 결과다. 명세와 다른 곳은 각 절에 적어 둔다.
+
+| 엔드포인트 | 상태 |
+| --- | --- |
+| `POST v1/users/signup` · `login` · `reissue-token` | 배포됨 |
+| `GET v1/users/me` | 배포됨 |
+| `POST v1/analyses` | 배포됨. **응답 구조가 이 문서와 다르다** (1번 절) |
+| `GET v1/restaurants/{id}/menus` | 배포됨. **`restaurant` 블록이 빠져 있다** (2번 절) |
+| `GET v1/orders` · `GET v1/orders/{id}` · `POST v1/orders` | 배포됨. 명세와 일치 |
+| `v1/posts` (요기족보) | **미배포.** 2026-08-10 예정 |
+
 ## 공용 오브젝트
 
 ### restaurant
@@ -185,6 +202,26 @@ combos : List         비슷한 다른 가게. comboScore 내림차순, 개수 �
 - 유사도·매칭근거는 순위 계산에만 쓰고 응답에 안 담는다
 - 결과가 0개면 에러가 아니라 `200` 으로 빈 배열: `{ "exactMatches": [], "combos": [] }`
 
+### 실제 응답이 다르다 (2026-08-08 확인) — 미해결
+
+배포된 서버는 `combos` 대신 `dishResults` 를 준다. 모양도 다르다.
+
+```
+문서 : { exactMatches[], combos[] }
+       combos[]     = { restaurant, items[], totalPrice, comboScore }
+
+서버 : { exactMatches[], dishResults[] }
+       dishResults[] = { dishName, candidates[] }
+       candidates[]  = { restaurant, item, score }
+```
+
+`combos` 는 **매장 하나에 메뉴 여러 개를 묶은 조합**이고, `dishResults` 는
+**메뉴 하나에 대한 매장 후보 목록**이다. 담는 단위가 달라 앱이 그대로 읽을 수 없다
+(`AnalysisResult.fromJson` 이 `combos` 를 보므로 항상 빈 결과가 된다).
+
+조합 카드 화면이 "한 매장에서 여러 메뉴를 묶어 담는" 구조라 어느 쪽에 맞출지
+정해야 한다. 정해지기 전에는 `.env` 의 `API_BASE_URL` 을 비워 둔다.
+
 ## 2. GET v1/restaurants/{restaurantId}/menus — 식당 전체 메뉴
 
 분석 결과 화면에서 '메뉴 수정하기' 를 눌렀을 때 쓴다. 읽기 전용, 본문 없음.
@@ -222,6 +259,18 @@ menus : List
 화면이다 — 여기서 따로 골라 담으면 된다.
 
 `404` 는 그 `restaurantId` 가 없을 때만 낸다. 배달권역 밖이라도 `200`.
+
+### 실제 응답에 `restaurant` 가 없다 (2026-08-08 확인) — 백엔드 확인 중
+
+```
+문서 : { restaurant: {...위 공용 오브젝트 10개 필드}, menus[] }
+서버 : { restaurantId, restaurantName, menus[] }
+```
+
+`menus[]` 항목은 문서와 정확히 일치한다. 빠진 것은 매장 블록뿐이다.
+`RestaurantMenus.fromJson` 이 `json['restaurant']` 를 읽으므로 빈 객체가 되고,
+평점 · 배달비 · 최소 주문 금액이 전부 0 으로 보인다. "다시 주문" 이 매장 정보를
+다시 채우는 경로(`AppFlow.reorderFromHistory`)도 같은 값을 쓴다.
 
 ## 3. GET v1/orders — 내 결제 목록
 
@@ -301,7 +350,8 @@ totalPrice : Integer
 ```
 
 주문 상세의 `items` 는 분석 응답과 필드명이 다르다 — `name` → `menuName`,
-`price` → `unitPrice`. 주문 요청과 같은 모양이다.
+`price` → `unitPrice`, `imageUrl` → `menuImageUrl`. 주문 요청과 같은 모양이고,
+`menuImageUrl` 만 응답에 더 붙는다(요청에는 없다).
 
 ## 5. POST v1/orders — 결제하기 (장바구니 → 주문 생성)
 
@@ -396,7 +446,7 @@ Response `accessToken`, `refreshToken`, `user.userId`(UUID), `user.nickname`,
 
 ### POST v1/users/signup
 
-Request `{ email, password, nickname }` → `accessToken`, `refreshToken`.
+Request `{ email, password, nickName }` → `accessToken`, `refreshToken`.
 `409 U002` 이메일 중복. 시연에서는 노출하지 않는다.
 
 ### POST v1/users/reissue-token

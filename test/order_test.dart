@@ -4,6 +4,7 @@ import 'package:mukbang_ttaradamgi/api/mukbang_api.dart';
 import 'package:mukbang_ttaradamgi/app_flow.dart';
 import 'package:mukbang_ttaradamgi/models/analysis_source.dart';
 import 'package:mukbang_ttaradamgi/models/combo.dart';
+import 'package:mukbang_ttaradamgi/models/menu.dart';
 import 'package:mukbang_ttaradamgi/models/order.dart';
 import 'package:mukbang_ttaradamgi/models/preference.dart';
 import 'package:mukbang_ttaradamgi/repository/combo_repository.dart';
@@ -479,6 +480,40 @@ void main() {
       expect(order.menuSummary, isEmpty);
       expect(order.menuCount, 0);
       expect(order.countText, '1개 매장');
+    });
+  });
+
+  // 주문 상세 응답만 사진 키가 menuImageUrl 이다. 다른 응답의 imageUrl 과
+  // 이름이 달라, 안 읽으면 주문내역 상세의 메뉴 사진이 비어 보인다.
+  group('주문 상세의 메뉴 사진', () {
+    test('menuImageUrl 을 읽는다', () {
+      final line = CartLine.fromOrderJson({
+        'menuId': 10101,
+        'menuName': '옛날전통육개장',
+        'menuImageUrl': 'https://example.com/menu.png',
+        'unitPrice': 12000,
+        'quantity': 1,
+        'selectedOptions': [],
+      });
+
+      expect(line.imageUrl, 'https://example.com/menu.png');
+      expect(line.name, '옛날전통육개장');
+    });
+
+    test('imageUrl 로 와도 읽는다', () {
+      final line = CartLine.fromOrderJson({
+        'menuId': 1,
+        'menuName': 'x',
+        'imageUrl': 'https://example.com/old.png',
+        'unitPrice': 1000,
+      });
+
+      expect(line.imageUrl, 'https://example.com/old.png');
+    });
+
+    test('둘 다 없으면 빈 문자열이다', () {
+      final line = CartLine.fromOrderJson({'menuId': 1, 'menuName': 'x'});
+      expect(line.imageUrl, '');
     });
   });
 

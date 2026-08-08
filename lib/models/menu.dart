@@ -198,6 +198,9 @@ class CartLine {
         name: (json['menuName'] ?? '') as String,
         menuType: MenuType.fromWire(json['menuType'] as String?),
         price: ((json['unitPrice'] ?? 0) as num).toInt(),
+        // 상세 응답은 사진 키가 `menuImageUrl` 이다. 다른 응답의 `imageUrl` 과
+        // 이름이 달라 그대로 두면 주문내역 상세의 메뉴 사진이 비어 보인다.
+        imageUrl: (json['menuImageUrl'] ?? json['imageUrl'] ?? '') as String,
         quantity: ((json['quantity'] ?? 1) as num).toInt(),
         selectedSpice: SpiceLevel.fromWire(json['selectedSpice'] as String?),
         // 조절 가능 여부를 주지 않는다. 맵기가 담겨 있으면 조절되는 메뉴였다는 뜻이다.
