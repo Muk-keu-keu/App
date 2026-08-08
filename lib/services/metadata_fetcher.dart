@@ -103,18 +103,42 @@ class MetadataFetcher {
     return reserved.contains(parts.first) ? null : parts.first;
   }
 
+  /// HTML 엔티티를 되돌린다. 이름 있는 것과 숫자 참조(`&#12345;` · `&#xc384;`)를 모두 본다.
+  ///
+  /// **숫자 참조가 중요하다.** 인스타그램은 og 태그의 한글을 전부 `&#xc384;` 같은
+  /// 16진수 참조로 내려준다. 이름 목록만 보고 있으면 캡션이 인코딩된 채로 Gemini 에
+  /// 들어간다. 그래도 추출은 되지만 같은 문장이 열 배 넘는 토큰을 먹고, 무엇보다
+  /// 화면에 그 문자열을 그대로 그리면 사람이 읽을 수 없다.
   static String decodeEntities(String s) {
-    const map = {
+    const named = {
       '&amp;': '&',
       '&quot;': '"',
-      '&#39;': "'",
-      '&#x27;': "'",
+      '&apos;': "'",
       '&lt;': '<',
       '&gt;': '>',
       '&nbsp;': ' ',
     };
-    var out = s;
-    map.forEach((k, v) => out = out.replaceAll(k, v));
+
+    // 숫자 참조를 먼저 푼다. `&amp;#39;` 처럼 이중 인코딩된 경우 이름 치환이
+    // 앞서면 `&#39;` 가 되어 한 번 더 풀려야 하는데, 순서를 이렇게 두면 그 경우도
+    // 다음 줄에서 정리된다.
+    var out = s.replaceAllMapped(
+      // 16진수 접두사는 대소문자 둘 다 유효하다 (`&#x41;` · `&#X41;`).
+      RegExp(r'&#([xX][0-9a-fA-F]+|[0-9]+);'),
+      (m) {
+        final raw = m.group(1)!;
+        final isHex = raw.startsWith('x') || raw.startsWith('X');
+        final code = isHex
+            ? int.tryParse(raw.substring(1), radix: 16)
+            : int.tryParse(raw);
+        // 유효한 유니코드 스칼라만 되돌린다. 서로게이트 영역은 문자로 만들 수 없다.
+        if (code == null || code < 0 || code > 0x10FFFF) return m.group(0)!;
+        if (code >= 0xD800 && code <= 0xDFFF) return m.group(0)!;
+        return String.fromCharCode(code);
+      },
+    );
+
+    named.forEach((k, v) => out = out.replaceAll(k, v));
     return out;
   }
 

@@ -814,5 +814,31 @@ void main() {
     test('HTML 엔티티를 되돌린다', () {
       expect(MetadataFetcher.decodeEntities('A&amp;B &quot;C&quot;'), 'A&B "C"');
     });
+
+    // 인스타그램은 og 태그의 한글을 전부 16진수 참조로 내려준다. 이름 목록만
+    // 보고 있으면 캡션이 인코딩된 채로 Gemini 에 들어가 토큰을 열 배 먹고,
+    // 화면에 그리면 사람이 읽을 수 없다.
+    test('숫자 참조도 되돌린다', () {
+      expect(MetadataFetcher.decodeEntities('&#xc5fd;&#xb5a1;'), '엽떡');
+      // 같은 글자의 10진수 표기 (0xC5FD = 50685, 0xB5A1 = 46497).
+      expect(MetadataFetcher.decodeEntities('&#50685;&#46497;'), '엽떡');
+      // 대문자 X 도 유효한 표기다.
+      expect(MetadataFetcher.decodeEntities('&#X41;'), 'A');
+      // 이모지는 BMP 밖이라 서로게이트 쌍으로 만들어진다.
+      expect(MetadataFetcher.decodeEntities('&#x1f437;'), '🐷');
+    });
+
+    test('망가진 참조는 원문 그대로 둔다', () {
+      // 범위를 넘는 값·서로게이트 영역은 문자로 만들 수 없다. 던지지 않고 남긴다.
+      expect(MetadataFetcher.decodeEntities('&#x110000;'), '&#x110000;');
+      expect(MetadataFetcher.decodeEntities('&#xD800;'), '&#xD800;');
+      expect(MetadataFetcher.decodeEntities('&#;'), '&#;');
+    });
+
+    test('이중 인코딩된 참조도 한 번 더 푼다', () {
+      // `&amp;#39;` → 숫자 참조를 먼저 풀 수 없으니 이름 치환이 뒤에 와야 한다.
+      expect(MetadataFetcher.decodeEntities('&amp;#39;'), "&#39;");
+      expect(MetadataFetcher.decodeEntities('&#39;'), "'");
+    });
   });
 }
