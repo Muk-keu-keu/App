@@ -271,7 +271,7 @@ menus : List
 
 `404` 는 그 `restaurantId` 가 없을 때만 낸다. 배달권역 밖이라도 `200`.
 
-### 실제 응답에 `restaurant` 가 없다 (2026-08-08 확인) — 백엔드 확인 중
+### 실제 응답에 `restaurant` 가 없다 — 서버 미반영 (2026-08-08 재확인)
 
 ```
 문서 : { restaurant: {...위 공용 오브젝트 10개 필드}, menus[] }
@@ -282,6 +282,10 @@ menus : List
 `RestaurantMenus.fromJson` 이 `json['restaurant']` 를 읽으므로 빈 객체가 되고,
 평점 · 배달비 · 최소 주문 금액이 전부 0 으로 보인다. "다시 주문" 이 매장 정보를
 다시 채우는 경로(`AppFlow.reorderFromHistory`)도 같은 값을 쓴다.
+
+**노션 명세에는 `restaurant : Object` 가 그대로 있다.** 문서가 바뀐 게 아니라 서버가
+아직 안 보내는 것이다. 앱은 명세대로 두고 서버 반영을 기다린다 — 지금 앱을 응답에
+맞추면 서버가 고친 뒤 다시 되돌려야 한다.
 
 ## 3. GET v1/orders — 내 결제 목록
 
