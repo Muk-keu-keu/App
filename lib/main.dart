@@ -19,6 +19,7 @@ import 'screens/home_screen.dart';
 import 'screens/keyword_select_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/order_done_screen.dart';
+import 'screens/signup_screen.dart';
 import 'screens/store_menu_screen.dart';
 import 'screens/yogijokbo/post_compose_screen.dart';
 import 'screens/yogijokbo/post_detail_screen.dart';
@@ -32,7 +33,10 @@ Future<void> main() async {
 
   runApp(
     ChangeNotifierProvider(
-      create: (_) => AppFlow(),
+      // 저장된 토큰이 있으면 로그인 화면을 건너뛴다. 앱을 띄우기 전에 기다리지 않는다 —
+      // 저장소 읽기와 `me()` 왕복만큼 흰 화면이 길어지고, 그동안 [AppFlow] 가
+      // `isRestoringSession` 으로 화면을 잡아 준다.
+      create: (_) => AppFlow()..restoreSession(),
       child: const MukbangApp(),
     ),
   );
@@ -125,12 +129,21 @@ class _RootScreenState extends State<RootScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final stage = context.watch<AppFlow>().stage;
+    final flow = context.watch<AppFlow>();
 
     return Scaffold(
       backgroundColor: AppColors.pageBackground,
-      body: switch (stage) {
+      // 자동 로그인을 확인하는 동안은 흰 화면으로 둔다. 로그인 화면을 먼저 그리면
+      // 자동 로그인이 될 사람에게 로그인 화면이 한 번 번쩍여, 로그아웃된 것처럼 보인다.
+      body: flow.isRestoringSession
+          ? const ColoredBox(color: Colors.white)
+          : _screenFor(flow.stage),
+    );
+  }
+
+  Widget _screenFor(AppStage stage) => switch (stage) {
         AppStage.login => const LoginScreen(),
+        AppStage.signup => const SignupScreen(),
         AppStage.yogiyoHome => const YogiyoHomeScreen(),
         AppStage.orders => const OrderHistoryScreen(),
         AppStage.orderDetail => const OrderDetailScreen(),
@@ -150,9 +163,7 @@ class _RootScreenState extends State<RootScreen> {
         AppStage.jokboOrder => _JokboOrderStage(),
         AppStage.jokboCompose => const PostComposeScreen(),
         AppStage.jokboEdit => const PostEditScreen(),
-      },
-    );
-  }
+      };
 }
 
 /// 분석 결과에서 온 장바구니. 뒤로 가면 조합 카드로 돌아간다.

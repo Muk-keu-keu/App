@@ -7,6 +7,7 @@ import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../../widgets/ds.dart';
 import '../address_input_sheet.dart';
+import '../my_menu.dart';
 
 /// Figma "요기족보" (node 681:8066).
 ///
@@ -69,7 +70,7 @@ class YogijokboHomeScreen extends StatelessWidget {
       case DsTab.jokbo:
         break; // 이미 이 화면이다
       case DsTab.my:
-        break; // 마이요기요는 시안에 화면이 없다
+        showMyMenu(context); // 시안에 화면이 없어 로그아웃만 시트로 낸다
     }
   }
 }

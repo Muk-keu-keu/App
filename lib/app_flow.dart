@@ -2,12 +2,15 @@ import 'package:flutter/foundation.dart';
 
 import 'api/api_client.dart';
 import 'api/mukbang_api.dart';
+import 'api/user_api.dart';
 import 'models/analysis_source.dart';
+import 'models/auth.dart';
 import 'models/combo.dart';
 import 'models/order.dart';
 import 'models/post.dart';
 import 'models/preference.dart';
 import 'models/user_location.dart';
+import 'repository/auth_repository.dart';
 import 'repository/combo_repository.dart';
 import 'repository/order_repository.dart';
 import 'repository/post_repository.dart';
@@ -15,9 +18,11 @@ import 'env.dart';
 import 'services/gemini_extractor.dart';
 import 'services/location_service.dart';
 import 'services/metadata_fetcher.dart';
+import 'services/token_store.dart';
 
 enum AppStage {
   login, // 로그인 (앱 첫 진입)
+  signup, // 이메일로 회원가입
   yogiyoHome, // 요기요 메인 홈 (배너·검색·카테고리·요기족보 차트)
   orders, // 결제 내역 (요기족보 작성 진입점)
   orderDetail, // 주문내역 상세 (상세보기)
@@ -44,32 +49,68 @@ enum AppStage {
 /// 객체 안에만 있다. 앱을 껐다 켜면 사라진다 — 명세가 "프론트가 상태를 들고 있다가
 /// 주문 시점에 통째로 POST" 라고 정한 범위 그대로다.
 class AppFlow extends ChangeNotifier {
-  AppFlow({
+  /// `.env` 에 서버 주소가 있으면 실제 API, 없으면 더미로 조립한다.
+  ///
+  /// 백엔드가 아직 없어서 기본값이 더미다. 서버가 올라오면 `.env` 의
+  /// `API_BASE_URL` 만 채우면 되고 코드는 손대지 않는다.
+  ///
+  /// **[ApiClient] 는 하나만 만들어 모든 repository 가 나눠 쓴다.** 저장소마다 따로
+  /// 만들면 로그인으로 받은 토큰이 그 중 하나에만 꽂혀서, 같은 로그인 상태인데도
+  /// 화면에 따라 401 이 나는 상태가 된다. 토큰을 담는 자리가 하나여야 한다.
+  factory AppFlow({
     ComboRepository? repository,
     LocationService? locationService,
     PostRepository? postRepository,
     OrderRepository? orderRepository,
-  })  : _repository = repository ?? _defaultComboRepository(),
-        _locationService = locationService ?? const GeolocatorLocationService(),
-        _postRepository = postRepository ?? MockPostRepository(),
-        _orderRepository = orderRepository ?? _defaultOrderRepository();
+    AuthRepository? authRepository,
+    TokenStore? tokenStore,
+    ApiClient? apiClient,
+  }) {
+    final client =
+        apiClient ?? (Env.hasApiBaseUrl ? ApiClient(baseUrl: Env.apiBaseUrl) : null);
+    final api = client == null ? null : MukbangApi(client);
 
-  /// `.env` 에 서버 주소가 있으면 실제 API, 없으면 더미.
-  ///
-  /// 백엔드가 아직 없어서 기본값이 더미다. 서버가 올라오면 `.env` 의
-  /// `API_BASE_URL` 만 채우면 되고 코드는 손대지 않는다.
-  static ComboRepository _defaultComboRepository() =>
-      Env.hasApiBaseUrl ? ApiComboRepository(_api()) : const MockComboRepository();
+    // 인자 순서는 아래 `AppFlow._` 의 선언 순서다. 이름을 붙일 수 없는 이유는
+    // private 필드(`_repository`)를 named 파라미터로 받을 수 없기 때문이다.
+    final flow = AppFlow._(
+      repository ?? (api == null ? const MockComboRepository() : ApiComboRepository(api)),
+      locationService ?? const GeolocatorLocationService(),
+      postRepository ?? MockPostRepository(),
+      orderRepository ?? (api == null ? MockOrderRepository() : ApiOrderRepository(api)),
+      authRepository ??
+          (client == null ? MockAuthRepository() : ApiAuthRepository(UserApi(client))),
+      // 더미로 도는 동안에는 토큰을 기기에 남기지 않는다. 더미 토큰으로 자동 로그인이
+      // 걸리면 시연에서 로그인 화면을 다시 보려면 앱을 지워야 한다.
+      tokenStore ?? (client == null ? MemoryTokenStore() : const PreferencesTokenStore()),
+      client,
+    );
 
-  static OrderRepository _defaultOrderRepository() =>
-      Env.hasApiBaseUrl ? ApiOrderRepository(_api()) : MockOrderRepository();
+    // 401 을 받으면 재발급을 시도하고 그 요청을 한 번 더 보낸다.
+    // HTTP 계층은 로그인 도메인을 모르므로 여기서 꽂아 준다.
+    client?.onUnauthorized = flow._reissueTokens;
+    return flow;
+  }
 
-  static MukbangApi _api() => MukbangApi(ApiClient(baseUrl: Env.apiBaseUrl));
+  AppFlow._(
+    this._repository,
+    this._locationService,
+    this._postRepository,
+    this._orderRepository,
+    this._authRepository,
+    this._tokenStore,
+    this._client,
+  );
 
   final ComboRepository _repository;
   final LocationService _locationService;
   final PostRepository _postRepository;
   final OrderRepository _orderRepository;
+  final AuthRepository _authRepository;
+  final TokenStore _tokenStore;
+
+  /// 서버를 쓸 때의 HTTP 클라이언트. 더미로 돌 때는 null 이다.
+  /// 토큰을 꽂는 유일한 자리다.
+  final ApiClient? _client;
 
   AppStage _stage = AppStage.login;
   AppStage get stage => _stage;
@@ -112,7 +153,196 @@ class AppFlow extends ChangeNotifier {
     _setStage(AppStage.keyword);
   }
 
-  /// 로그인 완료. 실제 인증이 붙기 전까지는 화면 흐름만 이어준다.
+  // ── 인증 ──────────────────────────────────────────────────────────────────
+
+  /// 로그인한 사람. 서버가 `{id, email, role}` 만 주므로 그만큼만 안다.
+  /// 로그인 전과 로그아웃 뒤에는 null 이다.
+  AuthUser? currentUser;
+
+  /// 로그인·회원가입 요청이 도는 중인지. 버튼을 두 번 눌러 두 번 로그인하는 것을 막는다.
+  bool isAuthenticating = false;
+
+  /// 저장된 토큰으로 자동 로그인을 시도하는 중인지.
+  ///
+  /// 끝날 때까지 로그인 화면 대신 빈 화면을 둔다 — 자동 로그인이 될 사람에게
+  /// 로그인 화면이 한 번 번쩍이면 앱이 로그아웃된 것처럼 보인다.
+  bool isRestoringSession = false;
+
+  /// 토큰을 들고 있는지. `currentUser` 가 null 이어도 로그인 상태일 수 있다 —
+  /// 로그인 응답에 사용자 정보가 없어서 `me()` 를 따로 부르는데, 그 호출만 실패하면
+  /// 토큰은 멀쩡하다. 로그인 여부는 토큰이 기준이다.
+  bool get isLoggedIn => _hasSession;
+
+  bool _hasSession = false;
+
+  /// 앱을 켤 때 1회. 저장된 토큰이 살아 있으면 로그인 화면을 건너뛴다.
+  ///
+  /// 토큰이 죽었으면 지우고 로그인 화면에 남는다. 여기서 `me()` 를 부르는 이유는
+  /// 토큰이 있다는 것만으로는 살아 있는지 알 수 없기 때문이다. 만료됐다면 그 401 을
+  /// [ApiClient] 가 재발급으로 받아 주고, 재발급도 실패하면 예외로 올라온다.
+  Future<void> restoreSession() async {
+    final saved = await _tokenStore.read();
+    if (saved == null || !saved.isUsable) return;
+
+    isRestoringSession = true;
+    notifyListeners();
+
+    _client?.accessToken = saved.accessToken;
+    _refreshToken = saved.refreshToken;
+    _hasSession = true;
+
+    try {
+      currentUser = await _authRepository.me();
+      completeLogin();
+    } on Object {
+      // 만료·위조된 토큰이다. 지우고 로그인 화면에 남는다.
+      await _clearSession();
+    } finally {
+      isRestoringSession = false;
+      notifyListeners();
+    }
+  }
+
+  /// 저장된 refreshToken. 재발급 때만 쓴다.
+  String _refreshToken = '';
+
+  Future<AuthResult> login({required String email, required String password}) =>
+      _authenticate(() => _authRepository.login(email: email.trim(), password: password));
+
+  /// 회원가입. 서버가 토큰을 주지 않아 repository 가 이어서 로그인까지 하고,
+  /// 앱은 가입과 로그인을 한 동작으로 다룬다.
+  Future<AuthResult> signUp({
+    required String email,
+    required String password,
+    required String nickname,
+  }) =>
+      _authenticate(() => _authRepository.signup(
+            email: email.trim(),
+            password: password,
+            nickName: nickname.trim(),
+          ));
+
+  Future<AuthResult> _authenticate(Future<AuthTokens> Function() request) async {
+    if (isAuthenticating) return const AuthResult.failed(AuthFailure.server);
+
+    isAuthenticating = true;
+    notifyListeners();
+
+    try {
+      final tokens = await request();
+      await _applyTokens(tokens);
+
+      // 서버 로그인 응답에는 사용자 정보가 없다. 누가 로그인했는지 알려면
+      // `me()` 를 따로 불러야 한다. 실패해도 토큰은 멀쩡하니 로그인은 성공으로 둔다 —
+      // 지금 앱에 사용자 정보를 그리는 화면이 없어 흐름을 막을 이유가 없다.
+      try {
+        currentUser = await _authRepository.me();
+      } on Object {
+        currentUser = null;
+      }
+
+      completeLogin();
+      return const AuthResult.success();
+    } on Object catch (e) {
+      return _authFailure(e);
+    } finally {
+      isAuthenticating = false;
+      notifyListeners();
+    }
+  }
+
+  /// 로그아웃. 서버에 알리고 앱이 들고 있던 것을 전부 버린다.
+  ///
+  /// 장바구니·주문·조합을 함께 비우는 이유는 다음에 로그인한 사람이 남의 장바구니를
+  /// 보게 되면 안 되기 때문이다. 서버가 토큰을 무효화하지 않으므로 실질적인
+  /// 로그아웃은 토큰을 지우는 이쪽이다.
+  Future<void> logout() async {
+    await _authRepository.logout();
+    await _clearSession();
+
+    cart = Cart();
+    orders = [];
+    ordersNextCursor = null;
+    orderDetail = null;
+    receipt = null;
+    posts = [];
+    popularPosts = [];
+    selectedPost = null;
+    postComments = [];
+    analysis = const AnalysisResult.empty();
+    source = null;
+    extraction = null;
+
+    _setStage(AppStage.login);
+  }
+
+  /// 토큰을 이번 실행에 꽂고 기기에도 남긴다.
+  ///
+  /// 저장 실패는 삼킨다. 저장은 **다음 실행의 자동 로그인용 편의**이고 지금 로그인의
+  /// 조건이 아니다. 저장이 안 됐다고 로그인을 실패로 돌리면, 앱이 이미 토큰을 들고
+  /// 있는데도 로그인 화면에 남는 앞뒤가 안 맞는 상태가 된다.
+  Future<void> _applyTokens(AuthTokens tokens) async {
+    _client?.accessToken = tokens.accessToken;
+    _refreshToken = tokens.refreshToken;
+    _hasSession = true;
+    try {
+      await _tokenStore.write(tokens);
+    } on Object catch (e) {
+      // 다음에 켤 때 로그인 화면을 한 번 더 보는 것뿐이다. 다만 조용히 넘기면
+      // 자동 로그인이 안 되는 이유를 찾을 수 없어, 개발 빌드에서는 남긴다.
+      debugPrint('토큰 저장 실패 — 자동 로그인이 되지 않는다: $e');
+    }
+  }
+
+  Future<void> _clearSession() async {
+    currentUser = null;
+    _refreshToken = '';
+    _hasSession = false;
+    _client?.accessToken = null;
+    try {
+      await _tokenStore.clear();
+    } on Object catch (e) {
+      // 지우지 못해도 이번 실행은 로그아웃 상태다. 다음 실행의 자동 로그인은
+      // `me()` 가 막는다 — 서버가 거절하면 그 자리에서 다시 지운다.
+      debugPrint('토큰 삭제 실패 — 다음 실행에서 me 가 걸러낸다: $e');
+    }
+  }
+
+  /// [ApiClient] 가 401 을 받았을 때 부른다. 새 토큰을 얻으면 true —
+  /// 그러면 클라이언트가 그 요청을 한 번 더 보낸다.
+  Future<bool> _reissueTokens() async {
+    final tokens = await _authRepository.reissue(_refreshToken);
+    if (tokens == null) {
+      // 다시 로그인해야 한다. 지금 보고 있는 화면을 끊고 로그인으로 돌려보낸다 —
+      // 토큰이 죽은 채로 남으면 화면마다 조용히 빈 목록이 된다.
+      await _clearSession();
+      _setStage(AppStage.login);
+      return false;
+    }
+    await _applyTokens(tokens);
+    return true;
+  }
+
+  /// 실패 원인을 화면이 쓸 형태로 바꾼다. 서버가 준 문구가 있으면 함께 넘긴다 —
+  /// 비밀번호 길이 같은 규칙은 서버만 알고 있어 앱이 지어내면 어긋난다.
+  static AuthResult _authFailure(Object error) => switch (error) {
+        NetworkException() => const AuthResult.failed(AuthFailure.network),
+        ApiNotConfiguredException() => const AuthResult.failed(AuthFailure.network),
+        ApiException(statusCode: 401) =>
+          const AuthResult.failed(AuthFailure.invalidCredentials),
+        ApiException(statusCode: 409, message: final m) =>
+          AuthResult.failed(AuthFailure.emailTaken, message: m),
+        ApiException(statusCode: 400, message: final m) =>
+          AuthResult.failed(AuthFailure.invalidInput, message: m),
+        _ => const AuthResult.failed(AuthFailure.server),
+      };
+
+  /// 회원가입 화면으로. 로그인 화면의 "이메일로 회원가입" 이 부른다.
+  void openSignup() => _setStage(AppStage.signup);
+
+  void backToLogin() => _setStage(AppStage.login);
+
+  /// 인증이 끝나고 화면을 홈으로 보낸다.
   ///
   /// 곧바로 위치를 1회 수집한다. 좌표를 쓰는 화면(요기족보 목록의 "내 위치에서 가능한
   /// 조합만")에 도달했을 때 이미 준비돼 있어야 흐름이 끊기지 않는다.

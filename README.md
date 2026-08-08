@@ -47,7 +47,7 @@ lib/
   main.dart              앱 진입점. 공유 링크 수신과 화면 전환
   app_flow.dart          상태관리(ChangeNotifier). 분석·장바구니·결제
   env.dart               .env 접근
-  api/                   HTTP 계층. api_client(인증·에러) + mukbang_api(엔드포인트)
+  api/                   HTTP 계층. api_client(인증·에러) + mukbang_api·user_api(엔드포인트)
   models/                도메인 모델 (= docs/api-spec.md 와 1:1)
   services/              Gemini 호출, 링크 메타데이터 수집, 위치
   repository/            Api* 구현체 + Mock* 더미 (서버 없이도 돈다)
@@ -61,6 +61,28 @@ lib/
 돌려준다. 백엔드 작업이 끝나기 전에 화면을 확인하려고 남겨 둔 경로이고,
 서버가 올라오면 `API_BASE_URL` 만 채우면 `Api*Repository` 로 바뀐다.
 코드는 손대지 않는다.
+
+로그인도 같다. 값이 비어 있으면 `MockAuthRepository` 가 비어 있지 않은 이메일·비밀번호를
+모두 통과시켜 로그인 화면을 지나갈 수 있게 한다. 이때는 토큰을 기기에 저장하지 않는다 —
+더미 토큰으로 자동 로그인이 걸리면 로그인 화면을 다시 보려면 앱을 지워야 한다.
+
+## 로그인
+
+모든 인증 API 는 `Authorization: Bearer {accessToken}` 을 요구한다. 토큰을 담는 자리는
+`ApiClient.accessToken` 하나이고, `AppFlow` 가 서버를 쓸 때 `ApiClient` 를 **하나만**
+만들어 모든 repository 가 나눠 쓴다.
+
+- 로그인·회원가입은 `Authorization` 헤더를 붙이지 않는다. 만료된 토큰이 남아 있으면
+  그 토큰 때문에 로그인 자체가 401 이 된다.
+- 토큰은 `shared_preferences` 에 남는다(`TokenStore`). 앱을 켜면 `AppFlow.restoreSession`
+  이 저장된 토큰으로 `GET v1/users/me` 를 불러 살아 있는지 확인하고, 살아 있으면 로그인
+  화면을 건너뛴다. 죽었으면 지우고 로그인 화면에 남는다.
+- 인증 API 가 401 을 주면 `ApiClient` 가 `reissue-token` 으로 한 번 재발급하고 같은
+  요청을 한 번만 다시 보낸다. 재발급도 실패하면 로그아웃하고 로그인 화면으로 보낸다.
+- 로그아웃은 하단 내비 "마이요기요" 의 시트에 있다. 마이요기요 화면은 시안에 없다.
+
+`shared_preferences` 는 암호화되지 않는다(iOS `UserDefaults`). 데모 단계라 이대로 두고,
+실서비스에서는 `TokenStore` 구현만 키체인 기반으로 갈아끼운다.
 
 ## API 명세
 

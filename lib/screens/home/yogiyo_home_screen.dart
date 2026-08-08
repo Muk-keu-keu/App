@@ -6,6 +6,7 @@ import '../../models/post.dart';
 import '../../theme.dart';
 import '../../widgets/ds.dart';
 import '../address_input_sheet.dart';
+import '../my_menu.dart';
 
 /// Figma "홈" (node 681:6419) — 요기요 메인 홈.
 ///
@@ -60,8 +61,8 @@ class YogiyoHomeScreen extends StatelessWidget {
       case DsTab.orders:
         flow.openOrders();
       case DsTab.my:
-        // 마이요기요 화면은 시안에 없다. 자리만 지킨다.
-        break;
+        // 마이요기요 화면은 시안에 없다. 로그아웃만 시트로 낸다.
+        showMyMenu(context);
     }
   }
 }

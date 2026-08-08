@@ -27,14 +27,18 @@
 없는 경로가 구분되지 않는다. 404 로 바꿔 달라고 요청해 둘 것 — 이것 때문에 로그인
 경로를 잘못 알고 있던 동안 "서버가 막아 놨다" 로 오진한 적이 있다.
 
+이 때문에 앱의 401 처리는 오타 난 경로에도 토큰 재발급을 한 번 헛돌린다. 재발급 뒤
+같은 401 이 오면 그대로 던지므로 반복되지는 않고, 요청 한 건이 더 나가는 비용만 있다.
+
 ## 배포 상태 (2026-08-08 확인)
 
 실제 서버에 요청해 확인한 결과다. 명세와 다른 곳은 각 절에 적어 둔다.
 
 | 엔드포인트 | 상태 |
 | --- | --- |
-| `POST v1/users/signup` · `login` · `reissue-token` | 배포됨 |
-| `GET v1/users/me` | 배포됨 |
+| `POST v1/users/signup` · `login` · `reissue-token` | 배포됨. **응답이 명세와 다르다** (6번 절) |
+| `GET v1/users/me` | 배포됨. **`{id, email, role}` 뿐** (6번 절) |
+| `POST v1/users/logout` | 배포됨. `204` 지만 토큰을 무효화하지 않는다 (6번 절) |
 | `POST v1/analyses` | 배포됨. 문서와 일치 (2026-08-08 명세 갱신 반영) |
 | `GET v1/restaurants/{id}/menus` | 배포됨. **`restaurant` 블록이 빠져 있다** (2번 절) |
 | `GET v1/orders` · `GET v1/orders/{id}` · `POST v1/orders` | 배포됨. 명세와 일치 |
@@ -452,31 +456,95 @@ API 에 나가는 `orderId` 는 `checkout_id` 다. DB 의 `order_id` 는 내부 
 | USER | GET | 내가 쓴 요기족보 글 목록 | `v1/users/me/posts` |
 | USER | GET | 내 주문 내역 조회 | `v1/users/me/orders` |
 
+아래는 2026-08-08 실제 서버에 요청해 확인한 계약이다. 노션 명세와 다른 곳은 각 절에
+표로 적는다. 앱은 실제 응답을 기준으로 구현돼 있다.
+
 ### POST v1/users/login
 
 Request `{ "email": "...", "password": "..." }`
 
-Response `accessToken`, `refreshToken`, `user.userId`(UUID), `user.nickname`,
-`user.profileImageUrl`. 실패는 `401 U001`.
+Response `200 OK`
+
+```
+accessToken  : String (JWT)
+refreshToken : String (JWT)
+```
+
+실패는 `401 INVALID_CREDENTIALS`.
+
+| 항목 | 노션 명세 | 실제 서버 |
+| --- | --- | --- |
+| `user` 블록 | `user.userId`(UUID) · `user.nickname` · `user.profileImageUrl` | 없다. 토큰 두 개뿐 |
+| 실패 코드 | `401 U001` | `401 INVALID_CREDENTIALS` |
+
+로그인 응답에 사용자 정보가 없으므로 누가 로그인했는지 알려면 `GET v1/users/me` 를
+따로 부른다. 앱이 그렇게 한다.
+
+JWT payload 는 `{ sub, role, email, iat, exp }` 이고 `exp - iat` 는 약 140일이다.
+`sub` 가 정수 사용자 id 다.
 
 ### POST v1/users/signup
 
-Request `{ email, password, nickName }` → `accessToken`, `refreshToken`.
-`409 U002` 이메일 중복. 시연에서는 노출하지 않는다.
+Request `{ email, password, nickName }` → `201 CREATED`, **본문 없음**(`Content-Length: 0`).
+
+| 항목 | 노션 명세 | 실제 서버 |
+| --- | --- | --- |
+| 응답 본문 | `accessToken`, `refreshToken` | 없다. 가입 뒤 `login` 을 따로 불러야 토큰을 받는다 |
+| 중복 코드 | `409 U002` | `409 EMAIL_ALREADY_EXISTS` |
+
+**요청 필드는 `nickName` — 대문자 N 이다.** 소문자 `nickname` 으로 보내면
+`400 INVALID_REQUEST_DATA "닉네임은 필수 입력값입니다."` 가 온다. 응답(`me`)은
+`nickname` 을 쓰므로 요청과 응답의 표기가 다르다.
+
+`400 INVALID_REQUEST_DATA` 로 거절되는 조건과 서버 문구:
+
+| 조건 | message |
+| --- | --- |
+| 비밀번호 길이 | `비밀번호는 8자 이상 64자 이하여야 합니다.` |
+| 이메일 형식 | `이메일 형식이 올바르지 않습니다.` |
+| 닉네임 누락 | `닉네임은 필수 입력값입니다.` |
+
+길이·형식 규칙은 서버만 가지고 있다. 앱은 같은 조건을 미리 걸러 왕복을 줄이되,
+문구는 서버가 준 `message` 를 그대로 보여준다.
 
 ### POST v1/users/reissue-token
 
-Request `{ refreshToken }` → `accessToken`.
-`accessToken` 만료 24h 로 두고 미구현 가능.
+Request `{ refreshToken }` → `200 OK`
+
+```
+accessToken  : String
+refreshToken : String
+```
+
+명세에는 `accessToken` 만 적혀 있으나 실제로는 둘 다 온다. 앱은 둘 다 갈아끼운다.
+
+`accessToken` 만료가 140일이라 실사용에서 이 경로를 타는 일은 거의 없다. 앱은
+401 을 받으면 이 경로로 한 번 재발급하고 그 요청을 한 번만 다시 보낸다.
 
 ### POST v1/users/logout
 
-`204 No Content`. 클라이언트 토큰 삭제로 대체 가능.
+`204 No Content`.
+
+**서버가 토큰을 무효화하지 않는다.** 로그아웃 뒤에도 같은 `accessToken` 으로
+`GET v1/users/me` 가 `200` 이다. 실질적인 로그아웃은 클라이언트가 토큰을 지우는 것이고,
+이 호출은 서버에 알리는 의미만 있다. 앱은 이 호출이 실패해도 토큰을 지운다.
 
 ### GET / PATCH v1/users/me
 
-- GET → `userId`(UUID), `email`, `nickname`, `profileImageUrl`, `createdAt`
-- PATCH ← `{ nickname, profileImageUrl }`
+GET → `200 OK`
+
+```
+id    : Integer
+email : String
+role  : String ("USER")
+```
+
+| 항목 | 노션 명세 | 실제 서버 |
+| --- | --- | --- |
+| 식별자 | `userId` (UUID) | `id` (정수) |
+| `nickname` · `profileImageUrl` · `createdAt` | 있다 | 없다 |
+
+PATCH ← `{ nickname, profileImageUrl }` — 앱이 쓰지 않는다.
 
 ### GET v1/users/me/posts
 
@@ -551,3 +619,7 @@ nextCursor              : String (다음 페이지 없으면 null)
 | 결제 완료 후 이동 | `orderId` 를 주지 않으므로 완료 화면은 목록으로만 갈 수 있다. 상세로 보내려면 `orderIds` 추가 필요 |
 | **`GET v1/orders` 에 `menuSummary` 추가** | 시안 857:4509 가 카드에 `[지점명] 메뉴, 메뉴` 와 "N개 매장 · 총 N개 메뉴" 를 그린다. 목록 응답에는 `restaurantNames` 와 `totalPrice` 뿐이라 메뉴 이름을 알 수 없고, 카드마다 상세를 더 부르는 건 "목록에는 조합 전체를 내리지 않는다" 는 명세와 충돌한다. 필요한 모양: `menuSummary: [{ storeName, menuNames[] }]`. 앱 모델(`OrderSummary.menuSummary`)은 이미 이 키를 읽고, 없으면 그 줄을 그리지 않는다 |
 | `INSTAGRAM`/`YOUTUBE` 외 링크 | `source.platform` 이 두 값뿐이다. 앱은 그 밖의 링크를 분석 전에 막는다 |
+| **회원가입 필드 표기 불일치** | 요청은 `nickName`, 응답(`me`)은 `nickname` 이다. 한쪽으로 맞춰야 한다 |
+| **`GET v1/users/me` 에 닉네임 없음** | 응답이 `{id, email, role}` 뿐이라 가입 때 받은 닉네임을 되읽을 방법이 없다. 요기족보 글의 작성자 표시를 서버 데이터로 바꾸려면 `nickname` 과 `profileImageUrl` 이 필요하다 |
+| **회원가입 응답에 토큰 없음** | `201` 본문이 비어 있어 앱이 가입 직후 `login` 을 한 번 더 부른다. 토큰을 함께 주면 왕복이 하나 줄어든다 |
+| **로그아웃이 토큰을 무효화하지 않음** | `204` 를 주지만 같은 토큰이 계속 유효하다. 탈취된 토큰을 끊을 방법이 없다 |

@@ -6,6 +6,7 @@ import '../../models/order.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../../widgets/ds.dart';
+import '../my_menu.dart';
 
 /// Figma "주문내역" (node 731:5325).
 ///
@@ -57,8 +58,9 @@ class OrderHistoryScreen extends StatelessWidget {
       case DsTab.jokbo:
         flow.openJokbo();
       case DsTab.orders:
+        break; // 이미 이 화면이다
       case DsTab.my:
-        break;
+        showMyMenu(context); // 시안에 화면이 없어 로그아웃만 시트로 낸다
     }
   }
 }
