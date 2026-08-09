@@ -151,6 +151,33 @@ class ApiClient {
         authenticated: authenticated,
       );
 
+  /// `multipart/form-data` 로 보낸다. 파일이 없어도 multipart 다.
+  ///
+  /// **`Content-Type` 을 직접 넣지 않는다.** 손으로 지정하면 `boundary` 가 빠져
+  /// 400 이 난다 — 구분선은 http 패키지가 만들어 붙인다. 그래서 [_headers] 를 쓰지
+  /// 않고 인증 헤더만 얹는다 ([_headers] 는 `application/json` 을 넣는다).
+  ///
+  /// 요청 객체는 한 번만 보낼 수 있고 파일 스트림도 한 번만 읽힌다. 401 재발급 뒤
+  /// 재시도가 같은 요청을 다시 보내야 하므로 클로저 안에서 매번 새로 조립한다.
+  Future<Map<String, dynamic>> multipart(
+    String path, {
+    Map<String, String> fields = const {},
+    List<String> filePaths = const [],
+    String fileField = 'images',
+  }) async =>
+      _send(() async {
+        final request = http.MultipartRequest('POST', _uri(path))
+          ..fields.addAll(fields)
+          ..headers['accept'] = 'application/json';
+        if (isAuthenticated) {
+          request.headers['Authorization'] = 'Bearer ${accessToken!.trim()}';
+        }
+        for (final filePath in filePaths) {
+          request.files.add(await http.MultipartFile.fromPath(fileField, filePath));
+        }
+        return http.Response.fromStream(await _http.send(request));
+      }, path);
+
   Future<Map<String, dynamic>> patch(String path, {Object? body}) async => _send(
         () => _http.patch(
           _uri(path),

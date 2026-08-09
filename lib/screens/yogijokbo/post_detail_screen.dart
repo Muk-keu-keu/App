@@ -89,7 +89,11 @@ class _PostSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _Profile(author: post.author, dateText: post.dateText),
+            _Profile(
+              author: post.author,
+              dateText: post.dateText,
+              canEdit: post.mine,
+            ),
             const SizedBox(height: 16),
             Text(post.title, style: AppText.sub1().copyWith(letterSpacing: -0.45)),
             const SizedBox(height: 9),
@@ -110,10 +114,18 @@ class _PostSection extends StatelessWidget {
 }
 
 class _Profile extends StatelessWidget {
-  const _Profile({required this.author, required this.dateText});
+  const _Profile({
+    required this.author,
+    required this.dateText,
+    this.canEdit = false,
+  });
 
   final PostAuthor author;
   final String dateText;
+
+  /// 내 글일 때만 점 아이콘을 그린다. 남의 글을 고치거나 지우려 하면 서버가
+  /// 403 을 주므로, 누를 수 있게 두면 반드시 실패하는 버튼이 된다.
+  final bool canEdit;
 
   /// 헤더 점 아이콘 → 수정하기 / 삭제하기 (시안 922:2734 —
   /// "게시물 헤더의 우측 점 아이콘 선택시 하단에 나타남").
@@ -166,18 +178,19 @@ class _Profile extends StatelessWidget {
               ],
             ),
           ),
-          GestureDetector(
-            onTap: () => _openMenu(context),
-            behavior: HitTestBehavior.opaque,
-            child: const Padding(
-              padding: EdgeInsets.only(left: 12),
-              child: Icon(
-                Icons.more_vert,
-                size: 20,
-                color: AppColors.gray600,
+          if (canEdit)
+            GestureDetector(
+              onTap: () => _openMenu(context),
+              behavior: HitTestBehavior.opaque,
+              child: const Padding(
+                padding: EdgeInsets.only(left: 12),
+                child: Icon(
+                  Icons.more_vert,
+                  size: 20,
+                  color: AppColors.gray600,
+                ),
               ),
             ),
-          ),
         ],
       );
 }
@@ -489,19 +502,21 @@ class _CommentItemState extends State<_CommentItem> {
                   ],
                 ),
               ),
-              GestureDetector(
-                key: _anchorKey,
-                onTap: _openMenu,
-                behavior: HitTestBehavior.opaque,
-                child: const Padding(
-                  padding: EdgeInsets.only(left: 8),
-                  child: Icon(
-                    Icons.more_horiz,
-                    size: 20,
-                    color: AppColors.gray500,
+              // 내 댓글만 지울 수 있다. 남의 댓글은 서버가 403 을 준다.
+              if (comment.mine)
+                GestureDetector(
+                  key: _anchorKey,
+                  onTap: _openMenu,
+                  behavior: HitTestBehavior.opaque,
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: Icon(
+                      Icons.more_horiz,
+                      size: 20,
+                      color: AppColors.gray500,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 8),

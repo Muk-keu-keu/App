@@ -75,7 +75,7 @@ class AppFlow extends ChangeNotifier {
     final flow = AppFlow._(
       repository ?? (api == null ? const MockComboRepository() : ApiComboRepository(api)),
       locationService ?? const GeolocatorLocationService(),
-      postRepository ?? MockPostRepository(),
+      postRepository ?? (api == null ? MockPostRepository() : ApiPostRepository(api)),
       orderRepository ?? (api == null ? MockOrderRepository() : ApiOrderRepository(api)),
       authRepository ??
           (client == null ? MockAuthRepository() : ApiAuthRepository(UserApi(client))),
@@ -355,9 +355,15 @@ class AppFlow extends ChangeNotifier {
   /// 요기요 메인 홈의 "요기족보 실시간 인기조합" 차트에 쓸 목록.
   List<YogijokboPost> popularPosts = [];
 
+  /// 로그인 직후 기다리지 않고 부르는 자리다 (`completeLogin`). 실패를 던지면
+  /// 잡을 사람이 없으므로 여기서 삼키고, 홈의 그 줄만 비워 둔다.
   Future<void> loadPopularPosts() async {
-    final page = await _postRepository.list(sort: PostSort.popular);
-    popularPosts = page.items;
+    try {
+      final page = await _postRepository.list(sort: PostSort.popular);
+      popularPosts = page.items;
+    } on Object {
+      popularPosts = [];
+    }
     notifyListeners();
   }
 
@@ -1001,13 +1007,25 @@ class AppFlow extends ChangeNotifier {
   /// 다음 페이지 커서. null 이면 더 없다 (api-yogijokbo.md 1번).
   String? postsNextCursor;
 
+  /// 목록을 받아오지 못했는지. 빈 목록과 구분해야 한다 — 실패를 "아직 글이 없어요"
+  /// 로 보여주면 사용자가 다시 시도할 이유를 알 수 없다.
+  bool postsLoadFailed = false;
+
   Future<void> loadPosts() async {
     postsLoading = true;
+    postsLoadFailed = false;
     notifyListeners();
 
-    final page = await _postRepository.list(sort: postSort);
-    posts = page.items;
-    postsNextCursor = page.nextCursor;
+    try {
+      final page = await _postRepository.list(sort: postSort);
+      posts = page.items;
+      postsNextCursor = page.nextCursor;
+    } on Object {
+      // 서버·네트워크 문제. 여기서 던지면 로딩 표시가 영원히 남는다.
+      posts = [];
+      postsNextCursor = null;
+      postsLoadFailed = true;
+    }
 
     postsLoading = false;
     notifyListeners();
@@ -1021,9 +1039,14 @@ class AppFlow extends ChangeNotifier {
     postsLoading = true;
     notifyListeners();
 
-    final page = await _postRepository.list(sort: postSort, cursor: cursor);
-    posts = [...posts, ...page.items];
-    postsNextCursor = page.nextCursor;
+    try {
+      final page = await _postRepository.list(sort: postSort, cursor: cursor);
+      posts = [...posts, ...page.items];
+      postsNextCursor = page.nextCursor;
+    } on Object {
+      // 이미 보고 있는 목록은 그대로 둔다. 커서만 지워 같은 실패를 반복하지 않는다.
+      postsNextCursor = null;
+    }
 
     postsLoading = false;
     notifyListeners();
@@ -1095,9 +1118,9 @@ class AppFlow extends ChangeNotifier {
     final trimmed = body.trim();
     if (post == null || trimmed.isEmpty) return;
 
-    // 201 은 본문이 없다. 서버가 매긴 id·작성시각을 알 수 없어 다시 받아온다.
-    await _postRepository.addComment(post.id, trimmed);
-    await loadComments(post.id);
+    // 작성 응답이 갱신된 목록 전체를 준다. 서버가 매긴 id·작성시각이 그 안에 있어
+    // 목록을 다시 받지 않는다.
+    postComments = await _postRepository.addComment(post.id, trimmed);
     post.commentCount = postComments.length;
     notifyListeners();
   }

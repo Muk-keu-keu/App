@@ -1,14 +1,25 @@
 # 요기족보 API 명세
 
-> **2026-08-04 회의 이후 재확인이 필요한 문서다.** 아래 내용은 매장 하나를
-> 기준으로 쓰여 있는데, 회의에서 족보 등록·주문·리뷰를 **묶음 조합 단위**로
-> 바꿨다. 앱은 `YogijokboPost.stores` (매장 목록)로 이미 고쳐 두었고, 주문 상세
-> (`docs/api-spec.md` 4번)와 같은 모양을 가정한다. 서버 응답 필드명이 확정되면
-> 이 문서의 2번·3번을 고친다.
->
-> 함께 바뀐 것: 찜하기 기능 제거, 맵기 3단계 확정.
+> **2026-08-09 에 배포된 서버로 직접 확인한 계약이다.** 노션 명세와 다른 곳이
+> 있으면 이 문서가 기준이다. 확인한 것은 `test/yogijokbo_api_test.dart` 가 잠근다.
 
 출처: Notion `[요기요 x 오라클 해커톤] / API 명세서 (수정완료) / 요기족보`
++ 2026-08-09 실서버 확인
+
+## 노션 명세와 다른 곳
+
+| 항목 | 노션 명세 | 실제 서버 |
+| --- | --- | --- |
+| 인증 헤더 | `X-User-Id` | `Authorization: Bearer {accessToken}` |
+| 목록 응답 키 | `items` | `posts` |
+| 게시글 id | `id` | `postId` (Long, 숫자) |
+| 작성자 | `author` 오브젝트 | `authorNickName` 문자열 (대문자 N) |
+| 좋아요 여부 | `likedByMe` | `liked` |
+| 상세의 조합 | `combo` (매장 하나) | `order` (주문 상세와 같은 모양, 매장 목록) |
+| 댓글 페이지네이션 | `cursor`/`size` | 없다. 한 번에 다 준다 |
+| 댓글 작성 응답 | 본문 없음 | 갱신된 댓글 목록 전체 |
+| 작성 요청 | `data`(JSON) 파트 + `orderId` | 평평한 multipart 필드 + `checkoutId` |
+| 목록의 위치 필터 | `orderableOnly`/`lat`/`lng` | 폐기 (기능 자체가 없어졌다) |
 
 ## 공통
 
@@ -16,10 +27,14 @@
 | --- | --- |
 | Base | `{API_BASE_URL}/` — `.env` 의 `API_BASE_URL` |
 | 인증 헤더 | `Authorization: Bearer {accessToken}` |
-| 페이지네이션 | cursor 기반. `cursor`, `size` (기본 20) |
-| 시간 | `DateTime` |
+| 페이지네이션 | 목록만 cursor 기반. `cursor`, `size` (기본 20) |
+| 시간 | ISO-8601 + `+09:00` |
 
-`likedByMe` 는 인증 헤더가 없으면 `false`.
+`liked` 는 **토큰 기준**이다. 인증 헤더가 없으면 전부 `false` 로 온다.
+
+목록과 상세는 인증이 없어도 `200` 이다. 좋아요는 무인증이면 `401` 이다.
+
+회의(2026-08-04)에서 족보 등록·주문·리뷰를 **묶음 조합 단위**로 바꿨다. 상세의 `order` 블록이 매장 목록(`stores[]`)을 담아 그 결정과 맞는다. 함께 바뀐 것: 찜하기 기능 제거, 맵기 3단계 확정.
 
 ## 엔드포인트
 
@@ -32,6 +47,11 @@
 | 5 | USER | DELETE | `v1/posts/{postId}/likes` | 좋아요 취소 |
 | 6 | ALL | GET | `v1/posts/{postId}/comments` | 조합 댓글 목록 |
 | 7 | USER | POST | `v1/posts/{postId}/comments` | 댓글 작성 |
+| 8 | USER | PATCH | `v1/posts/{postId}` | 게시물 수정 — **형식 미확정** |
+| 9 | USER | DELETE | `v1/posts/{postId}` | 게시물 삭제 |
+| 10 | USER | DELETE | `v1/posts/{postId}/comments/{commentId}` | 댓글 삭제 |
+
+8~10 은 노션 명세에 없지만 서버에 있다. 아래 "명세에 없지만 서버에 있는 것" 참고.
 
 ---
 
@@ -71,24 +91,29 @@ GET v1/posts?sort=POPULAR&size=20
 
 ```json
 {
-  "items": [
+  "posts": [
     {
-      "id": 9001,
+      "postId": 9001,
       "title": "떵개 추천 두찜 로제 닭발",
       "thumbnailUrl": "https://cdn.example.com/orders/5001/source.jpg",
-      "storeName": "두찜-잠실새내점",
+      "authorNickName": "배고픈 요기요",
+      "createdAt": "2026-07-07T19:12:00+09:00",
       "likeCount": 12,
       "commentCount": 4,
-      "author": {
-        "nickname": "배고픈 요기요",
-        "profileImageUrl": "https://cdn.example.com/users/1/profile.jpg"
-      },
-      "createdAt": "2026-07-07T19:12:00"
+      "liked": false
     }
   ],
   "nextCursor": "eyJpZCI6OTAwMX0="
 }
 ```
+
+| 필드 | 타입 | 비고 |
+| --- | --- | --- |
+| `postId` | Long | **숫자다.** 앱 모델은 문자열 id 로 담는다 |
+| `thumbnailUrl` | String, nullable | 서버가 골라 준다. 앱은 다시 고르지 않는다 |
+| `authorNickName` | String | 대문자 `N`. id·프로필 사진은 안 온다 |
+| `liked` | Boolean | 토큰 기준. 무인증이면 `false` |
+| `nextCursor` | String, nullable | 없으면 마지막 페이지 |
 
 ### 비고
 
@@ -139,57 +164,52 @@ GET v1/posts/9001
 
 ```json
 {
-  "id": 9001,
+  "postId": 9001,
   "title": "떵개 추천 두찜 로제 닭발",
   "body": "분모자랑 치즈 꼭 추가하고 드세요\n맵찔이는 치즈 추가해서 먹어야 딱 적당히 매워서 너무 맛있어요",
   "imageUrls": [
     "https://cdn.example.com/posts/9001/1.jpg",
     "https://cdn.example.com/posts/9001/2.jpg"
   ],
-  "author": {
-    "id": 1,
-    "nickname": "배고픈 요기요",
-    "profileImageUrl": "https://cdn.example.com/users/1/profile.jpg"
-  },
-  "source": {
-    "platform": "YOUTUBE",
-    "url": "https://www.youtube.com/watch?v=abc123",
-    "thumbnailUrl": "https://cdn.example.com/orders/5001/source.jpg",
-    "title": "Sub) 로제닭발 먹방! 두찜에서 로제닭발과 중국당면, 치즈 추가 / 닭발 먹방 asmr 리얼사운드"
-  },
-  "combo": {
-    "store": {
-      "id": 3001,
-      "name": "두찜-잠실새내점",
-      "imageUrl": "https://cdn.example.com/stores/3001.jpg",
-      "rating": 4.2,
-      "reviewCount": 312
-    },
-    "items": [
-      {
-        "menuId": 7001,
-        "name": "[원조 K 로제] 로제 닭발",
-        "description": "순살, 보통맛, 분모자로 변경, 치즈몽땅 추가, [리뷰 이벤트] 납작당면 추가",
-        "imageUrl": "https://cdn.example.com/menus/7001.jpg",
-        "unitPrice": 20000,
-        "quantity": 1,
-        "selectedSpice": "MEDIUM",
-        "selectedOptions": [
-          { "name": "치즈몽땅 추가", "price": 2000 },
-          { "name": "납작당면 추가", "price": 1000 }
-        ],
-        "optionsPrice": 3000,
-        "lineTotal": 23000
-      }
-    ],
-    "itemsTotal": 23000,
-    "deliveryFee": 1500,
-    "payableTotal": 24500
-  },
+  "eatedAt": "2026-07-07T19:12:00+09:00",
   "likeCount": 12,
-  "likedByMe": false,
   "commentCount": 4,
-  "createdAt": "2026-07-07T19:12:00"
+  "liked": false,
+  "mine": true,
+  "order": {
+    "checkoutId": 5001,
+    "orderedAt": "2026-07-07T18:00:00+09:00",
+    "source": {
+      "platform": "YOUTUBE",
+      "url": "https://www.youtube.com/watch?v=abc123",
+      "thumbnailUrl": "https://cdn.example.com/orders/5001/source.jpg",
+      "title": "Sub) 로제닭발 먹방! 두찜에서 로제닭발과 중국당면, 치즈 추가"
+    },
+    "totalPrice": 23000,
+    "stores": [
+      {
+        "restaurantId": 201,
+        "restaurantName": "두찜-잠실새내점",
+        "deliveryFee": 3000,
+        "itemsTotal": 20000,
+        "subtotal": 23000,
+        "items": [
+          {
+            "menuId": 201001,
+            "menuName": "[원조 K 로제] 로제 닭발",
+            "menuImageUrl": "https://cdn.example.com/menus/201001.jpg",
+            "unitPrice": 16000,
+            "quantity": 1,
+            "selectedOptions": [
+              { "group": "토핑 추가", "name": "치즈몽땅", "price": 0 }
+            ],
+            "optionsPrice": 0,
+            "lineTotal": 16000
+          }
+        ]
+      }
+    ]
+  }
 }
 ```
 
@@ -198,17 +218,20 @@ GET v1/posts/9001
 | 필드 | 타입 | 비고 |
 | --- | --- | --- |
 | `imageUrls` | List\<String\> | 사용자가 올린 사진 (`post_image`) |
-| `source.platform` | Enum | `INSTAGRAM` \| `YOUTUBE` |
-| `source.url` | String | 영상 연결 화면으로 가는 링크 |
-| `source.thumbnailUrl` | String | 영상 썸네일 (`orders.source_thumbnail`) |
-| `combo.items[].description` | String | 주문 시점 스냅샷 |
-| `combo.items[].selectedSpice` | Enum, nullable | `NONE` \| `MEDIUM` \| `HOT` |
-| `combo.items[].selectedOptions` | List | `{ name: String, price: Integer }` |
-| `likedByMe` | Boolean | 인증 헤더가 없으면 `false` |
+| `eatedAt` | DateTime | **먹은 날.** 작성일(`createdAt`)은 오지 않는다 |
+| `liked` | Boolean | 토큰 기준 |
+| `mine` | Boolean | 내 글인지. 수정·삭제 노출을 이 값으로 가른다 |
+| `order` | Object | **주문 상세(`GET v1/orders/{checkoutId}`)와 같은 모양** |
+| `order.stores[].items[].selectedSpice` | Enum, nullable | `NONE` \| `MEDIUM` \| `HOT` |
+| `order.stores[].items[].selectedOptions` | List | `{ group, name, price }` — 고른 것만 |
+
+작성자가 오지 않는다. 화면의 작성자 줄은 값이 들어올 때까지 비어 있다 (확인 필요 항목).
+
+`order` 가 주문 상세와 같은 모양이라 앱은 `OrderDetail` 파싱을 그대로 다시 쓰고, 같은 변환으로 "나도 주문하기" 장바구니를 만든다. 파싱을 두 벌 두지 않는다.
 
 ### 비고
 
-댓글은 여기 안 담긴다. `GET v1/posts/{postId}/comments` 로 따로 받는다 — 댓글은 페이지네이션이 필요하고 글보다 자주 바뀌기 때문이다.
+댓글은 여기 안 담긴다. `GET v1/posts/{postId}/comments` 로 따로 받는다 — 글보다 자주 바뀌기 때문이다.
 
 영상 사진과 사용자 사진은 다른 것이다.
 
@@ -236,20 +259,20 @@ Authorization: Bearer {accessToken}
 Content-Type: multipart/form-data
 ```
 
-Part 1 — `data` (`application/json`)
+필드 (JSON 파트가 아니라 **평평한 form 필드**다)
 
 | 이름 | 타입 | 비고 |
 | --- | --- | --- |
-| `orderId` | Long | |
+| `checkoutId` | Long | 명세의 `orderId` 가 아니다 |
 | `title` | String | 최대 20자 |
 | `body` | String | 최대 400자 |
 
-Part 2 — `images` (file)
+`images` (file)
 
 | 항목 | 값 |
 | --- | --- |
 | 장수 | 0~5장 |
-| 형식 | jpg, png |
+| 형식 | jpg, jpeg, png, webp |
 | 크기 | 장당 최대 5MB |
 
 - 사용자가 직접 찍은 사진. 없으면 생략해도 된다.
@@ -258,13 +281,13 @@ Part 2 — `images` (file)
 
 ### 받지 않는 것
 
-`restaurantId` 를 받지 않는다. 주문 1건이 곧 가게 1곳이라 `orderId` 하나면 가게가 정해진다.
+`restaurantId` 를 받지 않는다. `checkoutId` 하나로 조합이 전부 정해진다.
 
-조합 내용을 보내지 않는다. `orderId` 만 보내면 서버가 `orders` 와 `order_item` 에서 읽어 붙인다. 메뉴·옵션·맵기·금액은 이미 주문 시점 스냅샷으로 저장되어 있다. 영상 링크·썸네일도 `orders` 에서 가져온다.
+조합 내용을 보내지 않는다. `checkoutId` 만 보내면 서버가 결제 스냅샷에서 읽어 붙인다. 메뉴·옵션·맵기·금액은 이미 주문 시점 스냅샷으로 저장되어 있다. 영상 링크·썸네일도 그쪽에서 가져온다.
 
 `userId` 를 받지 않는다. 인증에서 꺼낸다. 본문으로 받으면 남의 이름으로 글을 쓸 수 있다.
 
-엽떡 + 교촌을 한 번에 결제했으면 주문이 2건이니 글도 2건이다. 주문 내역에서 각각 `[족보 작성]` 을 누른다. 같은 `orderId` 로 두 번 쓰면 `409 CONFLICT`.
+한 결제로 글을 두 번 쓸 수 없다 — `UNIQUE (checkout_id)`. 가게가 여러 곳인 결제였으면 글 하나가 묶음 조합을 담는다.
 
 ### Request example
 
@@ -274,21 +297,19 @@ Authorization: Bearer {accessToken}
 Content-Type: multipart/form-data; boundary=----X
 
 ------X
-Content-Disposition: form-data; name="data"
-Content-Type: application/json
+Content-Disposition: form-data; name="checkoutId"
 
-{
-  "orderId": 5001,
-  "title": "분모자 넣은 엽떡 진짜 맛있음",
-  "body": "영상 보고 그대로 시켰는데 분모자가 신의 한 수였음. 오리지널로 시켜도 충분히 매운데 분모자랑 같이 먹으니 덜 자극적이고 좋았어요."
-}
+5001
+------X
+Content-Disposition: form-data; name="title"
+
+분모자 넣은 엽떡 진짜 맛있음
+------X
+Content-Disposition: form-data; name="body"
+
+영상 보고 그대로 시켰는데 분모자가 신의 한 수였음.
 ------X
 Content-Disposition: form-data; name="images"; filename="1.jpg"
-Content-Type: image/jpeg
-
-(binary)
-------X
-Content-Disposition: form-data; name="images"; filename="2.jpg"
 Content-Type: image/jpeg
 
 (binary)
@@ -304,18 +325,9 @@ files.forEach(f => fd.append("images", f));
 axios.post("/api/v1/posts", fd);
 ```
 
-스프링 쪽은 이렇게 받는다.
+`images` 는 없어도 된다. 사진 없이 글만 쓰는 경우가 있다.
 
-```java
-@PostMapping(consumes = MULTIPART_FORM_DATA_VALUE)
-@ResponseStatus(CREATED)
-PostCreateResponse create(
-    @AuthenticationPrincipal Long userId,
-    @Valid @RequestPart("data") PostCreateRequest data,
-    @RequestPart(value = "images", required = false) List<MultipartFile> images)
-```
-
-`images` 는 `required = false` 다. 사진 없이 글만 쓰는 경우가 있다. 5장 제한은 `@Size` 가 `List<MultipartFile>` 에 잘 걸리지 않으니 서비스 진입부에서 직접 센다.
+앱에서는 `ApiClient.multipart` 가 이 요청을 만든다. 헤더에 `Content-Type` 을 넣지 않는 것이 이 메서드가 [get]/[post] 와 따로 있는 이유다.
 
 ### Response
 
@@ -336,19 +348,19 @@ Location: /api/v1/posts/9012
 | 코드 | 조건 |
 | --- | --- |
 | `400` | `title`/`body` 가 비었거나 길이 초과, 사진 5장 초과 |
-| `404` | 그 `orderId` 가 없거나 내 주문이 아님 |
-| `409` | 같은 `orderId` 로 이미 쓴 글이 있음 |
+| `404` | 그 `checkoutId` 가 없거나 내 결제가 아님 |
+| `409` | 같은 `checkoutId` 로 이미 쓴 글이 있음 |
 
-`404` 를 쓴다. `403` 이 아니다 — 남의 주문 번호가 존재한다는 사실이 새면 안 된다.
+`404` 를 쓴다. `403` 이 아니다 — 남의 결제 번호가 존재한다는 사실이 새면 안 된다.
 
 ### 흐름
 
 ```
 주문내역 [족보 작성] 누름
-  → GET v1/orders/{orderId} 로 영상 썸네일·링크·주문한 메뉴를 미리 보여줌
+  → GET v1/orders/{checkoutId} 로 영상 썸네일·링크·주문한 메뉴를 미리 보여줌
   → 사용자는 제목·후기·사진만 입력
-  → POST v1/posts (multipart) 로 data(JSON) + images(파일) 를 한 번에 보냄
-  → 201 의 postId 로 상세 화면 이동
+  → POST v1/posts (multipart) 로 필드 + images(파일) 를 한 번에 보냄
+  → 201 의 postId 를 들고 주문내역으로 돌아가고, 토스트의 "보러가기" 로 그 글을 연다
 ```
 
 사진 업로드 API 를 따로 두지 않는다. 따로 빼면 글을 안 쓰고 나간 사진이 스토리지에 고아로 남고, 사진만 올라가고 글은 실패하는 상태가 생긴다. 한 요청 한 트랜잭션이면 그런 상태가 없다.
@@ -400,9 +412,11 @@ POST v1/posts/9001/likes
 ```json
 {
   "likeCount": 13,
-  "likedByMe": true
+  "liked": true
 }
 ```
+
+무인증으로 부르면 `401` 이다 (목록·상세와 다르다).
 
 이미 누른 상태에서 또 눌러도 `200` 을 낸다 (멱등성). 중복 삽입은 PK `(post_id, user_id)` 가 막아준다.
 
@@ -449,11 +463,11 @@ DELETE v1/posts/9001/likes
 ```json
 {
   "likeCount": 12,
-  "likedByMe": false
+  "liked": false
 }
 ```
 
-`likedByMe` 는 항상 `false`.
+`liked` 는 항상 `false`.
 
 안 누른 상태에서 취소해도 `200` 을 낸다 (멱등성). `post.like_count` 를 같이 `-1` 하되, 0 미만으로 내려가지 않게 한다.
 
@@ -489,16 +503,14 @@ GET v1/posts/9001/comments
 
 ```json
 {
-  "items": [
+  "comments": [
     {
-      "id": 4101,
-      "author": {
-        "id": 2,
-        "nickname": "배고픈 요기요",
-        "profileImageUrl": "https://cdn.example.com/users/2/profile.jpg"
-      },
-      "body": "ㅇㅈ 진짜 맛있어요 근데 전 순한맛도 살짝 매웠어서 본인이 진짜 맵찔이면 가게에 덜맵게 요청하는 거 추천",
-      "createdAt": "2026-07-07T20:03:00"
+      "commentId": 4101,
+      "authorId": 2,
+      "authorNickName": "배고픈 요기요",
+      "body": "ㅇㅈ 진짜 맛있어요 근데 전 순한맛도 살짝 매웠어서 가게에 덜맵게 요청하는 거 추천",
+      "createdAt": "2026-07-07T20:03:00+09:00",
+      "mine": false
     }
   ]
 }
@@ -552,7 +564,15 @@ POST v1/posts/9001/comments
 
 ### Response
 
-`201 CREATED`
+`201 CREATED` — **갱신된 댓글 목록 전체**를 6번과 같은 모양으로 준다.
+
+```json
+{ "comments": [ { "commentId": 4101, "...": "..." } ] }
+```
+
+서버가 매긴 id·작성시각이 이 응답에 들어 있어 목록을 다시 받지 않는다.
+
+`mine` 은 내가 쓴 댓글인지. 삭제 아이콘을 이 값으로 가른다.
 
 ### 테이블
 
@@ -585,13 +605,34 @@ localStorage 가 없다. 장바구니는 `AppFlow` 가 메모리로 들고 있�
 
 ---
 
+## 명세에 없지만 서버에 있는 것
+
+시안 922:2734 의 수정·삭제 화면에 필요한 세 경로가 서버에 이미 있다. 남의 글로 불러 `403` 을 받는 것으로 존재를 확인했다 (2026-08-09).
+
+| 경로 | 확인한 응답 | 상태 |
+| --- | --- | --- |
+| `PATCH v1/posts/{postId}` | `415` (라우팅은 됨, Content-Type 불일치) | **형식 대기 중** |
+| `DELETE v1/posts/{postId}` | `403` (남의 글이라 거부 = 존재) | 쓸 수 있다 |
+| `DELETE v1/posts/{postId}/comments/{commentId}` | `403` (같음) | 쓸 수 있다 |
+
+수정·삭제는 내 것에만 열어 준다. 상세의 `mine`, 댓글의 `mine` 으로 가른다 — 남의 것에 버튼을 두면 반드시 실패하는 버튼이 된다.
+
+앱은 `PATCH` 를 `{title, body}` JSON 으로 보내 둔 상태다. 형식이 정해지면 `MukbangApi.updatePost` 한 곳만 고친다.
+
+`GET v1/users/me/posts` 는 아직 미구현이다 (`404`). 내가 쓴 글 목록 화면은 그 경로가 열린 뒤에 붙인다.
+
+---
+
 ## 확인 필요 항목
 
 | 항목 | 내용 |
 | --- | --- |
-| 목록의 본문 | 1번 응답에 `body`(또는 미리보기)가 없다. Figma 목록 카드는 본문 2줄을 보여준다 |
+| 목록의 본문 | 1번 응답에 `body`(또는 미리보기)가 없다. Figma 목록 카드는 본문 2줄을 보여준다. 앱은 키가 붙는 즉시 읽도록 해 뒀다 |
+| 상세의 작성자·작성일 | 2번 응답에 작성자(`authorNickName`)와 작성일이 없다. 화면은 작성자 줄과 날짜를 보여주는데, 지금은 날짜를 `eatedAt`(먹은 날)으로 대신 쓰고 작성자 줄은 비워 둔다 |
+| `PATCH v1/posts/{id}` 형식 | Content-Type 과, 제목·본문만인지 사진도 교체 가능한지 |
+| `GET v1/users/me/posts` | 미구현(`404`). 내가 쓴 글 목록 |
 | ~~상세의 `orderableHere`~~ | **닫힘.** "내 위치에서 가능한 조합만" 기능이 폐기됐다 (2026-08-09). 필드·쿼리·필터를 앱에서 모두 지웠다 |
 | ~~`selectedSpice` 3단계~~ | **닫힘.** 회의(2026-08-04)에서 맵기를 3단계(`NONE`/`MEDIUM`/`HOT`)로 통일했다. 시안의 "매운맛 5단계" 옵션 그룹은 없애고, `spiceAdjustable` 이 true 인 메뉴에만 3버튼을 그린다 |
-| 묶음 조합 응답 모양 | 게시글의 `stores[]` 필드명·구조 확정 필요. 앱은 주문 상세와 같은 모양을 가정한다 |
-| 게시물 수정·삭제, 댓글 삭제 | **필요하다.** 시안 922:2734 에 화면이 다 있다 — 게시물 헤더 점 아이콘 → 수정하기/삭제하기, 댓글 점 아이콘 → 삭제하기, 확인 alert 2종, "족보 수정" 화면(제목 20자·본문 400자). 엔드포인트가 없어 앱은 `MockPostRepository` 로만 돈다. 필요한 것: 게시물 수정(제목·본문만, 조합은 결제 스냅샷이라 불변), 게시물 삭제, 댓글 삭제 |
+| ~~묶음 조합 응답 모양~~ | **닫힘.** 상세의 `order` 블록이 주문 상세와 같은 모양이다 (2026-08-09 확인) |
+| ~~게시물 수정·삭제, 댓글 삭제~~ | **경로 확인됨.** 위 "명세에 없지만 서버에 있는 것" 참고. 수정 형식만 남았다 |
 | 대댓글 | 시안에 1단계 댓글만 있다. 필요 여부 확정 필요 |

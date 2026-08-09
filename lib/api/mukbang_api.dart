@@ -7,6 +7,7 @@ library;
 import '../models/analysis_source.dart';
 import '../models/combo.dart';
 import '../models/order.dart';
+import '../models/post.dart';
 import '../models/preference.dart';
 import '../services/gemini_extractor.dart';
 import 'api_client.dart';
@@ -86,4 +87,104 @@ class MukbangApi {
     final json = await client.post('v1/orders', body: cart.toOrderJson());
     return OrderReceipt.fromJson(json);
   }
+
+  // ── 요기족보 ───────────────────────────────────────────────────────────────
+  // 2026-08-09 에 서버로 직접 확인한 계약이다. 노션 명세와 다른 곳이 있으면
+  // 이쪽이 기준이다 (`docs/api-yogijokbo.md` 에 차이를 적어 뒀다).
+
+  /// `GET v1/posts` — 조합 목록. **인증이 없어도 200** 이다. 토큰이 없으면
+  /// `liked` 가 전부 false 로 온다.
+  Future<CursorPage<YogijokboPost>> posts({
+    required PostSort sort,
+    String? cursor,
+    int size = 20,
+  }) async {
+    final json = await client.get('v1/posts', query: {
+      'sort': sort.wire,
+      'cursor': cursor,
+      'size': size,
+    });
+    return CursorPage(
+      items: [
+        for (final e in (json['posts'] ?? const []) as List)
+          if (e is Map<String, dynamic>) YogijokboPost.fromListJson(e),
+      ],
+      // 커서는 불투명 문자열이다. 숫자로 와도 그대로 되돌려 보낼 수 있게 문자열로 받는다.
+      nextCursor: json['nextCursor'] == null ? null : '${json['nextCursor']}',
+    );
+  }
+
+  /// `GET v1/posts/{postId}` — 게시글 상세. 조합이 `order` 블록으로 온다.
+  Future<YogijokboPost> post(String postId) async {
+    final json = await client.get('v1/posts/$postId');
+    return YogijokboPost.fromDetailJson(json);
+  }
+
+  /// `GET v1/posts/{postId}/comments` — `{ comments: [...] }`. 커서가 없다.
+  Future<List<PostComment>> postComments(String postId) async {
+    final json = await client.get('v1/posts/$postId/comments');
+    return _comments(json);
+  }
+
+  /// `POST v1/posts/{postId}/comments` — 201. **갱신된 댓글 목록 전체**를 준다.
+  Future<List<PostComment>> createPostComment(String postId, String body) async {
+    final json = await client.post('v1/posts/$postId/comments', body: {'body': body});
+    return _comments(json);
+  }
+
+  /// `POST v1/posts/{postId}/likes` — 멱등. 변경 후 카운트를 준다.
+  Future<({int likeCount, bool likedByMe})> likePost(String postId) async =>
+      _like(await client.post('v1/posts/$postId/likes'));
+
+  /// `DELETE v1/posts/{postId}/likes` — 멱등. `liked` 는 항상 false.
+  Future<({int likeCount, bool likedByMe})> unlikePost(String postId) async =>
+      _like(await client.delete('v1/posts/$postId/likes'));
+
+  /// `POST v1/posts` — **multipart/form-data**. JSON 이 아니다.
+  ///
+  /// `restaurantId` 를 받지 않는다. `checkoutId` 하나로 조합이 전부 정해진다.
+  /// 한 결제로 두 번 쓰면 `UNIQUE(checkout_id)` 가 막는다.
+  Future<String> createPost({
+    required int checkoutId,
+    required String title,
+    required String body,
+    List<String> imagePaths = const [],
+  }) async {
+    final json = await client.multipart(
+      'v1/posts',
+      fields: {'checkoutId': '$checkoutId', 'title': title, 'body': body},
+      filePaths: imagePaths,
+    );
+    return '${json['postId'] ?? ''}';
+  }
+
+  /// `PATCH v1/posts/{postId}` — 제목·본문 수정.
+  ///
+  /// **형식 미확정.** 라우팅은 되지만 JSON 으로 보내면 415 가 온다 (2026-08-09).
+  /// 사진도 함께 교체하는지, multipart 인지 백엔드 회신 대기 중이다. 형식이 오면
+  /// 이 한 줄만 고친다.
+  Future<void> updatePost(
+    String postId, {
+    required String title,
+    required String body,
+  }) =>
+      client.patch('v1/posts/$postId', body: {'title': title, 'body': body});
+
+  /// `DELETE v1/posts/{postId}` — 내 글만. 남의 글은 403.
+  Future<void> deletePost(String postId) => client.delete('v1/posts/$postId');
+
+  /// `DELETE v1/posts/{postId}/comments/{commentId}` — 내 댓글만. 남의 댓글은 403.
+  Future<void> deletePostComment(String postId, String commentId) =>
+      client.delete('v1/posts/$postId/comments/$commentId');
+
+  static List<PostComment> _comments(Map<String, dynamic> json) => [
+        for (final e in (json['comments'] ?? const []) as List)
+          if (e is Map<String, dynamic>) PostComment.fromJson(e),
+      ];
+
+  /// 좋아요 응답은 `liked` 로 온다. 앱 모델의 이름은 `likedByMe` 다.
+  static ({int likeCount, bool likedByMe}) _like(Map<String, dynamic> json) => (
+        likeCount: ((json['likeCount'] ?? 0) as num).toInt(),
+        likedByMe: json['liked'] == true,
+      );
 }

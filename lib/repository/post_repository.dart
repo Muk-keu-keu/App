@@ -1,10 +1,12 @@
+import '../api/api_client.dart';
+import '../api/mukbang_api.dart';
 import '../models/combo.dart';
 import '../models/post.dart';
 
 /// 요기족보 데이터 소스.
 ///
-/// 백엔드가 아직 없어 [MockPostRepository] 가 Figma 시안의 데이터를 그대로 돌려준다.
-/// 서버가 붙으면 이 구현체만 갈아끼우면 화면 코드는 그대로다.
+/// `.env` 에 `API_BASE_URL` 이 있으면 [ApiPostRepository], 없으면 시안 데이터를
+/// 돌려주는 [MockPostRepository] 가 꽂힌다. 화면 코드는 둘을 구분하지 않는다.
 /// 메서드는 `docs/api-yogijokbo.md` 의 엔드포인트와 1:1로 대응한다.
 abstract class PostRepository {
   /// 1. GET v1/posts
@@ -22,7 +24,7 @@ abstract class PostRepository {
   /// 조합 내용을 보내지 않는다. [checkoutId] 만 보내면 서버가 결제 스냅샷에서
   /// 읽어 붙인다. 가게가 여러 곳인 결제였으면 글도 묶음 조합으로 만들어진다.
   ///
-  /// 본문 키 이름은 `orderId` 다 — 명세 비고 "API 에 나가는 orderId 는 checkout_id 다".
+  /// 필드 이름은 `checkoutId` 다 (2026-08-09 서버 확인 — 명세의 `orderId` 가 아니다).
   Future<String> create({
     required int checkoutId,
     required String title,
@@ -41,13 +43,16 @@ abstract class PostRepository {
   /// 커서가 없다. 서버가 한 글의 댓글을 한 번에 다 준다 (`{ comments: [...] }`).
   Future<List<PostComment>> comments(String postId);
 
-  /// 7. POST v1/posts/{postId}/comments — 201 CREATED, 본문 없음.
-  Future<void> addComment(String postId, String body);
+  /// 7. POST v1/posts/{postId}/comments — 201.
+  ///
+  /// **갱신된 댓글 목록 전체를 돌려준다** (2026-08-09 서버 확인). 서버가 매긴
+  /// id·작성시각을 알기 위해 목록을 다시 받을 필요가 없다.
+  Future<List<PostComment>> addComment(String postId, String body);
 
-  // ── 명세에 없는 것들 ────────────────────────────────────────────────────────
-  // 아래 셋은 시안(922:2734)에 화면이 있는데 `docs/api-yogijokbo.md` 에는
-  // 엔드포인트가 없다. 그 문서의 확인 필요 항목 "대댓글·수정·삭제" 가 아직 열려
-  // 있다. 경로가 정해지면 Api 구현만 채우면 되도록 자리를 먼저 만들어 둔다.
+  // ── 명세에 없지만 서버에 있는 것들 ──────────────────────────────────────────
+  // 시안(922:2734)에 화면이 다 있는데 노션 명세에는 엔드포인트가 없다. 서버에는
+  // 있다 — 남의 글로 불러 403 을 받는 것으로 확인했다 (2026-08-09).
+  // 수정만 형식(Content-Type)이 미확정이라 백엔드 회신 대기 중이다.
 
   /// 족보 수정. 제목과 본문만 고친다 — 조합은 결제 스냅샷이라 바뀌지 않는다.
   Future<void> updatePost(
@@ -61,6 +66,80 @@ abstract class PostRepository {
 
   /// 댓글 삭제. 되돌릴 수 없다.
   Future<void> deleteComment(String postId, String commentId);
+}
+
+/// 실제 서버를 쓰는 구현. 판단 없이 [MukbangApi] 로 넘긴다.
+class ApiPostRepository implements PostRepository {
+  const ApiPostRepository(this._api);
+
+  final MukbangApi _api;
+
+  @override
+  Future<CursorPage<YogijokboPost>> list({
+    required PostSort sort,
+    String? cursor,
+    int size = 20,
+  }) =>
+      _api.posts(sort: sort, cursor: cursor, size: size);
+
+  /// 없는 글이면 404 다. 화면은 "글이 사라졌다" 를 null 로 다룬다.
+  @override
+  Future<YogijokboPost?> detail(String postId) async {
+    try {
+      return await _api.post(postId);
+    } on ApiException catch (e) {
+      if (e.isNotFound) return null;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<String> create({
+    required int checkoutId,
+    required String title,
+    required String body,
+    List<String> imagePaths = const [],
+  }) =>
+      _api.createPost(
+        checkoutId: checkoutId,
+        title: title,
+        body: body,
+        imagePaths: imagePaths,
+      );
+
+  @override
+  Future<({int likeCount, bool likedByMe})> like(String postId) =>
+      _api.likePost(postId);
+
+  @override
+  Future<({int likeCount, bool likedByMe})> unlike(String postId) =>
+      _api.unlikePost(postId);
+
+  @override
+  Future<List<PostComment>> comments(String postId) => _api.postComments(postId);
+
+  /// 작성 응답이 갱신된 목록을 준다. 비어 있으면 응답 모양이 바뀐 것이므로
+  /// 목록을 다시 받는다 — 방금 쓴 댓글이 화면에서 사라지는 것보다 낫다.
+  @override
+  Future<List<PostComment>> addComment(String postId, String body) async {
+    final updated = await _api.createPostComment(postId, body);
+    return updated.isEmpty ? _api.postComments(postId) : updated;
+  }
+
+  @override
+  Future<void> updatePost(
+    String postId, {
+    required String title,
+    required String body,
+  }) =>
+      _api.updatePost(postId, title: title, body: body);
+
+  @override
+  Future<void> deletePost(String postId) => _api.deletePost(postId);
+
+  @override
+  Future<void> deleteComment(String postId, String commentId) =>
+      _api.deletePostComment(postId, commentId);
 }
 
 class MockPostRepository implements PostRepository {
@@ -133,8 +212,9 @@ class MockPostRepository implements PostRepository {
     return [...(_comments[postId] ??= _sampleComments(postId))];
   }
 
+  /// 서버처럼 갱신된 목록 전체를 돌려준다.
   @override
-  Future<void> addComment(String postId, String body) async {
+  Future<List<PostComment>> addComment(String postId, String body) async {
     await _wait;
     final list = _comments[postId] ??= _sampleComments(postId);
     list.add(
@@ -144,11 +224,13 @@ class MockPostRepository implements PostRepository {
         body: body,
         // createdAt 은 호출 시각. 목록 정렬용이라 실제 시각이 필요하다.
         createdAt: DateTime.now(),
+        mine: true,
       ),
     );
     for (final post in _posts) {
       if (post.id == postId) post.commentCount = list.length;
     }
+    return [...list];
   }
 
   @override
@@ -226,6 +308,7 @@ class MockPostRepository implements PostRepository {
       imagePaths: imagePaths,
       source: template.source,
       commentCount: 0,
+      mine: true,
     );
     _posts.insert(0, post);
     return post.id;
@@ -235,6 +318,9 @@ class MockPostRepository implements PostRepository {
   // Figma "요기족보" 섹션의 홈 목록·조합 상세·주문하기 화면에 나오는 값 그대로다.
   // 첫 글은 매장 하나, 두 번째 글은 **매장 두 곳**이다 — 회의(2026-08-04)에서 족보를
   // 묶음 조합 단위로 바꿨으므로, 목록·상세·주문 화면이 둘 다 그려지는지 봐야 한다.
+  //
+  // 글과 댓글을 모두 `mine: true` 로 둔다. 시연에서 수정·삭제 화면(922:2734)까지
+  // 보여줘야 하기 때문이다. 서버가 붙으면 실제 소유 여부가 내려온다.
 
   static const _author1 = PostAuthor(id: 'user_01', nickname: '배고픈 요기요');
   static const _author2 = PostAuthor(id: 'user_02', nickname: '문복희팬');
@@ -259,6 +345,7 @@ class MockPostRepository implements PostRepository {
           ),
           likeCount: 12,
           commentCount: 4,
+          mine: true,
           // 로제 닭발 16,000 + 치즈볼 2,000×2 = 음식값 20,000,
           // 배달비 3,000 을 더해 결제 23,000.
           stores: [
@@ -322,6 +409,7 @@ class MockPostRepository implements PostRepository {
           ),
           likeCount: 32,
           commentCount: 9,
+          mine: true,
           // 매장 두 곳 조합. 배달비가 2,500 + 2,000 으로 두 번 붙는다.
           stores: [
             StoreCart(
@@ -389,24 +477,28 @@ class MockPostRepository implements PostRepository {
         author: const PostAuthor(id: 'u3', nickname: '닭발러버'),
         body: '분모자 진짜 필수인가요? 중국당면이 더 맛있을 것 같은데',
         createdAt: DateTime(2026, 7, 7, 13, 2),
+        mine: true,
       ),
       PostComment(
         id: 'c2',
         author: _author1,
         body: '둘 다 맛있는데 분모자가 소스 더 잘 배어요!',
         createdAt: DateTime(2026, 7, 7, 13, 20),
+        mine: true,
       ),
       PostComment(
         id: 'c3',
         author: const PostAuthor(id: 'u4', nickname: '맵찔이탈출'),
         body: '치즈 추가 꿀팁 감사합니다 저도 시켜봤어요',
         createdAt: DateTime(2026, 7, 7, 18, 41),
+        mine: true,
       ),
       PostComment(
         id: 'c4',
         author: const PostAuthor(id: 'u5', nickname: '주먹밥장인'),
         body: '주먹밥 같이 먹으니까 진짜 다르네요',
         createdAt: DateTime(2026, 7, 8, 9, 15),
+        mine: true,
       ),
     ];
   }

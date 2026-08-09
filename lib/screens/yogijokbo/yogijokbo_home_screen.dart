@@ -294,7 +294,7 @@ class _PostList extends StatelessWidget {
             const _FilterRow(),
             const SizedBox(height: 12),
             if (posts.isEmpty)
-              const _EmptyList()
+              _EmptyList(failed: context.watch<AppFlow>().postsLoadFailed)
             else
               for (var i = 0; i < posts.length; i++) ...[
                 if (i > 0) const DsDivider(color: AppColors.gray300),
@@ -407,7 +407,10 @@ class _SortSheet extends StatelessWidget {
 }
 
 class _EmptyList extends StatelessWidget {
-  const _EmptyList();
+  const _EmptyList({this.failed = false});
+
+  /// 목록을 못 받아온 것인지. 빈 목록과 문구가 달라야 한다.
+  final bool failed;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -419,7 +422,9 @@ class _EmptyList extends StatelessWidget {
             Image.asset('assets/images/platter.png', width: 100, height: 100),
             const SizedBox(height: 16),
             Text(
-              '아직 올라온 조합이 없어요',
+              failed
+                  ? '조합을 불러오지 못했어요\n잠시 후 다시 시도해 주세요'
+                  : '아직 올라온 조합이 없어요',
               textAlign: TextAlign.center,
               style: AppText.body2(color: AppColors.gray700),
             ),

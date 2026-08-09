@@ -5,22 +5,41 @@
 /// 필드를 고치면 그 문서도 함께 고친다 — 백엔드와의 계약이다.
 ///
 /// 회의(2026-08-04)에서 족보 등록·주문·리뷰를 **묶음 조합 단위**로 바꿨다. 그래서
-/// 게시글이 매장 하나(`combo`)가 아니라 매장 목록(`stores`)을 갖는다. 주문 상세와
-/// 같은 모양이라 "나도 주문하기" 가 변환 없이 장바구니로 넘긴다.
+/// 게시글이 매장 하나(`combo`)가 아니라 매장 목록(`stores`)을 갖는다.
 ///
-/// 다만 요기족보 응답의 정확한 `stores` 필드명은 아직 확정 명세에 없다
-/// (`docs/api-spec.md` 확인 필요 항목). 주문 상세와 같은 모양을 가정한다.
+/// 상세의 조합은 `order` 블록으로 오고 **주문 상세(`GET v1/orders/{id}`)와 같은
+/// 모양**이다 (2026-08-09 서버 확인). 그래서 [OrderDetail] 로 읽고 장바구니로
+/// 되돌린다 — 같은 파싱을 두 벌 두지 않는다.
 library;
 
 import 'combo.dart';
+import 'order.dart';
 
-/// 게시글 작성자. API `author` 객체.
+/// 게시글 작성자.
+///
+/// 서버는 작성자를 **닉네임 한 줄로만** 준다 (`authorNickName` — 대문자 N).
+/// id·프로필 사진이 없어 원형 자리는 첫 글자로 채운다.
 class PostAuthor {
   const PostAuthor({
     required this.id,
     required this.nickname,
     this.profileImageUrl,
   });
+
+  /// 목록·상세·댓글이 모두 `authorNickName` 을 쓴다. 예전 명세의 `author` 객체가
+  /// 오는 경우도 있어 둘 다 받는다.
+  factory PostAuthor.fromWire(Map<String, dynamic> json) {
+    final nested = json['author'];
+    final nickname = json['authorNickName'] ??
+        json['authorNickname'] ??
+        (nested is Map<String, dynamic> ? nested['nickname'] : null);
+    return PostAuthor(
+      id: '${json['authorId'] ?? (nested is Map<String, dynamic> ? nested['id'] ?? '' : '')}',
+      nickname: '${nickname ?? ''}',
+      profileImageUrl:
+          nested is Map<String, dynamic> ? nested['profileImageUrl'] as String? : null,
+    );
+  }
 
   final String id;
   final String nickname;
@@ -87,12 +106,26 @@ class PostComment {
     required this.author,
     required this.body,
     required this.createdAt,
+    this.mine = false,
   });
 
   final String id;
   final PostAuthor author;
   final String body;
   final DateTime createdAt;
+
+  /// 내가 쓴 댓글인지. 삭제는 내 댓글에만 열어 준다 — 남의 댓글을 지우려 하면
+  /// 서버가 403 을 준다.
+  final bool mine;
+
+  factory PostComment.fromJson(Map<String, dynamic> json) => PostComment(
+        id: '${json['commentId'] ?? json['id'] ?? ''}',
+        author: PostAuthor.fromWire(json),
+        body: '${json['body'] ?? ''}',
+        createdAt:
+            DateTime.tryParse('${json['createdAt'] ?? ''}') ?? DateTime(2026),
+        mine: json['mine'] == true,
+      );
 }
 
 class YogijokboPost {
@@ -109,7 +142,69 @@ class YogijokboPost {
     this.likeCount = 0,
     this.likedByMe = false,
     this.commentCount = 0,
+    this.mine = false,
+    this.listThumbnailUrl,
   });
+
+  /// 목록 항목. `GET v1/posts` 의 `posts[]`.
+  ///
+  /// 목록은 조합도 본문도 내려주지 않는다 — 메뉴·옵션·금액은 상세에서 받는다.
+  /// 카드에 필요한 만큼만 채워진 객체다.
+  factory YogijokboPost.fromListJson(Map<String, dynamic> json) => YogijokboPost(
+        id: '${json['postId'] ?? json['id'] ?? ''}',
+        title: '${json['title'] ?? ''}',
+        // 목록 응답에 본문이 없다 (`docs/api-yogijokbo.md` 확인 필요 항목).
+        // 값이 붙으면 그대로 읽히도록 키는 미리 본다.
+        body: '${json['body'] ?? ''}',
+        author: PostAuthor.fromWire(json),
+        stores: const [],
+        createdAt:
+            DateTime.tryParse('${json['createdAt'] ?? ''}') ?? DateTime(2026),
+        likeCount: ((json['likeCount'] ?? 0) as num).toInt(),
+        likedByMe: json['liked'] == true,
+        commentCount: ((json['commentCount'] ?? 0) as num).toInt(),
+        mine: json['mine'] == true,
+        listThumbnailUrl: json['thumbnailUrl'] as String?,
+      );
+
+  /// 게시글 상세. `GET v1/posts/{postId}`.
+  ///
+  /// 조합은 `order` 블록에 주문 상세와 같은 모양으로 온다. 그 파싱을 다시 쓰고,
+  /// 장바구니로 되돌린 결과를 스냅샷으로 들고 있는다.
+  factory YogijokboPost.fromDetailJson(Map<String, dynamic> json) {
+    final order = json['order'] is Map<String, dynamic>
+        ? OrderDetail.fromJson(json['order'] as Map<String, dynamic>)
+        : null;
+    final source = order?.source;
+
+    return YogijokboPost(
+      id: '${json['postId'] ?? json['id'] ?? ''}',
+      title: '${json['title'] ?? ''}',
+      body: '${json['body'] ?? ''}',
+      author: PostAuthor.fromWire(json),
+      stores: order == null ? const [] : Cart.fromOrderDetail(order).stores,
+      // 상세는 작성일 대신 **먹은 날**(`eatedAt`)을 준다. 화면의 날짜 줄이 그 값이다.
+      // 작성일이 필요해지면 서버에 `createdAt` 을 요청해야 한다.
+      createdAt: DateTime.tryParse('${json['eatedAt'] ?? json['createdAt'] ?? ''}') ??
+          order?.orderedAt ??
+          DateTime(2026),
+      imageUrls: [for (final e in (json['imageUrls'] ?? const []) as List) '$e'],
+      source: source == null
+          ? null
+          : PostSource(
+              platform: source.platform == SourceKind.instagram
+                  ? PostPlatform.instagram
+                  : PostPlatform.youtube,
+              url: source.url,
+              title: source.title,
+              thumbnailUrl: source.thumbnailUrl,
+            ),
+      likeCount: ((json['likeCount'] ?? 0) as num).toInt(),
+      likedByMe: json['liked'] == true,
+      commentCount: ((json['commentCount'] ?? 0) as num).toInt(),
+      mine: json['mine'] == true,
+    );
+  }
 
   final String id;
 
@@ -140,10 +235,22 @@ class YogijokboPost {
   bool likedByMe;
   int commentCount;
 
-  /// 목록 카드에 쓰는 대표 이미지. 명세는 영상 썸네일을 먼저 쓰고, 없으면
-  /// 사용자가 올린 첫 사진을 쓴다 (1번 비고).
+  /// 내 글인지. 수정·삭제는 내 글에만 열어 준다 — 남의 글을 고치려 하면 서버가
+  /// 403 을 준다. 목록·상세가 모두 내려준다.
+  final bool mine;
+
+  /// 목록이 직접 내려주는 대표 이미지. 상세에는 없다.
+  ///
+  /// 서버가 영상 썸네일 → 사용자 사진 → 첫 메뉴 사진 순으로 골라 준다 (1번 비고).
+  /// 그 판단을 앱이 다시 하지 않는다.
+  final String? listThumbnailUrl;
+
+  /// 목록 카드에 쓰는 대표 이미지. 목록이 골라 준 값이 있으면 그것을 쓰고,
+  /// 상세에서는 영상 썸네일 → 사용자가 올린 첫 사진 순으로 고른다.
   String? get thumbnailUrl =>
-      source?.thumbnailUrl ?? (imageUrls.isEmpty ? null : imageUrls.first);
+      listThumbnailUrl ??
+      source?.thumbnailUrl ??
+      (imageUrls.isEmpty ? null : imageUrls.first);
   String get thumbnailPath =>
       imagePaths.isEmpty ? 'assets/images/store_dujjim.png' : imagePaths.first;
 
@@ -202,6 +309,8 @@ class YogijokboPost {
         likeCount: likeCount,
         likedByMe: likedByMe,
         commentCount: commentCount,
+        mine: mine,
+        listThumbnailUrl: listThumbnailUrl,
       );
 }
 
