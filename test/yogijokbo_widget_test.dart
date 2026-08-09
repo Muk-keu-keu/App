@@ -57,8 +57,9 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('요기족보'), findsWidgets);
-    expect(find.text('내 위치에서 가능한 조합만'), findsOneWidget);
     expect(find.text('떵개 추천 두찜 로제 닭발'), findsWidgets);
+    // 정렬 선택 줄. 왼쪽 위치 필터는 기능 폐기로 빠졌다.
+    expect(find.text('인기순'), findsWidgets);
     // 하단 내비 4탭
     expect(find.text('주문내역'), findsOneWidget);
     expect(find.text('마이요기요'), findsOneWidget);
@@ -144,23 +145,6 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('4,500원'), findsOneWidget); // 2,500 + 2,000
-  });
-
-  testWidgets('주문 불가 매장은 결제 버튼을 막는다', (tester) async {
-    final flow = newFlow();
-    await flow.openPost('post_02K3M'); // orderableHere: false
-    await flow.startReorder();
-    await pumpScreen(
-      tester,
-      CartScreen(title: '주문하기', unavailable: true, onBack: () {}),
-      flow,
-    );
-
-    expect(tester.takeException(), isNull);
-    // 시안의 버튼은 하나뿐이라, 막을 때는 바꿔 끼우지 않고 비활성으로 그린다.
-    final button = tester.widget<DsButton>(find.byType(DsButton));
-    expect(button.onPressed, isNull);
-    expect(find.text('지금 이 위치에서는 주문할 수 없는 조합이에요'), findsOneWidget);
   });
 
   testWidgets('족보 작성이 크래시 없이 그려지고 제목 없이는 공유할 수 없다', (tester) async {

@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mukbang_ttaradamgi/app_flow.dart';
 import 'package:mukbang_ttaradamgi/models/post.dart';
-import 'package:mukbang_ttaradamgi/models/user_location.dart';
 import 'package:mukbang_ttaradamgi/repository/post_repository.dart';
 import 'package:mukbang_ttaradamgi/services/location_service.dart';
 
@@ -13,12 +12,6 @@ class _NoLocation implements LocationService {
   Future<LocationResult> current() async =>
       const LocationResult.failed(LocationFailure.denied);
 }
-
-const _gangnam = UserLocation(
-  lat: 37.4979,
-  lng: 127.0276,
-  origin: LocationOrigin.gps,
-);
 
 void main() {
   AppFlow makeFlow() => AppFlow(
@@ -73,28 +66,6 @@ void main() {
       expect(page.items.first.createdAt.isAfter(page.items.last.createdAt), isTrue);
     });
 
-    test('내 위치에서 가능한 조합만 켜면 배달 불가 매장이 걸러진다', () async {
-      final repo = MockPostRepository();
-      final all = await repo.list(sort: PostSort.latest);
-      final filtered = await repo.list(
-        sort: PostSort.latest,
-        orderableOnly: true,
-        location: _gangnam,
-      );
-
-      expect(all.items.length, greaterThan(filtered.items.length));
-      expect(filtered.items.every((p) => p.orderableHere), isTrue);
-    });
-
-    test('위치가 없으면 필터를 무시하고 전체를 준다', () async {
-      // 빈 목록을 보여주는 것보다 낫다. 화면이 위치 설정을 따로 안내한다.
-      final repo = MockPostRepository();
-      final all = await repo.list(sort: PostSort.latest);
-      final noLocation = await repo.list(sort: PostSort.latest, orderableOnly: true);
-
-      expect(noLocation.items.length, all.items.length);
-    });
-
     test('정렬을 바꾸면 목록을 다시 불러온다', () async {
       final flow = makeFlow();
       await flow.openJokbo();
@@ -106,18 +77,6 @@ void main() {
       expect(flow.postSort, PostSort.latest);
       expect(flow.posts, isNotEmpty);
       expect(flow.postsLoading, isFalse);
-    });
-
-    test('위치 필터를 켜면 목록을 다시 불러온다', () async {
-      final flow = makeFlow();
-      await flow.openJokbo();
-      final before = flow.posts.length;
-
-      await flow.toggleOrderableOnly();
-
-      expect(flow.orderableOnly, isTrue);
-      // 위치가 없어 필터가 무시되므로 개수는 그대로다.
-      expect(flow.posts, hasLength(before));
     });
   });
 
@@ -231,16 +190,7 @@ void main() {
       expect(source['title'], contains('로제닭발'));
     });
 
-    test('배달 불가 매장이면 주문 불가로 표시한다', () async {
-      final flow = makeFlow();
-      await flow.openPost('post_02K3M'); // orderableHere: false
-      await flow.startReorder();
-
-      expect(flow.stage, AppStage.jokboOrder);
-      expect(flow.orderUnavailable, isTrue);
-    });
-
-    test('뒤로 가면 주문 불가 표시가 정리된다', () async {
+    test('뒤로 가면 상세로 돌아간다', () async {
       final flow = makeFlow();
       await flow.openPost('post_02K3M');
       await flow.startReorder();
@@ -248,7 +198,6 @@ void main() {
       flow.backToPostDetail();
 
       expect(flow.stage, AppStage.jokboDetail);
-      expect(flow.orderUnavailable, isFalse);
     });
   });
 

@@ -6,12 +6,11 @@ import '../../models/post.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../../widgets/ds.dart';
-import '../address_input_sheet.dart';
 import '../my_menu.dart';
 
 /// Figma "요기족보" (node 681:8066).
 ///
-/// 실시간 인기 조합 캐러셀 + 위치 필터 + 조합 목록 + 떠 있는 4탭 내비.
+/// 실시간 인기 조합 캐러셀 + 정렬 + 조합 목록 + 떠 있는 4탭 내비.
 class YogijokboHomeScreen extends StatelessWidget {
   const YogijokboHomeScreen({super.key});
 
@@ -320,6 +319,8 @@ class _PostList extends StatelessWidget {
       );
 }
 
+/// 목록 위 정렬 선택 줄. 오른쪽 정렬이다 — 왼쪽에 있던 "내 위치에서 가능한
+/// 조합만" 체크박스는 기능이 폐기돼 시안에서도 빠졌다.
 class _FilterRow extends StatelessWidget {
   const _FilterRow();
 
@@ -328,20 +329,8 @@ class _FilterRow extends StatelessWidget {
     final flow = context.watch<AppFlow>();
 
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        GestureDetector(
-          onTap: () => _onToggle(context, flow),
-          behavior: HitTestBehavior.opaque,
-          child: Row(
-            children: [
-              DsCheckbox(isOn: flow.orderableOnly),
-              const SizedBox(width: 8),
-              Text('내 위치에서 가능한 조합만',
-                  style: AppText.body2(color: AppColors.gray800)),
-            ],
-          ),
-        ),
         GestureDetector(
           onTap: () => _pickSort(context, flow),
           behavior: HitTestBehavior.opaque,
@@ -356,16 +345,6 @@ class _FilterRow extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  /// 위치가 없으면 걸러낼 근거가 없다. 체크만 켜고 아무 일도 안 일어나면
-  /// 고장으로 보이므로, 켜는 순간 주소 입력 시트를 띄워 위치를 받는다.
-  void _onToggle(BuildContext context, AppFlow flow) {
-    final willTurnOn = !flow.orderableOnly;
-    context.read<AppFlow>().toggleOrderableOnly();
-    if (willTurnOn && flow.location == null) {
-      AddressInputSheet.show(context);
-    }
   }
 
   Future<void> _pickSort(BuildContext context, AppFlow flow) async {
@@ -440,7 +419,7 @@ class _EmptyList extends StatelessWidget {
             Image.asset('assets/images/platter.png', width: 100, height: 100),
             const SizedBox(height: 16),
             Text(
-              '이 위치에서 주문할 수 있는 조합이 없어요',
+              '아직 올라온 조합이 없어요',
               textAlign: TextAlign.center,
               style: AppText.body2(color: AppColors.gray700),
             ),

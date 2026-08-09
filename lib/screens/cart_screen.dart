@@ -20,20 +20,16 @@ import 'menu_option_sheet.dart';
 ///
 /// 총액은 프론트가 `subtotal` 을 더해 그린다 — 명세가 전체 합계를 받지 않는다.
 /// "나도 주문하기" 도 이 화면을 쓴다. 남의 조합을 복사해 온 장바구니라 구조가 같고,
-/// 다른 점은 제목과 "지금 이 위치에서는 주문할 수 없다" 안내뿐이다.
+/// 다른 점은 제목과 돌아갈 곳뿐이다.
 class CartScreen extends StatelessWidget {
   const CartScreen({
     super.key,
     required this.onBack,
     this.title = '장바구니',
-    this.unavailable = false,
   });
 
   final VoidCallback onBack;
   final String title;
-
-  /// 게시글 스냅샷이 지금 위치에서 주문 불가일 때. 결제 버튼을 막는다.
-  final bool unavailable;
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +49,6 @@ class CartScreen extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 24),
                 children: [
                   if (cart.source != null) _VideoSection(cart: cart),
-                  if (unavailable) const _UnavailableNotice(),
                   // 매장이 여러 곳이면 배달이 따로 간다는 걸 미리 알려 준다.
                   // 배달비가 두 번 붙는 이유를 결제 단계에서 처음 보면 놀란다.
                   if (cart.storeCount > 1) _MultiStoreNotice(count: cart.storeCount),
@@ -67,7 +62,6 @@ class CartScreen extends StatelessWidget {
           _CheckoutBar(
             cart: cart,
             isCheckingOut: flow.isCheckingOut,
-            unavailable: unavailable,
             onCheckout: () => context.read<AppFlow>().checkout(),
           ),
         ],
@@ -304,43 +298,15 @@ class _PaymentSummary extends StatelessWidget {
       );
 }
 
-/// 스냅샷이 지금은 주문할 수 없을 때. 시안에 없는 상태지만, 안내가 없으면
-/// 결제 버튼이 왜 안 눌리는지 알 수 없다.
-class _UnavailableNotice extends StatelessWidget {
-  const _UnavailableNotice();
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(top: 16),
-        color: Colors.white,
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          children: [
-            const Icon(Icons.error_outline, size: 20, color: AppColors.primary500),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                '지금 이 위치에서는 주문할 수 없는 조합이에요',
-                style: AppText.body2(color: AppColors.gray700),
-              ),
-            ),
-          ],
-        ),
-      );
-}
-
 class _CheckoutBar extends StatelessWidget {
   const _CheckoutBar({
     required this.cart,
     required this.isCheckingOut,
-    required this.unavailable,
     required this.onCheckout,
   });
 
   final Cart cart;
   final bool isCheckingOut;
-  final bool unavailable;
   final VoidCallback onCheckout;
 
   /// 기본 문구는 시안(681:8164)의 "결제하기" 다.
@@ -349,7 +315,6 @@ class _CheckoutBar extends StatelessWidget {
   /// 이유 없이 회색이면 어디를 고쳐야 하는지 알 수 없다.
   String get _label {
     if (isCheckingOut) return '주문 중...';
-    if (unavailable) return '이 위치에서는 주문할 수 없어요';
     if (cart.isEmpty) return '담은 메뉴가 없어요';
     final below = cart.storesBelowMinimum;
     if (below.isNotEmpty) return '${below.first.restaurant.name} ${below.first.shortfallText}';
@@ -376,9 +341,7 @@ class _CheckoutBar extends StatelessWidget {
           child: DsButton(
             label: _label,
             // 두 번 눌러 주문이 두 건 생기지 않게 진행 중에는 막는다.
-            onPressed: cart.canCheckout && !isCheckingOut && !unavailable
-                ? onCheckout
-                : null,
+            onPressed: cart.canCheckout && !isCheckingOut ? onCheckout : null,
           ),
         ),
       );

@@ -78,19 +78,6 @@ void main() {
     });
   });
 
-  group('2번 상세 — orderableHere 를 목록에서 물려받는다', () {
-    test('상세 응답에 없는 값을 목록에서 채운다', () async {
-      final repo = MockPostRepository(delay: Duration.zero);
-      final flow = makeFlow(repo);
-
-      await flow.loadPosts();
-      final blocked = flow.posts.firstWhere((p) => !p.orderableHere);
-
-      await flow.openPost(blocked.id);
-      expect(flow.selectedPost?.orderableHere, isFalse);
-    });
-  });
-
   group('3번 작성 — postId 만 돌려준다', () {
     test('조합을 보내지 않고 orderId 로 만든다', () async {
       final repo = MockPostRepository(delay: Duration.zero);
@@ -157,15 +144,13 @@ void main() {
       expect(flow.selectedPost?.commentCount, flow.postComments.length);
     });
 
-    test('cursor 로 이어 받는다', () async {
+    test('커서 없이 한 번에 다 준다', () async {
       final repo = MockPostRepository(delay: Duration.zero);
-      final first = await repo.comments('post_01H8X', size: 2);
+      final all = await repo.comments('post_01H8X');
 
-      expect(first.items, hasLength(2));
-      expect(first.nextCursor, isNotNull);
-
-      final next = await repo.comments('post_01H8X', cursor: first.nextCursor, size: 2);
-      expect(next.items.first.id, isNot(first.items.first.id));
+      expect(all, hasLength(4));
+      // created_at 오름차순 — 오래된 댓글이 위다.
+      expect(all.first.createdAt.isBefore(all.last.createdAt), isTrue);
     });
   });
 
@@ -195,17 +180,6 @@ void main() {
       );
     });
 
-    test('배달 불가 글은 주문 불가로 표시한다', () async {
-      final repo = MockPostRepository(delay: Duration.zero);
-      final flow = makeFlow(repo);
-      await flow.loadPosts();
-      final blocked = flow.posts.firstWhere((p) => !p.orderableHere);
-
-      await flow.openPost(blocked.id);
-      await flow.startReorder();
-
-      expect(flow.orderUnavailable, isTrue);
-    });
   });
 
   group('금액', () {

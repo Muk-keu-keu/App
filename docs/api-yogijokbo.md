@@ -54,16 +54,15 @@ Query Parameter
 | 이름 | 타입 | 비고 |
 | --- | --- | --- |
 | `sort` | Enum | `LATEST` \| `POPULAR` |
-| `orderableOnly` | Boolean | |
-| `lat` | Double | `orderableOnly=true` 시 필수 |
-| `lng` | Double | `orderableOnly=true` 시 필수 |
 | `cursor` | String | |
 | `size` | Integer | 기본 20 |
+
+좌표를 받지 않는다. `orderableOnly` / `lat` / `lng` 는 "내 위치에서 가능한 조합만" 기능과 함께 폐기됐다 (2026-08-09 디자이너·백엔드 확인).
 
 ### Request example
 
 ```
-GET v1/posts?sort=POPULAR&orderableOnly=true&lat=37.5445&lng=127.0557&size=20
+GET v1/posts?sort=POPULAR&size=20
 ```
 
 ### Response
@@ -84,7 +83,6 @@ GET v1/posts?sort=POPULAR&orderableOnly=true&lat=37.5445&lng=127.0557&size=20
         "nickname": "배고픈 요기요",
         "profileImageUrl": "https://cdn.example.com/users/1/profile.jpg"
       },
-      "orderableHere": true,
       "createdAt": "2026-07-07T19:12:00"
     }
   ],
@@ -102,8 +100,6 @@ GET v1/posts?sort=POPULAR&orderableOnly=true&lat=37.5445&lng=127.0557&size=20
 `thumbnailUrl` 은 영상 썸네일. `orders.source_thumbnail` 이 비어 있으면(프론트에서 og:image 를 못 긁은 경우) `post_image` 첫 장을, 그마저 없으면 첫 메뉴 사진을 대신 내려준다. 카드에 빈 칸이 생기지 않게 한다.
 
 목록에는 조합 전체를 내리지 않는다. 메뉴·옵션·금액은 상세에서 받는다.
-
-`orderableHere` 는 그 조합을 지금 내 위치에서 시킬 수 있는지. `lat`/`lng` 기준 반경 5km 안에 그 가게가 있으면 `true`. `orderableOnly=true` 면 `false` 인 것은 목록에서 아예 빠진다.
 
 `like_count` / `comment_count` 는 `post` 테이블의 비정규화 캐시다. 목록에서 글마다 COUNT 를 돌리면 느리므로, 좋아요·댓글이 달릴 때 같이 증감시킨다.
 
@@ -479,17 +475,12 @@ Path Variable
 | --- | --- |
 | `postId` | Long |
 
-Query Parameter
-
-| 이름 | 타입 | 비고 |
-| --- | --- | --- |
-| `cursor` | String | |
-| `size` | Integer | 기본 20 |
+쿼리 파라미터가 없다. 한 글의 댓글을 한 번에 다 준다 (2026-08-09 확인). 앱도 이어 받는 커서를 두지 않는다.
 
 ### Request example
 
 ```
-GET v1/posts/9001/comments?size=20
+GET v1/posts/9001/comments
 ```
 
 ### Response
@@ -509,18 +500,15 @@ GET v1/posts/9001/comments?size=20
       "body": "ㅇㅈ 진짜 맛있어요 근데 전 순한맛도 살짝 매웠어서 본인이 진짜 맵찔이면 가게에 덜맵게 요청하는 거 추천",
       "createdAt": "2026-07-07T20:03:00"
     }
-  ],
-  "nextCursor": null
+  ]
 }
 ```
-
-`nextCursor` 는 nullable.
 
 ### 비고
 
 정렬은 `created_at` 오름차순 (오래된 댓글이 위). 인덱스 `ix_pcmt_post (post_id, created_at)` 가 받친다.
 
-글 상세 응답에는 댓글을 담지 않는다. 페이지네이션이 필요하고 글보다 자주 바뀌기 때문이다.
+글 상세 응답에는 댓글을 담지 않는다. 글보다 자주 바뀌기 때문이다.
 
 Figma 엔 1단계 댓글만. 대댓글·수정·삭제 필요 여부 확인.
 
@@ -602,7 +590,7 @@ localStorage 가 없다. 장바구니는 `AppFlow` 가 메모리로 들고 있�
 | 항목 | 내용 |
 | --- | --- |
 | 목록의 본문 | 1번 응답에 `body`(또는 미리보기)가 없다. Figma 목록 카드는 본문 2줄을 보여준다 |
-| 상세의 `orderableHere` | 1번에만 있고 2번에는 없다. 상세에서 "나도 주문하기" 가능 여부를 판단할 근거가 없다 |
+| ~~상세의 `orderableHere`~~ | **닫힘.** "내 위치에서 가능한 조합만" 기능이 폐기됐다 (2026-08-09). 필드·쿼리·필터를 앱에서 모두 지웠다 |
 | ~~`selectedSpice` 3단계~~ | **닫힘.** 회의(2026-08-04)에서 맵기를 3단계(`NONE`/`MEDIUM`/`HOT`)로 통일했다. 시안의 "매운맛 5단계" 옵션 그룹은 없애고, `spiceAdjustable` 이 true 인 메뉴에만 3버튼을 그린다 |
 | 묶음 조합 응답 모양 | 게시글의 `stores[]` 필드명·구조 확정 필요. 앱은 주문 상세와 같은 모양을 가정한다 |
 | 게시물 수정·삭제, 댓글 삭제 | **필요하다.** 시안 922:2734 에 화면이 다 있다 — 게시물 헤더 점 아이콘 → 수정하기/삭제하기, 댓글 점 아이콘 → 삭제하기, 확인 alert 2종, "족보 수정" 화면(제목 20자·본문 400자). 엔드포인트가 없어 앱은 `MockPostRepository` 로만 돈다. 필요한 것: 게시물 수정(제목·본문만, 조합은 결제 스냅샷이라 불변), 게시물 삭제, 댓글 삭제 |

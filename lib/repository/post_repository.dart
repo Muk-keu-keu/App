@@ -1,6 +1,5 @@
 import '../models/combo.dart';
 import '../models/post.dart';
-import '../models/user_location.dart';
 
 /// 요기족보 데이터 소스.
 ///
@@ -9,11 +8,8 @@ import '../models/user_location.dart';
 /// 메서드는 `docs/api-yogijokbo.md` 의 엔드포인트와 1:1로 대응한다.
 abstract class PostRepository {
   /// 1. GET v1/posts
-  /// [orderableOnly] 가 true 면 좌표가 필요하다. 좌표가 없으면 필터를 무시한다.
   Future<CursorPage<YogijokboPost>> list({
     required PostSort sort,
-    bool orderableOnly = false,
-    UserLocation? location,
     String? cursor,
     int size = 20,
   });
@@ -41,11 +37,9 @@ abstract class PostRepository {
   Future<({int likeCount, bool likedByMe})> unlike(String postId);
 
   /// 6. GET v1/posts/{postId}/comments — created_at 오름차순.
-  Future<CursorPage<PostComment>> comments(
-    String postId, {
-    String? cursor,
-    int size = 20,
-  });
+  ///
+  /// 커서가 없다. 서버가 한 글의 댓글을 한 번에 다 준다 (`{ comments: [...] }`).
+  Future<List<PostComment>> comments(String postId);
 
   /// 7. POST v1/posts/{postId}/comments — 201 CREATED, 본문 없음.
   Future<void> addComment(String postId, String body);
@@ -95,20 +89,12 @@ class MockPostRepository implements PostRepository {
   @override
   Future<CursorPage<YogijokboPost>> list({
     required PostSort sort,
-    bool orderableOnly = false,
-    UserLocation? location,
     String? cursor,
     int size = 20,
   }) async {
     await _wait;
 
-    var result = [..._posts];
-
-    // 좌표가 없으면 걸러낼 근거가 없다. 필터를 무시하고 전체를 준다 —
-    // 빈 목록을 보여주는 것보다 낫고, 화면이 위치 설정을 따로 안내한다.
-    if (orderableOnly && location != null) {
-      result = result.where((p) => p.orderableHere).toList();
-    }
+    final result = [..._posts];
 
     result.sort(switch (sort) {
       PostSort.popular => (a, b) => b.likeCount.compareTo(a.likeCount),
@@ -142,21 +128,9 @@ class MockPostRepository implements PostRepository {
   /// 같은 이유로 리스트도 새로 만들어 준다. 저장소의 리스트를 그대로 주면
   /// 화면이 항목을 더할 때 저장소에도 함께 들어간다.
   @override
-  Future<CursorPage<PostComment>> comments(
-    String postId, {
-    String? cursor,
-    int size = 20,
-  }) async {
+  Future<List<PostComment>> comments(String postId) async {
     await _wait;
-    final all = _comments[postId] ??= _sampleComments(postId);
-    final start = int.tryParse(cursor ?? '') ?? 0;
-    final page = all.skip(start).take(size).toList();
-    final next = start + page.length;
-
-    return CursorPage(
-      items: page,
-      nextCursor: next < all.length ? '$next' : null,
-    );
+    return [...(_comments[postId] ??= _sampleComments(postId))];
   }
 
   @override
@@ -348,9 +322,6 @@ class MockPostRepository implements PostRepository {
           ),
           likeCount: 32,
           commentCount: 9,
-          // 배달 권역 밖 매장. "내 위치에서 가능한 조합만" 필터가 동작하는지 보이려면
-          // 목록에 걸러지는 항목이 하나는 있어야 한다.
-          orderableHere: false,
           // 매장 두 곳 조합. 배달비가 2,500 + 2,000 으로 두 번 붙는다.
           stores: [
             StoreCart(

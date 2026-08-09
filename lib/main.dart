@@ -160,7 +160,7 @@ class _RootScreenState extends State<RootScreen> {
         AppStage.jokboDetail => const PostDetailScreen(),
         // "나도 주문하기" 도 같은 장바구니 화면이다. 남의 조합을 복사해 온
         // 장바구니라 구조가 같고, 돌아갈 곳과 주문 불가 안내만 다르다.
-        AppStage.jokboOrder => _JokboOrderStage(),
+        AppStage.jokboOrder => const _JokboOrderStage(),
         AppStage.jokboCompose => const PostComposeScreen(),
         AppStage.jokboEdit => const PostEditScreen(),
       };
@@ -176,10 +176,11 @@ class _CartStage extends StatelessWidget {
 
 /// 요기족보 "나도 주문하기" 로 온 장바구니.
 class _JokboOrderStage extends StatelessWidget {
+  const _JokboOrderStage();
+
   @override
   Widget build(BuildContext context) => CartScreen(
         title: '주문하기',
-        unavailable: context.watch<AppFlow>().orderUnavailable,
         onBack: () => context.read<AppFlow>().backToPostDetail(),
       );
 }

@@ -344,8 +344,8 @@ class AppFlow extends ChangeNotifier {
 
   /// 인증이 끝나고 화면을 홈으로 보낸다.
   ///
-  /// 곧바로 위치를 1회 수집한다. 좌표를 쓰는 화면(요기족보 목록의 "내 위치에서 가능한
-  /// 조합만")에 도달했을 때 이미 준비돼 있어야 흐름이 끊기지 않는다.
+  /// 곧바로 위치를 1회 수집한다. 배달 주소가 필요한 화면에 도달했을 때 이미
+  /// 준비돼 있어야 흐름이 끊기지 않는다.
   void completeLogin() {
     _setStage(AppStage.yogiyoHome);
     refreshLocation();
@@ -982,17 +982,8 @@ class AppFlow extends ChangeNotifier {
 
   PostSort postSort = PostSort.popular;
 
-  /// "내 위치에서 가능한 조합만" 체크박스.
-  ///
-  /// 서버는 반경 5km 로 고정해 판정한다 (명세: `orderableHere` 는 lat/lng 기준 5km).
-  /// 이 깃발은 그 판정을 목록에서 걸러낼지 여부다.
-  bool orderableOnly = false;
-
   YogijokboPost? selectedPost;
   List<PostComment> postComments = [];
-
-  /// 지금 위치에서 주문할 수 없는 조합인지.
-  bool orderUnavailable = false;
 
   /// 작성 화면이 공유할 조합.
   Cart? composeCart;
@@ -1014,11 +1005,7 @@ class AppFlow extends ChangeNotifier {
     postsLoading = true;
     notifyListeners();
 
-    final page = await _postRepository.list(
-      sort: postSort,
-      orderableOnly: orderableOnly,
-      location: location,
-    );
+    final page = await _postRepository.list(sort: postSort);
     posts = page.items;
     postsNextCursor = page.nextCursor;
 
@@ -1034,12 +1021,7 @@ class AppFlow extends ChangeNotifier {
     postsLoading = true;
     notifyListeners();
 
-    final page = await _postRepository.list(
-      sort: postSort,
-      orderableOnly: orderableOnly,
-      location: location,
-      cursor: cursor,
-    );
+    final page = await _postRepository.list(sort: postSort, cursor: cursor);
     posts = [...posts, ...page.items];
     postsNextCursor = page.nextCursor;
 
@@ -1053,51 +1035,21 @@ class AppFlow extends ChangeNotifier {
     await loadPosts();
   }
 
-  Future<void> toggleOrderableOnly() async {
-    orderableOnly = !orderableOnly;
-    await loadPosts();
-  }
-
   Future<void> openPost(String postId) async {
     final post = await _postRepository.detail(postId);
     if (post == null) return;
 
-    // 상세 응답에는 orderableHere 가 없다. 목록에서 알던 값을 물려준다.
-    for (final list in [posts, popularPosts]) {
-      final known = list.where((p) => p.id == postId);
-      if (known.isNotEmpty) {
-        post.orderableHere = known.first.orderableHere;
-        break;
-      }
-    }
-
     selectedPost = post;
     postComments = [];
-    commentsNextCursor = null;
     _setStage(AppStage.jokboDetail);
 
     // 댓글은 화면을 띄운 뒤 채운다. 상세 응답이 댓글을 내려주지 않아 별도 호출이다.
     await loadComments(postId);
   }
 
-  /// 댓글 다음 페이지 커서.
-  String? commentsNextCursor;
-
+  /// 서버가 한 글의 댓글을 한 번에 다 준다. 이어 받을 커서가 없다.
   Future<void> loadComments(String postId) async {
-    final page = await _postRepository.comments(postId);
-    postComments = page.items;
-    commentsNextCursor = page.nextCursor;
-    notifyListeners();
-  }
-
-  Future<void> loadMoreComments() async {
-    final post = selectedPost;
-    final cursor = commentsNextCursor;
-    if (post == null || cursor == null) return;
-
-    final page = await _postRepository.comments(post.id, cursor: cursor);
-    postComments = [...postComments, ...page.items];
-    commentsNextCursor = page.nextCursor;
+    postComments = await _postRepository.comments(postId);
     notifyListeners();
   }
 
@@ -1200,7 +1152,6 @@ class AppFlow extends ChangeNotifier {
     popularPosts = [for (final p in popularPosts) if (p.id != post.id) p];
     selectedPost = null;
     postComments = [];
-    commentsNextCursor = null;
     _setStage(AppStage.jokboHome);
   }
 
@@ -1237,14 +1188,10 @@ class AppFlow extends ChangeNotifier {
         title: post.source!.title,
       );
     }
-    orderUnavailable = !post.orderableHere;
     _setStage(AppStage.jokboOrder);
   }
 
-  void backToPostDetail() {
-    orderUnavailable = false;
-    _setStage(AppStage.jokboDetail);
-  }
+  void backToPostDetail() => _setStage(AppStage.jokboDetail);
 
   void cancelCompose() {
     composeCart = null;

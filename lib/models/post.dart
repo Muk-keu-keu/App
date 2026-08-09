@@ -109,7 +109,6 @@ class YogijokboPost {
     this.likeCount = 0,
     this.likedByMe = false,
     this.commentCount = 0,
-    this.orderableHere = true,
   });
 
   final String id;
@@ -140,12 +139,6 @@ class YogijokboPost {
   int likeCount;
   bool likedByMe;
   int commentCount;
-
-  /// 내 위치에서 주문 가능한지. 목록의 "내 위치에서 가능한 조합만" 필터에 쓴다.
-  ///
-  /// 목록(1번)만 내려주는 값이다. 상세(2번) 응답에는 없어서, 상세를 받을 때
-  /// 목록에서 알던 값을 그대로 물려준다 (`docs/api-yogijokbo.md` 확인 필요 항목).
-  bool orderableHere;
 
   /// 목록 카드에 쓰는 대표 이미지. 명세는 영상 썸네일을 먼저 쓰고, 없으면
   /// 사용자가 올린 첫 사진을 쓴다 (1번 비고).
@@ -209,7 +202,6 @@ class YogijokboPost {
         likeCount: likeCount,
         likedByMe: likedByMe,
         commentCount: commentCount,
-        orderableHere: orderableHere,
       );
 }
 
