@@ -462,6 +462,10 @@ class DsIcons {
   static const radioRing = 'assets/icons/radio_ring.svg';
   static const radioDot = 'assets/icons/radio_dot.svg';
   static const heart = 'assets/icons/heart.svg';
+
+  /// 좋아요를 누른 상태. `heart.svg` 와 같은 path 에 fill 만 넣은 것이라 실루엣이
+  /// 정확히 겹친다. 외곽선만 색을 바꾸면 눌렀는지 아닌지가 잘 안 보인다.
+  static const heartFill = 'assets/icons/heart_fill.svg';
   static const bubble = 'assets/icons/bubble.svg';
   static const camera = 'assets/icons/camera.svg';
 }

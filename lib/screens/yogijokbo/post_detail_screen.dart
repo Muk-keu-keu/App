@@ -260,7 +260,8 @@ class _ActionRow extends StatelessWidget {
   Widget build(BuildContext context) => Row(
         children: [
           _count(
-            asset: DsIcons.heart,
+            // 누르면 채워진다. 색만 바꾸면 외곽선만 분홍이 되어 눌렀는지 알기 어렵다.
+            asset: post.likedByMe ? DsIcons.heartFill : DsIcons.heart,
             width: 15.5,
             height: 14.5,
             color: post.likedByMe ? AppColors.primary500 : null,
@@ -557,19 +558,34 @@ class _Composer extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: onSend,
-                  behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    width: 36,
-                    height: 28,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary500,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Icon(Icons.arrow_upward, size: 16, color: Colors.white),
-                  ),
+                // 입력 전에는 회색, 한 글자라도 넣으면 핑크 (피드백 2026-08-09).
+                // controller 가 ValueNotifier 라 입력마다 이 버튼만 다시 그린다.
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: controller,
+                  builder: (context, value, _) {
+                    final ready = value.text.trim().isNotEmpty;
+                    return GestureDetector(
+                      // 빈 입력으로 눌러도 아무 일이 없어야 한다. 색만 회색이고
+                      // 눌리면 "보냈는데 안 올라갔다" 로 읽힌다.
+                      onTap: ready ? onSend : null,
+                      behavior: HitTestBehavior.opaque,
+                      child: Container(
+                        width: 36,
+                        height: 28,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: ready ? AppColors.primary500 : AppColors.gray500,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Icon(
+                          Icons.arrow_upward,
+                          // 시안보다 작게 그려져 있었다. 버튼 28 높이에 맞춰 키운다.
+                          size: 20,
+                          color: Colors.white,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

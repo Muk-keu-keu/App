@@ -117,13 +117,19 @@ class _Banner extends StatelessWidget {
                     Text('먹방 속 메뉴를 내 한끼로',
                         style: AppText.waguri(16, color: Colors.white)),
                     const SizedBox(height: 10),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('먹방요기 바로가기',
-                            style: AppText.caption(color: Colors.white)),
-                        const Icon(Icons.chevron_right, size: 16, color: Colors.white),
-                      ],
+                    // 배너의 "바로가기" 는 퀵메뉴 첫 칸과 같은 곳으로 간다.
+                    // 문구만 있고 눌리지 않아 배너가 장식처럼 보였다.
+                    GestureDetector(
+                      onTap: () => context.read<AppFlow>().openShareGuide(),
+                      behavior: HitTestBehavior.opaque,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('먹방요기 바로가기',
+                              style: AppText.caption(color: Colors.white)),
+                          const Icon(Icons.chevron_right, size: 16, color: Colors.white),
+                        ],
+                      ),
                     ),
                   ],
                 ),

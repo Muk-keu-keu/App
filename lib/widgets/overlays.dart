@@ -340,7 +340,28 @@ class AppToast {
   }) {
     final messenger = ScaffoldMessenger.maybeOf(context);
     if (messenger == null) return;
+    showOn(
+      messenger,
+      message: message,
+      actionLabel: actionLabel,
+      onAction: onAction,
+      duration: duration,
+    );
+  }
 
+  /// 토스트를 띄운 화면이 사라진 뒤에도 보여줘야 할 때 쓴다.
+  ///
+  /// 조합 공유처럼 **성공하면 화면이 바뀌는** 동작은 `await` 가 끝난 시점에 그 화면이
+  /// 이미 없어서 `context` 로 messenger 를 찾을 수 없다. 그래서 부르는 쪽이 await 전에
+  /// [ScaffoldMessenger.of] 를 붙잡아 두고 이 메서드로 넘긴다 — messenger 자체는
+  /// MaterialApp 아래에 있어 화면 전환에 살아남는다.
+  static void showOn(
+    ScaffoldMessengerState messenger, {
+    required String message,
+    String? actionLabel,
+    VoidCallback? onAction,
+    Duration duration = const Duration(seconds: 4),
+  }) {
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(

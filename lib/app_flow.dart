@@ -630,9 +630,16 @@ class AppFlow extends ChangeNotifier {
     final line = combo.lineOf(menuId);
     if (line == null) return;
     final next = line.quantity + delta;
-    // 담기지 않은 카드에서는 줄을 없애지 않는다. 분석 결과가 사라지면
-    // 체크를 눌러 담을 대상 자체가 없어진다.
-    if (next <= 0) return;
+
+    // 수량 1에서 한 번 더 내리면 휴지통 아이콘이 되고, 그때는 그 메뉴를 뺀다
+    // (피드백 2026-08-09). 예전에는 카드가 비는 것을 막으려고 아무 일도 하지
+    // 않았는데, 아이콘이 휴지통인데 안 지워지니 눌리지 않는 것으로 보였다.
+    if (next <= 0) {
+      combo.items = [for (final l in combo.items) if (l.menuId != menuId) l];
+      notifyListeners();
+      return;
+    }
+
     line.quantity = next;
     notifyListeners();
   }

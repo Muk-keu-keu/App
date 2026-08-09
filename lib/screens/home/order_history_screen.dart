@@ -211,7 +211,10 @@ class _OrderCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.chip),
         ),
         child: Text(
-          done ? '작성한 족보' : '족보 작성',
+          // 이미 쓴 결제도 라벨은 "족보 작성" 이다 (피드백 2026-08-09).
+          // 쓴 글로 가는 버튼이 아니라 작성 화면으로 가는 버튼이라 동작이 같고,
+          // 이미 썼는지는 테두리·글자 색으로만 구분한다.
+          '족보 작성',
           style: AppText.btn2(color: done ? AppColors.gray500 : AppColors.gray800),
         ),
       ),

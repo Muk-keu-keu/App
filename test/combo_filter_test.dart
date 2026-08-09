@@ -153,4 +153,43 @@ void main() {
       expect(flow.stage, AppStage.comboList);
     });
   });
+
+  /// 피드백 2026-08-09 — 조합 카드에서 휴지통을 눌러도 메뉴가 지워지지 않았다.
+  /// 수량 1에서 아이콘이 휴지통으로 바뀌므로, 거기서 한 번 더 내리면 빠져야 한다.
+  group('조합 카드 수량', () {
+    late AppFlow flow;
+    late ComboSuggestion combo;
+
+    setUp(() async {
+      flow = AppFlow(repository: _RecordingRepository(), locationService: const _NoLocation());
+      flow.extraction = _extraction;
+      flow.source = _source;
+      flow.openFilter();
+      await flow.applyPreferenceAndAnalyze();
+      combo = flow.suggestions.first;
+    });
+
+    test('수량 1에서 한 번 더 내리면 그 메뉴가 빠진다', () {
+      final menuId = combo.items.first.menuId;
+      final before = combo.items.length;
+      // 1로 맞춘 뒤 한 번 더 내린다.
+      while ((combo.lineOf(menuId)?.quantity ?? 0) > 1) {
+        flow.changeSuggestionQuantity(combo: combo, menuId: menuId, delta: -1);
+      }
+
+      flow.changeSuggestionQuantity(combo: combo, menuId: menuId, delta: -1);
+
+      expect(combo.lineOf(menuId), isNull);
+      expect(combo.items, hasLength(before - 1));
+    });
+
+    test('수량을 올리면 그대로 올라간다', () {
+      final menuId = combo.items.first.menuId;
+      final before = combo.lineOf(menuId)!.quantity;
+
+      flow.changeSuggestionQuantity(combo: combo, menuId: menuId, delta: 1);
+
+      expect(combo.lineOf(menuId)!.quantity, before + 1);
+    });
+  });
 }

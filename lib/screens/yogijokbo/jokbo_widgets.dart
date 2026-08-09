@@ -85,10 +85,16 @@ class LikeCommentRow extends StatelessWidget {
             behavior: HitTestBehavior.opaque,
             child: Row(
               children: [
-                Icon(
-                  likedByMe ? Icons.favorite : Icons.favorite_border,
-                  size: 18,
-                  color: likedByMe ? AppColors.primary : AppColors.gray600,
+                // 상세 화면과 같은 시안 아이콘을 쓴다. Material 하트는 실루엣이 달라
+                // 목록과 상세에서 서로 다른 모양으로 보였다.
+                SvgPicture.asset(
+                  likedByMe ? DsIcons.heartFill : DsIcons.heart,
+                  width: 16.5,
+                  height: 15.5,
+                  colorFilter: ColorFilter.mode(
+                    likedByMe ? AppColors.primary : AppColors.gray600,
+                    BlendMode.srcIn,
+                  ),
                 ),
                 const SizedBox(width: 4),
                 Text('$likeCount',

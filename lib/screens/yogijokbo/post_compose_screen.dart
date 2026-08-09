@@ -58,19 +58,24 @@ class _PostComposeScreenState extends State<PostComposeScreen> {
     setState(() => _submitting = true);
 
     final flow = context.read<AppFlow>();
+
+    // 공유가 끝나면 [AppFlow.submitPost] 가 주문내역으로 옮겨 놓으므로, await 가
+    // 끝난 시점에 이 화면은 이미 사라져 있다. 그때 context 로 messenger 를 찾으면
+    // 못 찾아서 토스트가 조용히 안 떴다 — 미리 붙잡아 둔다.
+    final messenger = ScaffoldMessenger.of(context);
+
     final postId = await flow.submitPost(
       title: _titleController.text,
       body: _bodyController.text,
     );
 
-    if (!mounted) return;
-    setState(() => _submitting = false);
+    // 화면이 남아 있을 때만 버튼 상태를 되돌린다. 사라졌으면 되돌릴 대상이 없다.
+    if (mounted) setState(() => _submitting = false);
 
-    // 공유가 끝나면 [AppFlow.submitPost] 가 주문내역으로 옮겨 놓는다.
     // 방금 쓴 글로 가는 길은 이 토스트에만 있다 (시안 952:5089).
     if (postId == null) return;
-    AppToast.show(
-      context,
+    AppToast.showOn(
+      messenger,
       message: '요기족보를 공유했습니다.',
       actionLabel: '보러가기',
       onAction: () => flow.openPost(postId),
