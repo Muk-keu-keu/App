@@ -51,8 +51,9 @@ class Restaurant {
   /// 대표 이미지 URL 1장. 서버가 빈 값을 줄 수 있어 [imagePath] 로 폴백한다.
   final String imageUrl;
 
-  /// 응답에 없는 값이다. DB `restaurant.review_count` 는 있지만 API 가 내려주지
-  /// 않아, 평점 옆 리뷰 수는 값이 있을 때만 그린다 (`docs/api-spec.md` 확인 필요 항목).
+  /// 리뷰 수. `GET v1/restaurants/{id}/menus` 의 `restaurant` 블록이 내려준다
+  /// (2026-08-09 부터). 분석 응답에는 아직 없어서 nullable 로 둔다 — 없는 값을
+  /// 0으로 그리면 "리뷰 0개" 로 읽힌다.
   final int? reviewCount;
 
   /// 원격 이미지를 못 받았을 때 쓰는 번들 에셋. 시연용이고 서버 필드가 아니다.
@@ -102,13 +103,16 @@ class Restaurant {
         minOrderPrice: ((json['minOrderPrice'] ?? 0) as num).toInt(),
         distanceKm: ((json['distanceKm'] ?? 0) as num).toDouble(),
         imageUrl: (json['imageUrl'] ?? '') as String,
-        // 명세에 없지만 서버가 나중에 붙일 수 있어 있으면 받는다.
+        // 메뉴 조회에는 오고 분석 응답에는 아직 없다. 있을 때만 담는다.
         reviewCount: (json['reviewCount'] as num?)?.toInt(),
       );
 
-  /// 주문 상세(`stores[]`)는 매장 정보를 세 개만 준다. 다시 주문·족보 작성이
-  /// 그 자리에서 매장 카드를 그려야 해서, 아는 값만으로 최소한의 객체를 만든다.
-  /// 평점·거리처럼 모르는 값은 0이고, 정확한 값이 필요하면 GET menus 로 다시 받는다.
+  /// 주문 상세와 게시글의 `order` 블록은 매장 정보를 세 개만 준다. 다시 주문·족보
+  /// 작성이 그 자리에서 매장 카드를 그려야 해서, 아는 값만으로 최소한의 객체를 만든다.
+  ///
+  /// 평점·리뷰 수·거리·예상 시간·최소 주문 금액은 0이다. **결제까지 가는 화면은
+  /// 그대로 쓰면 안 된다** — 최소 주문 금액이 0이면 미달 판정이 무력해진다.
+  /// `AppFlow._hydrateStores` 가 GET menus 로 갈아끼운다.
   factory Restaurant.partial({
     required int restaurantId,
     required String name,

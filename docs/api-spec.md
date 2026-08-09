@@ -42,7 +42,7 @@
 | `POST v1/analyses` | 배포됨. 문서와 일치 (2026-08-08 명세 갱신 반영) |
 | `GET v1/restaurants/{id}/menus` | 배포됨. **`restaurant` 블록이 빠져 있다** (2번 절) |
 | `GET v1/orders` · `GET v1/orders/{id}` · `POST v1/orders` | 배포됨. 명세와 일치 |
-| `v1/posts` (요기족보) | **미배포.** 2026-08-10 예정 |
+| `v1/posts` (요기족보) | **배포됨.** 2026-08-09 확인. 계약은 `docs/api-yogijokbo.md` |
 
 ## 공용 오브젝트
 
@@ -62,9 +62,15 @@
 | `minOrderPrice` | Integer | 음식값이 이 값보다 낮으면 "N원 더 담아주세요" |
 | `distanceKm` | Double | |
 | `imageUrl` | String | 대표 이미지 1장 |
+| `reviewCount` | Integer | 메뉴 조회에만 온다 (2026-08-09 추가) |
 
-`reviewCount` 는 응답에 없다. DB `restaurant.review_count` 는 있지만 API 로
-내려오지 않아, 평점 옆 리뷰 수는 값이 있을 때만 그린다.
+`reviewCount` 는 **메뉴 조회 응답에는 오고 분석 응답에는 아직 없다.** 그래서 앱
+모델에서 nullable 이고, 평점 옆 리뷰 수는 값이 있을 때만 그린다 — 없는 값을 0으로
+그리면 "리뷰 0개" 로 읽힌다.
+
+결제 스냅샷에서 되돌린 매장(`Restaurant.partial`)은 이 블록의 값이 전부 0이다.
+결제까지 가는 화면은 `GET v1/restaurants/{id}/menus` 로 갈아끼운다 —
+특히 `minOrderPrice` 가 0이면 미달 판정이 무력해진다.
 
 ### items[] — 한 줄이 장바구니 한 칸
 
@@ -614,8 +620,8 @@ nextCursor              : String (다음 페이지 없으면 null)
 | --- | --- |
 | 주문 목록이 두 벌 | `GET v1/orders` (checkoutId · restaurantNames) 와 `GET v1/users/me/orders` (orderId · storeName 단일)가 서로 다른 모양이다. 다중 매장을 담는 건 앞쪽뿐이라 앱은 `GET v1/orders` 를 쓴다. 뒤쪽은 폐기인지 확인 필요 |
 | `isPostedToJokbo` | `v1/users/me/orders` 에만 있다. `GET v1/orders` 에는 없어 "이미 족보에 공유했는지" 를 결제 목록에서 알 수 없다 |
-| `reviewCount` | 응답에 없다. 시안은 평점 옆에 리뷰 수를 보여준다 |
-| 요기족보 다중 매장 | `api-yogijokbo.md` 는 아직 단일 매장(`combo.store`)이다. `stores[]` 로 바뀌는지, 그 모양이 주문 상세와 같은지 확인 필요 |
+| ~~`reviewCount`~~ | **닫힘.** `GET v1/restaurants/{id}/menus` 의 `restaurant` 블록이 2026-08-09 부터 `reviewCount` 와 `distanceKm` 을 준다. 분석 응답에는 아직 없다 |
+| ~~요기족보 다중 매장~~ | **닫힘.** 게시글 상세의 `order` 블록이 주문 상세와 같은 모양이다 (2026-08-09 확인) |
 | 결제 완료 후 이동 | `orderId` 를 주지 않으므로 완료 화면은 목록으로만 갈 수 있다. 상세로 보내려면 `orderIds` 추가 필요 |
 | **`GET v1/orders` 에 `menuSummary` 추가** | 시안 857:4509 가 카드에 `[지점명] 메뉴, 메뉴` 와 "N개 매장 · 총 N개 메뉴" 를 그린다. 목록 응답에는 `restaurantNames` 와 `totalPrice` 뿐이라 메뉴 이름을 알 수 없고, 카드마다 상세를 더 부르는 건 "목록에는 조합 전체를 내리지 않는다" 는 명세와 충돌한다. 필요한 모양: `menuSummary: [{ storeName, menuNames[] }]`. 앱 모델(`OrderSummary.menuSummary`)은 이미 이 키를 읽고, 없으면 그 줄을 그리지 않는다 |
 | `INSTAGRAM`/`YOUTUBE` 외 링크 | `source.platform` 이 두 값뿐이다. 앱은 그 밖의 링크를 분석 전에 막는다 |

@@ -60,6 +60,9 @@ class MukbangApi {
   /// `GET v1/restaurants/{restaurantId}/menus` — 식당 전체 메뉴. 읽기 전용이다.
   ///
   /// 404 는 그 `restaurantId` 가 없을 때만 온다. 배달권역 밖이라도 200 이다.
+  ///
+  /// 2026-08-09 부터 `restaurant` 블록이 함께 온다 — 평점·리뷰 수·거리·예상 시간·
+  /// 최소 주문 금액까지 전부다. 결제 스냅샷에서 되돌린 매장의 0 값을 이걸로 채운다.
   Future<RestaurantMenus> restaurantMenus(int restaurantId) async {
     final json = await client.get('v1/restaurants/$restaurantId/menus');
     return RestaurantMenus.fromJson(json);

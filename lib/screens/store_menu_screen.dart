@@ -204,8 +204,8 @@ class _StoreInfo extends StatelessWidget {
                       const SizedBox(width: 4),
                       Text('리뷰 ${store.rating.toStringAsFixed(1)}',
                           style: AppText.btn2(color: AppColors.gray800)),
-                      // 리뷰 수는 응답에 없다. 없는 값을 (0) 으로 그리면
-                      // "리뷰 0개" 로 읽혀서, 값이 있을 때만 붙인다.
+                      // 메뉴 조회는 리뷰 수를 준다. 분석 응답에서 온 매장은 아직
+                      // 없어서, (0) 으로 "리뷰 0개" 처럼 보이지 않게 있을 때만 붙인다.
                       if (store.reviewCount != null) ...[
                         const SizedBox(width: 4),
                         Text('(${store.reviewCount})',

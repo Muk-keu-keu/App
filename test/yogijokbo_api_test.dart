@@ -161,6 +161,27 @@ const _commentsBody = '''
 }
 ''';
 
+/// `GET v1/restaurants/{id}/menus` 의 `restaurant` 블록. 2026-08-09 부터
+/// 평점·리뷰 수·거리·예상 시간·최소 주문 금액이 전부 온다.
+const _menusBody = '''
+{
+  "restaurant": {
+    "restaurantId": 201,
+    "name": "두찜-잠실새내점",
+    "foodCategory": "KOREAN",
+    "area": "잠실동",
+    "rating": 4.2,
+    "reviewCount": 312,
+    "etaMin": 40,
+    "deliveryFee": 3000,
+    "minOrderPrice": 14000,
+    "distanceKm": 3.2,
+    "imageUrl": "https://cdn.example.com/stores/201.jpg"
+  },
+  "menus": []
+}
+''';
+
 void main() {
   ({MukbangApi api, ApiPostRepository repo}) apiWith(
     _FakeServer server, {
@@ -418,10 +439,73 @@ void main() {
       expect(flow.selectedPost?.stores, hasLength(1));
       expect(flow.postComments, hasLength(2));
 
-      // 상세 조합이 그대로 장바구니가 된다.
+      // 상세 조합이 그대로 장바구니가 된다. 이 서버는 GET menus 에 매장 블록이
+      // 없는 응답을 주는데, id 가 맞지 않으므로 결제 스냅샷의 배달비가 남는다.
       await flow.startReorder();
       expect(flow.cart.storeCount, 1);
       expect(flow.cart.deliveryFeeTotal, 3000);
+    });
+
+    test('나도 주문하기가 매장 정보를 GET menus 로 채운다', () async {
+      // 게시글의 order 블록은 매장 정보를 세 개만 준다. 그대로 두면 최소 주문
+      // 금액이 0이라 미달인데도 결제 버튼이 열린다.
+      final server = _FakeServer((request) => switch (request.url.path) {
+            '/v1/posts' => _json(_listBody),
+            '/v1/restaurants/201/menus' => _json(_menusBody),
+            final p when p.endsWith('/comments') => _json(_commentsBody),
+            _ => _json(_detailBody),
+          });
+      final client = ApiClient(
+        baseUrl: 'http://server.test',
+        httpClient: server.client,
+        accessToken: 'access-token',
+      );
+      final flow = AppFlow(
+        apiClient: client,
+        locationService: const _NoLocation(),
+        postRepository: ApiPostRepository(MukbangApi(client)),
+      );
+
+      await flow.openPost('9001');
+      // 게시글에서 온 조합은 아직 0 이다.
+      expect(flow.selectedPost!.stores.first.restaurant.minOrderPrice, 0);
+
+      await flow.startReorder();
+
+      final store = flow.cart.stores.first.restaurant;
+      expect(store.rating, 4.2);
+      expect(store.reviewCount, 312);
+      expect(store.etaMin, 40);
+      expect(store.distanceKm, 3.2);
+      expect(store.minOrderPrice, 14000);
+      // 배달비는 게시글에서 이미 알던 값과 같다.
+      expect(flow.cart.deliveryFeeTotal, 3000);
+      // 음식값 20,000 이 최소 주문 금액을 넘어 결제할 수 있다.
+      expect(flow.cart.canCheckout, isTrue);
+    });
+
+    test('매장 정보를 못 받아도 주문 화면은 열린다', () async {
+      final server = _FakeServer((request) => switch (request.url.path) {
+            '/v1/restaurants/201/menus' => _json('{"status":404}', 404),
+            final p when p.endsWith('/comments') => _json(_commentsBody),
+            _ => _json(_detailBody),
+          });
+      final client = ApiClient(
+        baseUrl: 'http://server.test',
+        httpClient: server.client,
+        accessToken: 'access-token',
+      );
+      final flow = AppFlow(
+        apiClient: client,
+        locationService: const _NoLocation(),
+        postRepository: ApiPostRepository(MukbangApi(client)),
+      );
+
+      await flow.openPost('9001');
+      await flow.startReorder();
+
+      expect(flow.stage, AppStage.jokboOrder);
+      expect(flow.cart.stores.first.restaurant.name, '두찜-잠실새내점');
     });
 
     test('목록을 못 받으면 로딩을 끝내고 실패로 표시한다', () async {

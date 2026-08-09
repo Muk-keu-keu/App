@@ -448,22 +448,37 @@ class AppFlow extends ChangeNotifier {
   int? composeCheckoutId;
 
   /// "다시 주문" — 결제 상세를 장바구니로 되돌려 장바구니 화면을 연다.
-  ///
-  /// 결제 상세는 매장 정보를 세 개(id·이름·배달비)만 준다. 그대로 그리면 평점·최소
-  /// 주문 금액이 0으로 보이므로, 매장마다 GET menus 로 온전한 정보를 다시 받아 채운다.
-  /// 매장이 두세 곳이라 호출 수가 문제되지 않는다.
   Future<void> reorderFromHistory(OrderSummary order) async {
     final detail = await _orderRepository.detail(order.checkoutId);
     if (detail == null) return;
 
     final restored = detail.toCart();
-    for (final store in restored.stores) {
-      final menus = await _safeMenus(store.restaurantId);
-      if (menus != null) store.hydrate(menus);
-    }
+    await _hydrateStores(restored);
 
     cart = restored;
     _setStage(AppStage.cart);
+  }
+
+  /// 장바구니의 매장 정보를 온전한 값으로 채운다.
+  ///
+  /// 결제 상세와 게시글의 `order` 블록은 매장 정보를 세 개(id·이름·배달비)만 준다.
+  /// 그대로 그리면 평점·리뷰 수·거리·예상 시간이 0이고, **최소 주문 금액도 0이라
+  /// 미달인데도 결제 버튼이 열린다.** `GET v1/restaurants/{id}/menus` 의
+  /// `restaurant` 블록으로 갈아끼워 그 값들을 채운다.
+  ///
+  /// 매장이 두세 곳이라 호출 수가 문제되지 않는다. 한 곳이 실패해도 그 매장만
+  /// 예전 값으로 남고 흐름은 계속된다.
+  ///
+  /// **id 가 맞는 응답만 받아들인다.** 그러지 않으면 엉뚱한 응답이 왔을 때 결제
+  /// 스냅샷에서 알던 이름·배달비까지 0으로 덮인다 — 아는 값을 모르는 값으로
+  /// 바꾸는 셈이다.
+  Future<void> _hydrateStores(Cart target) async {
+    for (final store in target.stores) {
+      final menus = await _safeMenus(store.restaurantId);
+      if (menus?.restaurant.restaurantId == store.restaurantId) {
+        store.hydrate(menus!);
+      }
+    }
   }
 
   UserLocation? location;
@@ -1196,6 +1211,10 @@ class AppFlow extends ChangeNotifier {
   /// 수량을 바꿔도 게시글 스냅샷은 그대로다.
   ///
   /// 매장이 여러 곳인 글이면 그대로 여러 가게가 담긴 장바구니가 된다.
+  ///
+  /// 게시글의 매장 정보는 id·이름·배달비뿐이다. 화면을 먼저 띄우고 매장 정보를
+  /// 뒤이어 채운다 — 최소 주문 금액이 0인 채로 두면 미달인데도 결제가 열린다.
+  /// 기다렸다 띄우면 매장 수만큼 요청이 끝날 때까지 아무 일도 없어 보인다.
   Future<void> startReorder() async {
     final post = selectedPost;
     if (post == null) return;
@@ -1212,6 +1231,9 @@ class AppFlow extends ChangeNotifier {
       );
     }
     _setStage(AppStage.jokboOrder);
+
+    await _hydrateStores(cart);
+    notifyListeners();
   }
 
   void backToPostDetail() => _setStage(AppStage.jokboDetail);
