@@ -17,8 +17,9 @@ import 'order.dart';
 
 /// 게시글 작성자.
 ///
-/// 서버는 작성자를 **닉네임 한 줄로만** 준다 (`authorNickName` — 대문자 N).
-/// id·프로필 사진이 없어 원형 자리는 첫 글자로 채운다.
+/// 서버는 작성자를 `authorId` + `authorNickName`(대문자 N) 두 값으로 준다.
+/// **프로필 사진은 오지 않아** 원형 자리는 닉네임 첫 글자로 채운다.
+/// 목록은 닉네임만 주고 id 는 없다.
 class PostAuthor {
   const PostAuthor({
     required this.id,
@@ -183,9 +184,9 @@ class YogijokboPost {
       body: '${json['body'] ?? ''}',
       author: PostAuthor.fromWire(json),
       stores: order == null ? const [] : Cart.fromOrderDetail(order).stores,
-      // 상세는 작성일 대신 **먹은 날**(`eatedAt`)을 준다. 화면의 날짜 줄이 그 값이다.
-      // 작성일이 필요해지면 서버에 `createdAt` 을 요청해야 한다.
-      createdAt: DateTime.tryParse('${json['eatedAt'] ?? json['createdAt'] ?? ''}') ??
+      // 화면의 날짜 줄은 작성일이다. `eatedAt`(먹은 날)만 오던 시기가 있어 그쪽도
+      // 받아 두지만, 둘이 다 오면 작성일을 쓴다 — 시안의 그 자리는 작성일이다.
+      createdAt: DateTime.tryParse('${json['createdAt'] ?? json['eatedAt'] ?? ''}') ??
           order?.orderedAt ??
           DateTime(2026),
       imageUrls: [for (final e in (json['imageUrls'] ?? const []) as List) '$e'],

@@ -89,7 +89,9 @@ const _detailBody = '''
   "title": "떵개 추천 두찜 로제 닭발",
   "body": "분모자랑 치즈 꼭 추가하고 드세요",
   "imageUrls": ["https://cdn.example.com/posts/9001/1.jpg"],
-  "eatedAt": "2026-07-07T19:12:00+09:00",
+  "authorId": 1,
+  "authorNickName": "배고픈 요기요",
+  "createdAt": "2026-07-07T19:12:00+09:00",
   "likeCount": 12,
   "commentCount": 1,
   "liked": false,
@@ -285,11 +287,30 @@ void main() {
       expect(post.imageUrls, hasLength(1));
     });
 
-    test('상세는 작성일 대신 eatedAt 을 준다', () async {
+    test('작성자와 작성일을 읽는다', () async {
       final server = _FakeServer((_) => _json(_detailBody));
       final post = await apiWith(server).repo.detail('9001');
 
+      expect(post!.author.id, '1');
+      expect(post.author.nickname, '배고픈 요기요');
+      expect(post.dateText, '2026.07.07');
+      // 프로필 사진은 오지 않는다. 원형 자리는 닉네임 첫 글자로 채운다.
+      expect(post.author.profileImageUrl, isNull);
+      expect(post.author.initial, '배');
+    });
+
+    test('작성일이 없고 eatedAt 만 오면 그것을 쓴다', () async {
+      // 명세에 createdAt 이 들어오기 전(2026-08-09) 서버가 먹은 날만 주던 모양이다.
+      // 날짜 줄이 1970 으로 보이지 않도록 폴백을 남겨 둔다.
+      final server = _FakeServer((_) => _json(
+            _detailBody
+                .replaceAll('"createdAt"', '"eatedAt"')
+                .replaceAll('"authorNickName": "배고픈 요기요",', ''),
+          ));
+      final post = await apiWith(server).repo.detail('9001');
+
       expect(post!.dateText, '2026.07.07');
+      expect(post.author.nickname, isEmpty);
     });
 
     test('mine 이 true 면 내 글이다', () async {

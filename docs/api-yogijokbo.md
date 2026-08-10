@@ -1,25 +1,33 @@
 # 요기족보 API 명세
 
-> **2026-08-09 에 배포된 서버로 직접 확인한 계약이다.** 노션 명세와 다른 곳이
-> 있으면 이 문서가 기준이다. 확인한 것은 `test/yogijokbo_api_test.dart` 가 잠근다.
+> **실서버로 확인한 계약이다.** 명세와 다른 곳이 있으면 이 문서가 기준이고,
+> 확인한 것은 `test/yogijokbo_api_test.dart` 가 잠근다.
 
 출처: Notion `[요기요 x 오라클 해커톤] / API 명세서 (수정완료) / 요기족보`
 + 2026-08-09 실서버 확인
++ 2026-08-10 명세 개정 (수정 API 추가, 상세에 작성자·작성일 추가, 권한 정정)
 
 ## 노션 명세와 다른 곳
 
-| 항목 | 노션 명세 | 실제 서버 |
+2026-08-09 에 서버로 확인해 어긋났던 것들은 2026-08-10 명세 개정으로 대부분 정리됐다. 아래는 그때 실서버를 기준으로 앱을 맞춘 항목이고, 지금은 명세도 같은 값을 적고 있다.
+
+| 항목 | 개정 전 명세 | 확인한 값 (현재 명세도 동일) |
 | --- | --- | --- |
-| 인증 헤더 | `X-User-Id` | `Authorization: Bearer {accessToken}` |
 | 목록 응답 키 | `items` | `posts` |
 | 게시글 id | `id` | `postId` (Long, 숫자) |
-| 작성자 | `author` 오브젝트 | `authorNickName` 문자열 (대문자 N) |
+| 작성자 | `author` 오브젝트 | `authorId` + `authorNickName` (대문자 N) |
 | 좋아요 여부 | `likedByMe` | `liked` |
 | 상세의 조합 | `combo` (매장 하나) | `order` (주문 상세와 같은 모양, 매장 목록) |
 | 댓글 페이지네이션 | `cursor`/`size` | 없다. 한 번에 다 준다 |
 | 댓글 작성 응답 | 본문 없음 | 갱신된 댓글 목록 전체 |
 | 작성 요청 | `data`(JSON) 파트 + `orderId` | 평평한 multipart 필드 + `checkoutId` |
 | 목록의 위치 필터 | `orderableOnly`/`lat`/`lng` | 폐기 (기능 자체가 없어졌다) |
+
+### 아직 어긋난 것 — 인증 헤더
+
+명세 안에서도 표기가 갈린다. 3번(작성)·8번(수정)은 `Authorization: Bearer {accessToken}` 인데, 1·2·4·5·6번은 `User-Id : Long` 으로 적혀 있다.
+
+**서버는 전부 Bearer 다.** 무인증으로 `POST /likes` 를 부르면 `401`, Bearer 를 실으면 `200` 이고 `liked` 도 토큰 기준으로 갈린다 (2026-08-09 확인). 앱은 모든 요청에 Bearer 만 쓴다 — 헤더를 만드는 자리는 `ApiClient._headers` 하나뿐이다.
 
 ## 공통
 
@@ -47,7 +55,7 @@
 | 5 | USER | DELETE | `v1/posts/{postId}/likes` | 좋아요 취소 |
 | 6 | ALL | GET | `v1/posts/{postId}/comments` | 조합 댓글 목록 |
 | 7 | USER | POST | `v1/posts/{postId}/comments` | 댓글 작성 |
-| 8 | ALL | PATCH | `v1/posts/{postId}` | 요기족보 게시물 수정 |
+| 8 | USER | PATCH | `v1/posts/{postId}` | 요기족보 게시물 수정 |
 | 9 | USER | DELETE | `v1/posts/{postId}` | 게시물 삭제 |
 | 10 | USER | DELETE | `v1/posts/{postId}/comments/{commentId}` | 댓글 삭제 |
 
@@ -74,11 +82,13 @@ Query Parameter
 
 | 이름 | 타입 | 비고 |
 | --- | --- | --- |
-| `sort` | Enum | `LATEST` \| `POPULAR` |
-| `cursor` | String | |
-| `size` | Integer | 기본 20 |
+| `sort` | Enum | `LATEST` \| `POPULAR`. 기본 `LATEST` |
+| `cursor` | String | 첫 페이지는 생략 |
+| `size` | Integer | 기본 20, **최대 50** |
 
-좌표를 받지 않는다. `orderableOnly` / `lat` / `lng` 는 "내 위치에서 가능한 조합만" 기능과 함께 폐기됐다 (2026-08-09 디자이너·백엔드 확인).
+앱은 `sort` 를 항상 명시해 보낸다 — 요기족보 홈의 기본 정렬은 인기순이라 서버 기본값과 다르다.
+
+좌표를 받지 않는다. `orderableOnly` / `lat` / `lng` 는 "내 위치에서 가능한 조합만" 기능과 함께 폐기됐다 (2026-08-09 디자이너·백엔드 확인). 노션 명세의 1번 비고에는 `orderableHere` 설명이 아직 남아 있지만 **응답 필드 목록에는 없다.** 지워지지 않은 옛 문장이므로 되살리지 않는다.
 
 ### Request example
 
@@ -111,7 +121,7 @@ GET v1/posts?sort=POPULAR&size=20
 | 필드 | 타입 | 비고 |
 | --- | --- | --- |
 | `postId` | Long | **숫자다.** 앱 모델은 문자열 id 로 담는다 |
-| `thumbnailUrl` | String, nullable | 서버가 골라 준다. 앱은 다시 고르지 않는다 |
+| `thumbnailUrl` | String, nullable | 서버가 골라 준다. 앱은 다시 고르지 않는다. 사진 없이 쓴 글이면 null |
 | `authorNickName` | String | 대문자 `N`. id·프로필 사진은 안 온다 |
 | `liked` | Boolean | 토큰 기준. 무인증이면 `false` |
 | `nextCursor` | String, nullable | 없으면 마지막 페이지 |
@@ -172,7 +182,9 @@ GET v1/posts/9001
     "https://cdn.example.com/posts/9001/1.jpg",
     "https://cdn.example.com/posts/9001/2.jpg"
   ],
-  "eatedAt": "2026-07-07T19:12:00+09:00",
+  "authorId": 1,
+  "authorNickName": "배고픈 요기요",
+  "createdAt": "2026-07-07T19:12:00+09:00",
   "likeCount": 12,
   "commentCount": 4,
   "liked": false,
@@ -218,15 +230,24 @@ GET v1/posts/9001
 
 | 필드 | 타입 | 비고 |
 | --- | --- | --- |
-| `imageUrls` | List\<String\> | 사용자가 올린 사진 (`post_image`) |
-| `eatedAt` | DateTime | **먹은 날.** 작성일(`createdAt`)은 오지 않는다 |
+| `imageUrls` | List\<String\> | 사용자가 올린 사진 (`post_image`). `sort_order` 순 |
+| `authorId` | Long | 글쓴이 `userId` |
+| `authorNickName` | String | 대문자 `N`. 프로필 사진은 오지 않는다 |
+| `createdAt` | DateTime | 작성일. 화면의 날짜 줄이 이 값이다 |
 | `liked` | Boolean | 토큰 기준 |
 | `mine` | Boolean | 내 글인지. 수정·삭제 노출을 이 값으로 가른다 |
 | `order` | Object | **주문 상세(`GET v1/orders/{checkoutId}`)와 같은 모양** |
+| `order.stores[].restaurantName` | String | 결제 시점 스냅샷 (`order_item` 이 아니라 `orders`) |
+| `order.stores[].itemsTotal` | Integer | 그 가게 메뉴 + 옵션 합 |
+| `order.stores[].subtotal` | Integer | `itemsTotal + deliveryFee` |
+| `order.stores[].items[].menuImageUrl` | String | 결제 시점 스냅샷 (`order_item.menu_image_url`) |
 | `order.stores[].items[].selectedSpice` | Enum, nullable | `NONE` \| `MEDIUM` \| `HOT` |
-| `order.stores[].items[].selectedOptions` | List | `{ group, name, price }` — 고른 것만 |
+| `order.stores[].items[].selectedOptions` | List | `{ group, name, price }` — 고른 것만. `group` 은 없으면 null 이고 키 자체는 빠지지 않는다 |
+| `order.totalPrice` | Integer | 전체 결제액. `stores[].subtotal` 의 합 |
 
-작성자가 오지 않는다. 화면의 작성자 줄은 값이 들어올 때까지 비어 있다 (확인 필요 항목).
+프로필 사진이 없어 원형 자리는 닉네임 첫 글자로 채운다.
+
+앱은 `createdAt` 을 먼저 읽고 없으면 `eatedAt` 을 쓴다. 명세에 `createdAt` 이 들어오기 전(2026-08-09)에는 서버가 먹은 날만 주던 시기가 있어, 그때 응답에도 날짜 줄이 깨지지 않게 폴백을 남겨 뒀다.
 
 `order` 가 주문 상세와 같은 모양이라 앱은 `OrderDetail` 파싱을 그대로 다시 쓰고, 같은 변환으로 "나도 주문하기" 장바구니를 만든다. 파싱을 두 벌 두지 않는다.
 
@@ -591,7 +612,7 @@ PATCH v1/posts/{postId}
 
 **multipart/form-data 다.** 작성(3번)과 같은 모양이고 `checkoutId` 만 없다 — 조합은 결제 스냅샷이라 글쓴이가 바꿀 수 있는 값이 아니다.
 
-명세 표의 권한이 `ALL` 로 적혀 있지만 `Authorization` 헤더를 요구한다. 실제로는 `USER` 이고, 남의 글이면 `403` 이다. 앱은 상세의 `mine` 이 true 일 때만 수정 화면을 열어 준다.
+권한은 `USER` 다. 남의 글을 수정하면 `403` 이다 (2026-08-10 확인). 앱은 상세의 `mine` 이 true 일 때만 수정 화면을 열어 준다.
 
 ### Request
 
@@ -719,7 +740,7 @@ localStorage 가 없다. 장바구니는 `AppFlow` 가 메모리로 들고 있�
 | 항목 | 내용 |
 | --- | --- |
 | 목록의 본문 | 1번 응답에 `body`(또는 미리보기)가 없다. Figma 목록 카드는 본문 2줄을 보여준다. 앱은 키가 붙는 즉시 읽도록 해 뒀다 |
-| 상세의 작성자·작성일 | 2번 응답에 작성자(`authorNickName`)와 작성일이 없다. 화면은 작성자 줄과 날짜를 보여주는데, 지금은 날짜를 `eatedAt`(먹은 날)으로 대신 쓰고 작성자 줄은 비워 둔다 |
+| ~~상세의 작성자·작성일~~ | **닫힘.** 2번 응답에 `authorId` · `authorNickName` · `createdAt` 이 들어왔다 (2026-08-10 명세). 프로필 사진은 여전히 없어 원형 자리는 닉네임 첫 글자로 채운다 |
 | ~~`PATCH v1/posts/{id}` 형식~~ | **닫힘.** multipart 이고 사진도 교체된다 (2026-08-10 명세). 8번 참고 |
 | 수정의 사진 되보내기 | 앱이 기존 사진을 CDN 에서 다시 받아 되올린다. 사진이 많으면 왕복이 그만큼 늘어난다. 남길 사진을 URL·id 로 지정하는 방식(예: `keepImageIds`)이 있으면 그쪽이 낫다 |
 | `GET v1/users/me/posts` | 미구현(`404`). 내가 쓴 글 목록 |
