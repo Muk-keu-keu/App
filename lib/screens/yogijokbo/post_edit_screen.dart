@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../app_flow.dart';
 import '../../theme.dart';
 import '../../widgets/ds.dart';
+import '../../widgets/overlays.dart';
 import 'jokbo_widgets.dart';
 
 /// Figma "족보 수정" (node 922:2734).
@@ -53,11 +54,22 @@ class _PostEditScreenState extends State<PostEditScreen> {
   Future<void> _save() async {
     if (!_canSave) return;
     setState(() => _saving = true);
-    await context.read<AppFlow>().savePostEdit(
+    final saved = await context.read<AppFlow>().savePostEdit(
           title: _titleController.text,
           body: _bodyController.text,
         );
-    if (mounted) setState(() => _saving = false);
+    if (!mounted) return;
+    setState(() => _saving = false);
+
+    // 서버는 남길 사진을 파일로 다시 받는다. 그 사진을 받아 오지 못하면 저장을
+    // 멈춘다 — 보내면 사진이 지워지기 때문이다. 이유를 알려주지 않으면 "저장" 이
+    // 그냥 안 눌리는 것처럼 보인다.
+    if (!saved) {
+      AppToast.show(
+        context,
+        message: '사진을 다시 올릴 수 없어 저장하지 못했어요.\n잠시 후 다시 시도해 주세요.',
+      );
+    }
   }
 
   @override

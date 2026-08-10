@@ -9,6 +9,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -402,13 +403,161 @@ void main() {
       expect(server.last.url.path, '/v1/posts/9001/comments/4101');
     });
 
-    test('수정은 PATCH v1/posts/{id} 로 나간다 — 형식 확정 대기', () async {
+  });
+
+  group('8번 수정 — PATCH v1/posts/{postId} (multipart)', () {
+    test('multipart 로 title·body 를 보내고 checkoutId 는 없다', () async {
       final server = _FakeServer((_) => _json('', 200));
       await apiWith(server).repo.updatePost('9001', title: '새 제목', body: '새 본문');
 
       expect(server.last.method, 'PATCH');
       expect(server.last.url.path, '/v1/posts/9001');
-      expect(jsonDecode(server.last.body)['title'], '새 제목');
+
+      final contentType = server.last.headers['content-type'] ?? '';
+      expect(contentType, contains('multipart/form-data'));
+      expect(contentType, contains('boundary='));
+
+      final body = utf8.decode(server.last.bodyBytes);
+      expect(body, contains('name="title"'));
+      expect(body, contains('새 제목'));
+      expect(body, contains('name="body"'));
+      expect(body, contains('새 본문'));
+      // 조합은 결제 스냅샷이라 바뀌지 않는다. 작성과 달리 checkoutId 를 보내지 않는다.
+      expect(body, isNot(contains('checkoutId')));
+    });
+
+    test('남길 사진을 다시 받아 파일로 되보낸다 — 보낸 순서가 표시 순서다', () async {
+      // 서버는 사진을 부분 수정하지 않는다. 보낸 목록이 사진 전체를 대체하므로
+      // 제목만 고칠 때도 기존 사진을 되보내야 지워지지 않는다.
+      final server = _FakeServer((request) => request.url.host == 'cdn.example.com'
+          ? http.Response.bytes([1, 2, 3], 200)
+          : _json('', 200));
+
+      await apiWith(server).repo.updatePost(
+            '9001',
+            title: '새 제목',
+            body: '새 본문',
+            images: const [
+              PostImage.kept('https://cdn.example.com/posts/9001/first.png'),
+              PostImage.kept('https://cdn.example.com/posts/9001/second.jpg'),
+            ],
+          );
+
+      // 사진 두 장을 먼저 받아 오고 그 다음 PATCH 가 나간다.
+      expect(server.requests, hasLength(3));
+      expect(server.requests[0].url.path, '/posts/9001/first.png');
+      expect(server.requests[1].url.path, '/posts/9001/second.jpg');
+
+      final body = utf8.decode(server.last.bodyBytes);
+      // 두 파트 모두 images 라는 같은 이름으로, URL 의 파일 이름을 살려 나간다.
+      expect(body, contains('filename="first.png"'));
+      expect(body, contains('filename="second.jpg"'));
+      // 확장자로 파트의 Content-Type 이 정해진다. octet-stream 이면 서버 검증에 걸린다.
+      expect(body, contains('image/png'));
+      expect(body, contains('image/jpeg'));
+      // 순서가 그대로 sort_order 가 되므로 first 가 second 보다 앞이어야 한다.
+      expect(body.indexOf('first.png'), lessThan(body.indexOf('second.jpg')));
+    });
+
+    test('사진을 못 받으면 요청을 보내지 않고 던진다', () async {
+      // 그대로 보내면 서버가 그 사진을 지운다. 사용자가 건드리지도 않은 사진이
+      // 사라지는 것보다 저장을 실패시키는 쪽이 낫다.
+      final server = _FakeServer((request) => request.url.host == 'cdn.example.com'
+          ? _json('', 500)
+          : _json('', 200));
+
+      await expectLater(
+        apiWith(server).repo.updatePost(
+              '9001',
+              title: '새 제목',
+              body: '새 본문',
+              images: const [PostImage.kept('https://cdn.example.com/a.jpg')],
+            ),
+        throwsA(isA<PostImagesUnavailableException>()),
+      );
+
+      // CDN 요청 한 번뿐 — PATCH 는 나가지 않았다.
+      expect(server.requests, hasLength(1));
+      expect(server.requests.single.url.host, 'cdn.example.com');
+    });
+
+    test('새로 고른 사진은 파일 경로로 붙인다', () async {
+      final server = _FakeServer((_) => _json('', 200));
+      final picked = File(
+        '${Directory.systemTemp.path}/mukbang_test_picked.jpg',
+      )..writeAsBytesSync([9, 9, 9]);
+      addTearDown(() => picked.deleteSync());
+
+      await apiWith(server).repo.updatePost(
+            '9001',
+            title: '새 제목',
+            body: '새 본문',
+            images: [PostImage.picked(picked.path)],
+          );
+
+      final body = utf8.decode(server.last.bodyBytes);
+      expect(body, contains('filename="mukbang_test_picked.jpg"'));
+      expect(body, contains('image/jpeg'));
+    });
+
+    test('수정 화면 저장이 지금 붙어 있는 사진을 그대로 되보낸다', () async {
+      final server = _FakeServer((request) => switch (request.url.host) {
+            'cdn.example.com' => http.Response.bytes([1, 2, 3], 200),
+            _ when request.url.path.endsWith('/comments') => _json(_commentsBody),
+            _ when request.method == 'PATCH' => _json('', 200),
+            _ => _json(_detailBody),
+          });
+      final client = ApiClient(
+        baseUrl: 'http://server.test',
+        httpClient: server.client,
+        accessToken: 'access-token',
+      );
+      final flow = AppFlow(
+        apiClient: client,
+        locationService: const _NoLocation(),
+        postRepository: ApiPostRepository(MukbangApi(client)),
+      );
+
+      await flow.openPost('9001');
+      expect(flow.selectedPost!.imageUrls, hasLength(1));
+
+      final saved = await flow.savePostEdit(title: '고친 제목', body: '고친 본문');
+
+      expect(saved, isTrue);
+      expect(flow.stage, AppStage.jokboDetail);
+      expect(flow.selectedPost?.title, '고친 제목');
+
+      final patch = server.requests.lastWhere((r) => r.method == 'PATCH');
+      expect(utf8.decode(patch.bodyBytes), contains('filename="1.jpg"'));
+    });
+
+    test('사진을 못 받으면 저장하지 않고 수정 화면에 남는다', () async {
+      final server = _FakeServer((request) => switch (request.url.host) {
+            'cdn.example.com' => _json('', 500),
+            _ when request.url.path.endsWith('/comments') => _json(_commentsBody),
+            _ => _json(_detailBody),
+          });
+      final client = ApiClient(
+        baseUrl: 'http://server.test',
+        httpClient: server.client,
+        accessToken: 'access-token',
+      );
+      final flow = AppFlow(
+        apiClient: client,
+        locationService: const _NoLocation(),
+        postRepository: ApiPostRepository(MukbangApi(client)),
+      );
+
+      await flow.openPost('9001');
+      flow.openPostEdit();
+
+      final saved = await flow.savePostEdit(title: '고친 제목', body: '고친 본문');
+
+      expect(saved, isFalse);
+      expect(flow.stage, AppStage.jokboEdit);
+      // 제목도 그대로여야 한다 — 저장되지 않았는데 화면만 바뀌면 안 된다.
+      expect(flow.selectedPost?.title, '떵개 추천 두찜 로제 닭발');
+      expect(server.requests.any((r) => r.method == 'PATCH'), isFalse);
     });
   });
 

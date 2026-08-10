@@ -47,11 +47,12 @@
 | 5 | USER | DELETE | `v1/posts/{postId}/likes` | 좋아요 취소 |
 | 6 | ALL | GET | `v1/posts/{postId}/comments` | 조합 댓글 목록 |
 | 7 | USER | POST | `v1/posts/{postId}/comments` | 댓글 작성 |
-| 8 | USER | PATCH | `v1/posts/{postId}` | 게시물 수정 — **형식 미확정** |
+| 8 | ALL | PATCH | `v1/posts/{postId}` | 요기족보 게시물 수정 |
 | 9 | USER | DELETE | `v1/posts/{postId}` | 게시물 삭제 |
 | 10 | USER | DELETE | `v1/posts/{postId}/comments/{commentId}` | 댓글 삭제 |
 
-8~10 은 노션 명세에 없지만 서버에 있다. 아래 "명세에 없지만 서버에 있는 것" 참고.
+8번은 2026-08-10 에 명세가 들어왔다. 9·10 은 아직 표에 없고 서버에만 있다 —
+아래 "명세에 없지만 서버에 있는 것" 참고.
 
 ---
 
@@ -582,6 +583,97 @@ post_comment(comment_id, post_id, user_id, body, created_at)
 
 ---
 
+## 8. 요기족보 게시물 수정
+
+```
+PATCH v1/posts/{postId}
+```
+
+**multipart/form-data 다.** 작성(3번)과 같은 모양이고 `checkoutId` 만 없다 — 조합은 결제 스냅샷이라 글쓴이가 바꿀 수 있는 값이 아니다.
+
+명세 표의 권한이 `ALL` 로 적혀 있지만 `Authorization` 헤더를 요구한다. 실제로는 `USER` 이고, 남의 글이면 `403` 이다. 앱은 상세의 `mine` 이 true 일 때만 수정 화면을 열어 준다.
+
+### Request
+
+Header
+
+```
+Authorization: Bearer {accessToken}
+Content-Type: multipart/form-data
+```
+
+Path Variable
+
+| 이름 | 타입 |
+| --- | --- |
+| `postId` | Long |
+
+필드
+
+| 이름 | 타입 | 비고 |
+| --- | --- | --- |
+| `title` | String | 최대 20자 |
+| `body` | String | 최대 400자 |
+| `images` | file | 0~5장, jpg/jpeg/png/webp, 장당 최대 5MB |
+
+### images 는 부분 수정이 아니다
+
+**수정 후 남을 사진 전부를 보낸다. 기존 사진도 예외가 아니다.** 보낸 순서가 그대로 새 표시 순서(`sort_order`)가 된다.
+
+즉 이 목록이 사진 전체를 대체한다. 제목만 고칠 때 `images` 를 비워 보내면 **사진이 전부 지워진다.**
+
+앱은 URL 로만 아는 기존 사진을 지키기 위해 이렇게 한다.
+
+```
+수정 저장
+  → 지금 붙어 있는 imageUrls 를 순서대로 다시 받아 온다 (CDN, 인증 헤더 없음)
+  → 받아 온 바이트 + 새로 고른 파일을 한 목록으로 만들어 PATCH 로 보낸다
+  → 한 장이라도 못 받으면 요청을 보내지 않고 저장을 실패시킨다
+```
+
+마지막 줄이 중요하다. 못 받은 채로 보내면 사용자가 건드리지도 않은 사진이 사라진다. 저장 실패가 사진 유실보다 낫다 (`PostImagesUnavailableException` → 수정 화면에 남고 토스트로 알린다).
+
+파트의 `Content-Type` 은 파일 이름의 확장자로 정한다. http 패키지는 이 값을 추측하지 않고 `application/octet-stream` 을 넣어서, 그대로 두면 서버의 형식 검증에 걸린다.
+
+### Request example
+
+```
+PATCH v1/posts/9001
+Content-Type: multipart/form-data; boundary=----X
+
+------X
+Content-Disposition: form-data; name="title"
+
+엽떡+교촌 조합 인정 (수정)
+------X
+Content-Disposition: form-data; name="body"
+
+다시 시켜보고 적음. 분모자 사리는 진짜 필수.
+------X
+Content-Disposition: form-data; name="images"; filename="old_0.jpg"
+Content-Type: image/jpeg
+
+(binary)   ← 기존 사진도 파일로 다시 보낸다
+------X
+Content-Disposition: form-data; name="images"; filename="new.jpg"
+Content-Type: image/jpeg
+
+(binary)
+------X--
+```
+
+### Response
+
+`200 OK`
+
+### 서버 동작
+
+예전 이미지는 `post_image` 행만 지우고 버킷 파일은 남긴다. 지우다 실패하면 화면에 없는 사진 때문에 수정 전체가 롤백된다. 저장 공간보다 글을 고칠 수 있는 쪽이 중요하다.
+
+업로드를 먼저 하고 행을 지운다. 업로드가 실패하면 예외가 나가 트랜잭션이 통째로 되돌아가므로, 기존 사진이 지워진 채 새 사진도 없는 상태가 생기지 않는다.
+
+---
+
 ## 나도 주문하기 흐름
 
 전용 API 가 없다. 상세 응답의 조합을 프론트가 그대로 장바구니에 담는다.
@@ -607,17 +699,16 @@ localStorage 가 없다. 장바구니는 `AppFlow` 가 메모리로 들고 있�
 
 ## 명세에 없지만 서버에 있는 것
 
-시안 922:2734 의 수정·삭제 화면에 필요한 세 경로가 서버에 이미 있다. 남의 글로 불러 `403` 을 받는 것으로 존재를 확인했다 (2026-08-09).
+시안 922:2734 의 삭제 화면에 필요한 두 경로가 명세 표에는 없고 서버에만 있다. 남의 글로 불러 `403` 을 받는 것으로 존재를 확인했다 (2026-08-09).
 
 | 경로 | 확인한 응답 | 상태 |
 | --- | --- | --- |
-| `PATCH v1/posts/{postId}` | `415` (라우팅은 됨, Content-Type 불일치) | **형식 대기 중** |
 | `DELETE v1/posts/{postId}` | `403` (남의 글이라 거부 = 존재) | 쓸 수 있다 |
 | `DELETE v1/posts/{postId}/comments/{commentId}` | `403` (같음) | 쓸 수 있다 |
 
-수정·삭제는 내 것에만 열어 준다. 상세의 `mine`, 댓글의 `mine` 으로 가른다 — 남의 것에 버튼을 두면 반드시 실패하는 버튼이 된다.
+수정도 처음엔 여기 있었다. `415` 만 받던 상태에서 2026-08-10 에 형식이 들어와 8번으로 옮겼다.
 
-앱은 `PATCH` 를 `{title, body}` JSON 으로 보내 둔 상태다. 형식이 정해지면 `MukbangApi.updatePost` 한 곳만 고친다.
+수정·삭제는 내 것에만 열어 준다. 상세의 `mine`, 댓글의 `mine` 으로 가른다 — 남의 것에 버튼을 두면 반드시 실패하는 버튼이 된다.
 
 `GET v1/users/me/posts` 는 아직 미구현이다 (`404`). 내가 쓴 글 목록 화면은 그 경로가 열린 뒤에 붙인다.
 
@@ -629,7 +720,8 @@ localStorage 가 없다. 장바구니는 `AppFlow` 가 메모리로 들고 있�
 | --- | --- |
 | 목록의 본문 | 1번 응답에 `body`(또는 미리보기)가 없다. Figma 목록 카드는 본문 2줄을 보여준다. 앱은 키가 붙는 즉시 읽도록 해 뒀다 |
 | 상세의 작성자·작성일 | 2번 응답에 작성자(`authorNickName`)와 작성일이 없다. 화면은 작성자 줄과 날짜를 보여주는데, 지금은 날짜를 `eatedAt`(먹은 날)으로 대신 쓰고 작성자 줄은 비워 둔다 |
-| `PATCH v1/posts/{id}` 형식 | Content-Type 과, 제목·본문만인지 사진도 교체 가능한지 |
+| ~~`PATCH v1/posts/{id}` 형식~~ | **닫힘.** multipart 이고 사진도 교체된다 (2026-08-10 명세). 8번 참고 |
+| 수정의 사진 되보내기 | 앱이 기존 사진을 CDN 에서 다시 받아 되올린다. 사진이 많으면 왕복이 그만큼 늘어난다. 남길 사진을 URL·id 로 지정하는 방식(예: `keepImageIds`)이 있으면 그쪽이 낫다 |
 | `GET v1/users/me/posts` | 미구현(`404`). 내가 쓴 글 목록 |
 | ~~상세의 `orderableHere`~~ | **닫힘.** "내 위치에서 가능한 조합만" 기능이 폐기됐다 (2026-08-09). 필드·쿼리·필터를 앱에서 모두 지웠다 |
 | ~~`selectedSpice` 3단계~~ | **닫힘.** 회의(2026-08-04)에서 맵기를 3단계(`NONE`/`MEDIUM`/`HOT`)로 통일했다. 시안의 "매운맛 5단계" 옵션 그룹은 없애고, `spiceAdjustable` 이 true 인 메뉴에만 3버튼을 그린다 |

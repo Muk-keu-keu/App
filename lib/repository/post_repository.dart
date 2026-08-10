@@ -3,6 +3,44 @@ import '../api/mukbang_api.dart';
 import '../models/combo.dart';
 import '../models/post.dart';
 
+/// 수정 후 남을 사진 한 장.
+///
+/// `PATCH v1/posts/{id}` 는 남길 사진을 **전부 파일로** 받는다. 그래서 이미 올라가
+/// 있던 사진과 새로 고른 사진을 한 목록에 순서대로 담아야 한다 — 보낸 순서가 그대로
+/// 새 표시 순서가 된다.
+sealed class PostImage {
+  const PostImage();
+
+  /// 그대로 남길 사진. 앱은 URL 로만 알고 있어서 다시 받아 올려야 한다.
+  const factory PostImage.kept(String url) = KeptPostImage;
+
+  /// 새로 고른 기기 안의 사진.
+  const factory PostImage.picked(String path) = PickedPostImage;
+}
+
+class KeptPostImage extends PostImage {
+  const KeptPostImage(this.url);
+
+  final String url;
+}
+
+class PickedPostImage extends PostImage {
+  const PickedPostImage(this.path);
+
+  final String path;
+}
+
+/// 남길 사진을 다시 받아 오지 못해 수정을 멈춘 상태.
+///
+/// 그대로 보내면 서버가 그 사진을 지운다. 사용자가 건드리지도 않은 사진이 사라지는
+/// 것보다 저장을 실패시키는 쪽이 낫다.
+class PostImagesUnavailableException implements Exception {
+  const PostImagesUnavailableException();
+
+  @override
+  String toString() => 'PostImagesUnavailableException — 남길 사진을 다시 받지 못했습니다';
+}
+
 /// 요기족보 데이터 소스.
 ///
 /// `.env` 에 `API_BASE_URL` 이 있으면 [ApiPostRepository], 없으면 시안 데이터를
@@ -49,16 +87,21 @@ abstract class PostRepository {
   /// id·작성시각을 알기 위해 목록을 다시 받을 필요가 없다.
   Future<List<PostComment>> addComment(String postId, String body);
 
-  // ── 명세에 없지만 서버에 있는 것들 ──────────────────────────────────────────
-  // 시안(922:2734)에 화면이 다 있는데 노션 명세에는 엔드포인트가 없다. 서버에는
-  // 있다 — 남의 글로 불러 403 을 받는 것으로 확인했다 (2026-08-09).
-  // 수정만 형식(Content-Type)이 미확정이라 백엔드 회신 대기 중이다.
+  // ── 8~10. 명세 표에 늦게 들어온 것들 ────────────────────────────────────────
+  // 시안(922:2734)의 수정·삭제 화면에 필요한 세 경로다. 삭제 둘은 2026-08-09 에
+  // 존재를 확인했고, 수정은 2026-08-10 에 형식(multipart)까지 받았다.
 
-  /// 족보 수정. 제목과 본문만 고친다 — 조합은 결제 스냅샷이라 바뀌지 않는다.
+  /// 8. PATCH v1/posts/{postId} — multipart.
+  ///
+  /// 조합은 결제 스냅샷이라 바뀌지 않는다. 제목·본문·사진만 고친다.
+  ///
+  /// [images] 는 **수정 후 남을 사진 전부**다. 안 보내면 사진이 전부 지워진다.
+  /// 제목만 고칠 때도 지금 붙어 있는 사진을 그대로 다시 넘겨야 한다.
   Future<void> updatePost(
     String postId, {
     required String title,
     required String body,
+    List<PostImage> images = const [],
   });
 
   /// 게시물 삭제. 되돌릴 수 없다.
@@ -104,7 +147,7 @@ class ApiPostRepository implements PostRepository {
         checkoutId: checkoutId,
         title: title,
         body: body,
-        imagePaths: imagePaths,
+        images: [for (final path in imagePaths) UploadImage.file(path)],
       );
 
   @override
@@ -126,13 +169,40 @@ class ApiPostRepository implements PostRepository {
     return updated.isEmpty ? _api.postComments(postId) : updated;
   }
 
+  /// 남길 사진을 파일로 다시 보내야 해서, URL 로만 아는 사진은 먼저 받아 온다.
+  ///
+  /// 한 장이라도 못 받으면 요청을 보내지 않고 던진다. 그대로 보내면 서버가 그 사진을
+  /// 지우기 때문이다 — 사용자가 건드리지도 않은 사진이 사라진다.
   @override
   Future<void> updatePost(
     String postId, {
     required String title,
     required String body,
-  }) =>
-      _api.updatePost(postId, title: title, body: body);
+    List<PostImage> images = const [],
+  }) async {
+    final parts = <UploadImage>[];
+    for (final (index, image) in images.indexed) {
+      switch (image) {
+        case PickedPostImage(:final path):
+          parts.add(UploadImage.file(path));
+        case KeptPostImage(:final url):
+          final bytes = await _api.downloadImage(url);
+          if (bytes == null) throw const PostImagesUnavailableException();
+          parts.add(UploadImage.bytes(bytes, filename: _keptFilename(url, index)));
+      }
+    }
+
+    await _api.updatePost(postId, title: title, body: body, images: parts);
+  }
+
+  /// 되보내는 사진의 파일 이름. 확장자로 파트의 Content-Type 이 정해지므로
+  /// URL 의 마지막 조각을 살린다. 쿼리스트링이 붙어 있으면 떼고, 확장자가 없으면
+  /// jpg 로 둔다 — 서버가 받는 네 형식 중 가장 흔하다.
+  static String _keptFilename(String url, int index) {
+    final last = Uri.tryParse(url)?.pathSegments.lastOrNull ?? '';
+    final clean = last.split('?').first;
+    return clean.contains('.') ? clean : 'kept_$index.jpg';
+  }
 
   @override
   Future<void> deletePost(String postId) => _api.deletePost(postId);
@@ -233,11 +303,14 @@ class MockPostRepository implements PostRepository {
     return [...list];
   }
 
+  /// [images] 는 받아만 두고 쓰지 않는다. 더미 글의 사진은 번들 에셋이라 지우거나
+  /// 순서를 바꿀 대상이 없다. 서버에서는 이 목록이 사진 전체를 대체한다.
   @override
   Future<void> updatePost(
     String postId, {
     required String title,
     required String body,
+    List<PostImage> images = const [],
   }) async {
     await _wait;
     for (final post in _posts) {

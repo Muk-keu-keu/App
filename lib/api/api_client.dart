@@ -9,6 +9,54 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
+
+/// multipart 로 올릴 사진 한 장.
+///
+/// 기기에서 고른 파일이거나, **이미 서버에 있던 사진을 다시 받아 온 바이트**다.
+/// 게시물 수정(`PATCH v1/posts/{id}`)이 남길 사진을 전부 파일로 다시 보내야 해서
+/// 두 가지가 다 필요하다.
+class UploadImage {
+  const UploadImage.file(String path)
+      : _path = path,
+        _bytes = null,
+        givenFilename = null;
+
+  const UploadImage.bytes(List<int> bytes, {required String filename})
+      : _bytes = bytes,
+        givenFilename = filename,
+        _path = null;
+
+  final String? _path;
+  final List<int>? _bytes;
+
+  /// 바이트로 올릴 때 부르는 쪽이 정한 이름. 파일 경로로 올릴 때는 null 이고
+  /// 경로의 마지막 조각을 쓴다.
+  final String? givenFilename;
+
+  String get filename => givenFilename ?? _path!.split('/').last;
+
+  /// 파트의 `Content-Type`. 확장자로 정한다.
+  ///
+  /// http 패키지는 이 값을 추측하지 않고 `application/octet-stream` 을 넣는다.
+  /// 서버는 jpg/jpeg/png/webp 만 받으므로 그대로 보내면 형식 검증에 걸린다.
+  MediaType get contentType => switch (filename.toLowerCase().split('.').last) {
+        'png' => MediaType('image', 'png'),
+        'webp' => MediaType('image', 'webp'),
+        'jpg' || 'jpeg' => MediaType('image', 'jpeg'),
+        // 확장자를 모르면 서버가 판단하도록 일반 형식으로 둔다.
+        _ => MediaType('application', 'octet-stream'),
+      };
+
+  Future<http.MultipartFile> toPart(String field) async => _path != null
+      ? http.MultipartFile.fromPath(field, _path, contentType: contentType)
+      : http.MultipartFile.fromBytes(
+          field,
+          _bytes!,
+          filename: filename,
+          contentType: contentType,
+        );
+}
 
 /// 서버가 2xx 가 아닌 응답을 줬을 때.
 class ApiException implements Exception {
@@ -161,22 +209,38 @@ class ApiClient {
   /// 재시도가 같은 요청을 다시 보내야 하므로 클로저 안에서 매번 새로 조립한다.
   Future<Map<String, dynamic>> multipart(
     String path, {
+    String method = 'POST',
     Map<String, String> fields = const {},
-    List<String> filePaths = const [],
+    List<UploadImage> images = const [],
     String fileField = 'images',
   }) async =>
       _send(() async {
-        final request = http.MultipartRequest('POST', _uri(path))
+        final request = http.MultipartRequest(method, _uri(path))
           ..fields.addAll(fields)
           ..headers['accept'] = 'application/json';
         if (isAuthenticated) {
           request.headers['Authorization'] = 'Bearer ${accessToken!.trim()}';
         }
-        for (final filePath in filePaths) {
-          request.files.add(await http.MultipartFile.fromPath(fileField, filePath));
+        for (final image in images) {
+          request.files.add(await image.toPart(fileField));
         }
         return http.Response.fromStream(await _http.send(request));
       }, path);
+
+  /// 이미 올라가 있는 사진을 바이트로 다시 받아 온다.
+  ///
+  /// 게시물 수정은 남길 사진을 파일로 다시 보내야 하는데, 앱은 그 사진을 URL 로만
+  /// 안다. CDN 주소라 **인증 헤더를 붙이지 않는다.** 실패하면 null 이다 —
+  /// 부르는 쪽이 "사진을 지키지 못한다" 를 판단해야 한다.
+  Future<List<int>?> fetchBytes(String url) async {
+    try {
+      final response = await _http.get(Uri.parse(url)).timeout(timeout);
+      if (response.statusCode < 200 || response.statusCode >= 300) return null;
+      return response.bodyBytes;
+    } on Object {
+      return null;
+    }
+  }
 
   Future<Map<String, dynamic>> patch(String path, {Object? body}) async => _send(
         () => _http.patch(

@@ -19,6 +19,10 @@ dependencies:
   # Gemini / 메타데이터 HTTP 호출
   http: ^1.2.2
 
+  # multipart 파트의 Content-Type 을 지정하는 데 쓴다 (MediaType).
+  # 사진을 application/octet-stream 으로 보내면 서버의 형식 검증에 걸린다.
+  http_parser: ^4.0.2
+
   # 안드로이드 공유 시트(ACTION_SEND) 수신
   receive_sharing_intent: ^1.9.0
 
@@ -32,7 +36,7 @@ dependencies:
   # API 키 등 환경변수를 .env 에서 읽는다. .env 는 커밋하지 않는다.
   flutter_dotenv: ^5.2.1
 
-  # 현재 좌표 수집. 승중님 API 의 orderableOnly(GET /posts)와 reorder 가 lat/lng 를 요구한다.
+  # 현재 좌표 수집. 배달 주소를 정하는 데 쓴다.
   geolocator: ^14.0.3
 
   # 좌표를 "구·동"으로 바꿔 화면에 보여주기 위한 것. **표시 전용**이다.

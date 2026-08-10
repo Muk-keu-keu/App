@@ -151,27 +151,38 @@ class MukbangApi {
     required int checkoutId,
     required String title,
     required String body,
-    List<String> imagePaths = const [],
+    List<UploadImage> images = const [],
   }) async {
     final json = await client.multipart(
       'v1/posts',
       fields: {'checkoutId': '$checkoutId', 'title': title, 'body': body},
-      filePaths: imagePaths,
+      images: images,
     );
     return '${json['postId'] ?? ''}';
   }
 
-  /// `PATCH v1/posts/{postId}` — 제목·본문 수정.
+  /// `PATCH v1/posts/{postId}` — 제목·본문·사진 수정. **multipart 다** (JSON 이 아니다).
   ///
-  /// **형식 미확정.** 라우팅은 되지만 JSON 으로 보내면 415 가 온다 (2026-08-09).
-  /// 사진도 함께 교체하는지, multipart 인지 백엔드 회신 대기 중이다. 형식이 오면
-  /// 이 한 줄만 고친다.
+  /// 작성과 같은 모양이고 `checkoutId` 만 없다 — 조합은 결제 스냅샷이라 바뀌지 않는다.
+  ///
+  /// [images] 는 **수정 후 남을 사진 전부**다. 기존 사진도 예외가 아니라 파일로 다시
+  /// 보내야 하고, 보낸 순서가 새 표시 순서(`sort_order`)가 된다. 빈 목록을 보내면
+  /// 사진이 전부 지워진다 — 부르는 쪽이 남길 사진을 모아 넘겨야 한다.
   Future<void> updatePost(
     String postId, {
     required String title,
     required String body,
+    List<UploadImage> images = const [],
   }) =>
-      client.patch('v1/posts/$postId', body: {'title': title, 'body': body});
+      client.multipart(
+        'v1/posts/$postId',
+        method: 'PATCH',
+        fields: {'title': title, 'body': body},
+        images: images,
+      );
+
+  /// 이미 올라가 있는 사진을 바이트로 다시 받아 온다. 수정이 그 사진을 되보낼 때 쓴다.
+  Future<List<int>?> downloadImage(String url) => client.fetchBytes(url);
 
   /// `DELETE v1/posts/{postId}` — 내 글만. 남의 글은 403.
   Future<void> deletePost(String postId) => client.delete('v1/posts/$postId');

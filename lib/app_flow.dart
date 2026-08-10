@@ -1151,19 +1151,31 @@ class AppFlow extends ChangeNotifier {
   void cancelPostEdit() => _setStage(AppStage.jokboDetail);
 
   /// 족보 수정 저장. 조합은 결제 스냅샷이라 제목·본문만 바뀐다.
-  Future<void> savePostEdit({
+  ///
+  /// 서버는 사진을 부분 수정하지 않는다 — 보낸 목록이 사진 전체를 대체한다. 그래서
+  /// 제목만 고칠 때도 **지금 붙어 있는 사진을 그대로 다시 넘긴다.** 넘기지 않으면
+  /// 사용자가 건드리지도 않은 사진이 지워진다.
+  ///
+  /// 저장했는지를 돌려준다. 사진을 다시 올릴 수 없어 멈춘 경우 false 이고, 화면은
+  /// 수정 화면에 남아 사용자에게 알린다.
+  Future<bool> savePostEdit({
     required String title,
     required String body,
   }) async {
     final post = selectedPost;
     final trimmed = title.trim();
-    if (post == null || trimmed.isEmpty) return;
+    if (post == null || trimmed.isEmpty) return false;
 
-    await _postRepository.updatePost(
-      post.id,
-      title: trimmed,
-      body: body.trim(),
-    );
+    try {
+      await _postRepository.updatePost(
+        post.id,
+        title: trimmed,
+        body: body.trim(),
+        images: [for (final url in post.imageUrls) PostImage.kept(url)],
+      );
+    } on PostImagesUnavailableException {
+      return false;
+    }
 
     // 목록에도 같은 글이 떠 있다. 다시 받지 않고 그 자리에서 맞춘다 —
     // 수정 후 목록으로 돌아갔을 때 옛 제목이 남아 있으면 저장이 안 된 것처럼 보인다.
@@ -1178,6 +1190,7 @@ class AppFlow extends ChangeNotifier {
     }
 
     _setStage(AppStage.jokboDetail);
+    return true;
   }
 
   /// 게시물 삭제. 돌아갈 상세가 없어지므로 목록으로 나간다.
