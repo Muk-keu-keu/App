@@ -468,6 +468,9 @@ class DsIcons {
   static const heartFill = 'assets/icons/heart_fill.svg';
   static const bubble = 'assets/icons/bubble.svg';
   static const camera = 'assets/icons/camera.svg';
+
+  /// 시안 `icon/home` (type=line). 하단 내비의 홈과 같은 글리프라 같은 파일을 쓴다.
+  static const home = 'assets/icons/nav_home.svg';
 }
 
 /// SVG 안에 색이 박혀 있어 다른 색으로 쓰려면 덧씌워야 한다.
@@ -537,9 +540,11 @@ class DsCheckbox extends StatelessWidget {
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: isOn ? AppColors.primary500 : AppColors.gray100,
+        // 끈 상태는 흰 배경 + gray500 테두리 1.5 다 (시안 838:3465).
+        // 회색 배경으로 채우면 켠 것도 아니고 빈 것도 아닌 상태로 보인다.
+        color: isOn ? AppColors.primary500 : Colors.white,
         borderRadius: BorderRadius.circular(4.8),
-        border: isOn ? null : Border.all(color: AppColors.gray400, width: 1.5),
+        border: isOn ? null : Border.all(color: AppColors.gray500, width: 1.5),
       ),
       // 체크 표시는 20 기준 14×10 이고, 상자가 커지면 같은 비율로 커진다.
       child: isOn

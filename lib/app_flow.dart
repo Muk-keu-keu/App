@@ -568,13 +568,18 @@ class AppFlow extends ChangeNotifier {
   ///
   /// 영상에 나온 브랜드가 여러 개면 기본으로 전부 담는다 — 떡볶이+핫도그 영상이면
   /// 두 가게가 담긴 채로 시작한다. 그게 회의에서 정한 "한 번에 결제" 의 기본값이다.
+  /// **이미 담아 둔 것이 있으면 그대로 쓴다.** 조합 카드의 체크박스가 곧 담기이므로
+  /// 여기서 덮어쓰면 사용자가 체크를 뺀 가게가 되살아난다. 아무것도 안 골랐을 때만
+  /// 영상 브랜드를 기본으로 담는다.
   void openCartFromAnalysis() {
-    final selected = analysis.exactMatches.isEmpty
-        // 영상 브랜드를 못 찾았으면 지금 보고 있는 카드를 담는다.
-        ? [if (selectedCombo != null) selectedCombo!.toStoreCart()]
-        : analysis.exactStoreCarts;
+    if (cart.isEmpty) {
+      final selected = analysis.exactMatches.isEmpty
+          // 영상 브랜드를 못 찾았으면 지금 보고 있는 카드를 담는다.
+          ? [if (selectedCombo != null) selectedCombo!.toStoreCart()]
+          : analysis.exactStoreCarts;
 
-    cart = Cart(source: _cartSource(), stores: selected);
+      cart = Cart(source: _cartSource(), stores: selected);
+    }
     _setStage(AppStage.cart);
   }
 

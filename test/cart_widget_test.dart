@@ -11,6 +11,7 @@ import 'package:mukbang_ttaradamgi/repository/order_repository.dart';
 import 'package:mukbang_ttaradamgi/repository/post_repository.dart';
 import 'package:mukbang_ttaradamgi/screens/cart_screen.dart';
 import 'package:mukbang_ttaradamgi/screens/combo_list_screen.dart';
+import 'package:mukbang_ttaradamgi/screens/combo_result_screen.dart';
 import 'package:mukbang_ttaradamgi/screens/order_done_screen.dart';
 import 'package:mukbang_ttaradamgi/services/gemini_extractor.dart';
 import 'package:mukbang_ttaradamgi/services/location_service.dart';
@@ -241,6 +242,66 @@ void main() {
     expect(find.text('담은 메뉴가 없어요'), findsWidgets);
     final button = tester.widget<DsButton>(find.byType(DsButton));
     expect(button.onPressed, isNull);
+  });
+
+  // ── 먹방 조합 카드 선택 (피드백 16·17·18 / 시안 925:4220) ────────────────────
+  // 체크박스는 "지금 보고 있는 카드" 가 아니라 담기다. 그래서 해제도 되고,
+  // 카드마다 따로 켜진다.
+
+  testWidgets('선택 개수를 "N개 중 M개 선택" 으로 보여준다', (tester) async {
+    final flow = await analyzedFlow();
+    await pumpScreen(tester, const ComboResultScreen(), flow);
+
+    expect(tester.takeException(), isNull);
+    // 분석 결과는 영상 브랜드 2곳 + 비슷한 곳 1곳이다.
+    expect(flow.suggestions, hasLength(3));
+    // 개수만 색·크기가 달라 Text.rich 다. 이어붙인 문자열로 찾는다.
+    expect(find.text('3개 중 0개 선택', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('체크로 담고 다시 눌러 뺀다', (tester) async {
+    final flow = await analyzedFlow();
+    await pumpScreen(tester, const ComboResultScreen(), flow);
+
+    final first = flow.suggestions.first;
+    expect(flow.isInCart(first.id), isFalse);
+
+    await tester.tap(find.byType(DsCheckbox).first);
+    await tester.pump();
+    expect(flow.isInCart(first.id), isTrue);
+    expect(find.text('3개 중 1개 선택', findRichText: true), findsOneWidget);
+
+    // 해제가 되어야 한다 — 피드백 17번이 지적한 지점이다.
+    await tester.tap(find.byType(DsCheckbox).first);
+    await tester.pump();
+    expect(flow.isInCart(first.id), isFalse);
+    expect(find.text('3개 중 0개 선택', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('체크한 조합만 장바구니로 넘어간다', (tester) async {
+    final flow = await analyzedFlow();
+    await pumpScreen(tester, const ComboResultScreen(), flow);
+
+    await tester.tap(find.byType(DsCheckbox).first);
+    await tester.pump();
+    await tester.tap(find.text('이대로 주문하기'));
+    await tester.pump();
+
+    // 영상 브랜드가 2곳이지만 고른 것은 하나다. 예전에는 CTA 가 장바구니를
+    // 덮어써서 안 고른 가게까지 담겼다.
+    expect(flow.stage, AppStage.cart);
+    expect(flow.cart.storeCount, 1);
+    expect(flow.cart.stores.single.restaurantId, flow.suggestions.first.id);
+  });
+
+  testWidgets('아무것도 안 고르면 영상 브랜드를 기본으로 담는다', (tester) async {
+    final flow = await analyzedFlow();
+    await pumpScreen(tester, const ComboResultScreen(), flow);
+
+    await tester.tap(find.text('이대로 주문하기'));
+    await tester.pump();
+
+    expect(flow.cart.storeCount, 2);
   });
 
   testWidgets('완료 화면은 곳 수와 가게 이름만 보여준다', (tester) async {

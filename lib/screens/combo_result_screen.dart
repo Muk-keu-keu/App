@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../app_flow.dart';
@@ -43,15 +44,21 @@ class _ComboResultScreenState extends State<ComboResultScreen> {
     final combos = flow.suggestions;
     if (combos.isEmpty) return const SizedBox.shrink();
 
-    final exactCount = flow.analysis.exactMatches.length;
-
     return Container(
-      color: Colors.white,
+      // 시안 925:4220 의 배경은 회색(bg)이다. 헤더와 카드만 흰색이라
+      // 카드가 배경에서 떠 보인다.
+      color: AppColors.bg,
       child: Column(
         children: [
           _TitleArea(
-            storeCount: exactCount,
+            storeCount: flow.analysis.exactMatches.length,
             onHome: () => context.read<AppFlow>().backToYogiyoHome(),
+          ),
+          // 시안 925:4305 — 카드 위에 "N개 중 M개 선택". 카드를 넘기며 고르는
+          // 화면이라 몇 개를 담았는지가 안 보이면 진행 상황을 알 수 없다.
+          _SelectionCount(
+            total: combos.length,
+            selected: combos.where((c) => flow.isInCart(c.id)).length,
           ),
           Expanded(
             child: Column(
@@ -67,7 +74,9 @@ class _ComboResultScreenState extends State<ComboResultScreen> {
                       child: SingleChildScrollView(
                         child: _ComboCard(
                           combo: combos[i],
-                          selected: i == flow.selectedComboIndex,
+                          // 체크박스가 곧 "담는다" 다. 지금 보고 있는 카드인지와
+                          // 무관하다 — 넘겨 본 카드가 저절로 담기면 안 된다.
+                          selected: flow.isInCart(combos[i].id),
                         ),
                       ),
                     ),
@@ -113,11 +122,9 @@ class _TitleArea extends StatelessWidget {
                 child: GestureDetector(
                   onTap: onHome,
                   behavior: HitTestBehavior.opaque,
-                  child: const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: Icon(Icons.home_outlined, size: 24, color: Colors.black),
-                  ),
+                  // 시안은 디자인 시스템의 `icon/home` (line) 이다. Material 의
+                  // home_outlined 는 지붕 모양이 달라 원본과 다르게 보인다.
+                  child: SvgPicture.asset(DsIcons.home, width: 24, height: 24),
                 ),
               ),
               const SizedBox(height: 3),
@@ -137,16 +144,16 @@ class _TitleArea extends StatelessWidget {
       );
 }
 
-/// 조합 카드 하나 (시안 925:4225).
+/// 조합 카드 하나 (시안 925:4225 선택 / 925:4251 미선택).
 ///
-/// 지금 보고 있는 카드가 곧 고른 카드다. 시안이 오른쪽 위에 체크를 얹어 그것을
-/// 드러낸다 — 넘기다 보면 뭘 담게 되는지 헷갈리기 쉬운 화면이라 표시가 필요하다.
+/// 체크박스가 "이 조합을 담는다" 다. 카드를 넘겨 보는 것과 담는 것은 별개이므로
+/// 여러 장을 담을 수 있다 — 회의(2026-08-04)의 다중 매장 묶음 결제와 같은 규칙이다.
 class _ComboCard extends StatelessWidget {
   const _ComboCard({required this.combo, required this.selected});
 
   final ComboSuggestion combo;
 
-  /// 지금 페이지에 떠 있는 카드인지. 테두리와 체크가 함께 켜진다.
+  /// 장바구니에 담겼는지. 테두리와 체크가 함께 켜진다.
   final bool selected;
 
   @override
@@ -155,10 +162,10 @@ class _ComboCard extends StatelessWidget {
           Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
+              // 미선택도 2px 테두리가 있다 (시안 925:4251 은 gray300).
+              // 투명으로 두면 카드가 배경에 붙어 경계가 사라진다.
               border: Border.all(
-                // 안 고른 카드도 자리를 같게 두려고 투명 테두리를 남긴다.
-                // 색만 바뀌면 선택할 때 카드가 2px 씩 움직이지 않는다.
-                color: selected ? AppColors.primary400 : Colors.transparent,
+                color: selected ? AppColors.primary400 : AppColors.gray300,
                 width: 2,
               ),
             ),
@@ -171,25 +178,71 @@ class _ComboCard extends StatelessWidget {
               ],
             ),
           ),
-          if (selected)
-            const Positioned(
-              top: 14,
-              right: 18,
-              child: DsCheckbox(isOn: true, size: 32),
+          // 담기지 않은 카드에도 빈 체크박스를 그린다. 켜졌을 때만 그리면
+          // 무엇을 눌러야 담기는지 알 수 없고, 해제할 자리도 없어진다.
+          Positioned(
+            top: 14,
+            right: 18,
+            child: DsCheckbox(
+              isOn: selected,
+              size: 32,
+              onTap: () => context.read<AppFlow>().toggleSuggestionInCart(combo),
             ),
+          ),
         ],
       );
 }
 
-/// 매장 사진을 흐리게 깔고 그 위에 흰 글씨를 얹는다 (시안 925:4226, blur 30).
+/// "N개 중 M개 선택" (시안 925:4305).
+///
+/// 고른 개수만 14 SemiBold primary500 이고 나머지는 12 Regular 다.
+class _SelectionCount extends StatelessWidget {
+  const _SelectionCount({required this.total, required this.selected});
+
+  final int total;
+  final int selected;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.only(left: 21, bottom: 12),
+        child: Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(text: '$total개 중 ', style: AppText.caption()),
+              TextSpan(
+                text: '$selected개',
+                style: AppText.btn2(color: AppColors.primary500),
+              ),
+              TextSpan(text: ' 선택', style: AppText.caption()),
+            ],
+          ),
+        ),
+      );
+}
+
+/// 매장 사진을 흐리게 깔고 그 위에 흰 글씨를 얹는다 (시안 925:4226).
 ///
 /// 상호 · 별점 · 거리/배달시간 세 줄만 얹는다. "영상 속 {브랜드}" 라벨은 개정
 /// 시안에서 빠졌다 — 영상에 나온 조합이 앞에 오고 헤더가 "먹방 속 조합을
 /// 담았어요" 라고 말하므로 카드마다 다시 적지 않는다.
+///
+/// **블러는 위로 갈수록 사라진다.** 시안의 레이어 블러가 프로그레시브라 위쪽은
+/// 사진이 선명하고 글씨가 얹히는 아래쪽만 흐려진다. Flutter 에는 그런 필터가 없어
+/// 흐린 사본을 위→아래 그라디언트로 마스킹해 겹친다. 어둡게 덮는 층도 같은
+/// 그라디언트를 쓴다 — 위쪽까지 덮으면 선명한 사진이 탁해진다.
 class _StoreArea extends StatelessWidget {
   const _StoreArea({required this.store});
 
   final Restaurant store;
+
+  /// 위는 투명, 아래로 갈수록 불투명. 블러와 어둡게 덮는 층이 같이 쓴다.
+  static const _fade = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Colors.transparent, Colors.white],
+    stops: [0.12, 0.62],
+  );
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -204,10 +257,24 @@ class _StoreArea extends StatelessWidget {
               size: 152,
               radius: 0,
             ),
-            BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-              // 흐리게만 하면 흰 글씨가 밝은 사진 위에서 안 보인다.
-              child: Container(color: Colors.black.withValues(alpha: 0.28)),
+            ShaderMask(
+              blendMode: BlendMode.dstIn,
+              shaderCallback: _fade.createShader,
+              child: ImageFiltered(
+                imageFilter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: RemoteOrAssetImage(
+                  imageUrl: store.imageUrl,
+                  assetPath: store.imagePath,
+                  size: 152,
+                  radius: 0,
+                ),
+              ),
+            ),
+            // 흐리게만 하면 흰 글씨가 밝은 사진 위에서 안 보인다.
+            ShaderMask(
+              blendMode: BlendMode.dstIn,
+              shaderCallback: _fade.createShader,
+              child: Container(color: Colors.black.withValues(alpha: 0.32)),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
