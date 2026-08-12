@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -69,6 +71,55 @@ class YogiyoHomeScreen extends StatelessWidget {
 
 // ── 배너 ──────────────────────────────────────────────────────────────────────
 
+/// 배너의 접시 일러스트 + 그림자 (시안 681:6424).
+///
+/// 시안은 접시 아래에 타원 그림자 벡터 두 개를 따로 깔았다
+/// (681:6425 — 그룹 기준 13,68 크기 113x33 / 681:6426 — 89,82 크기 63x29).
+/// 그 두 벡터를 받아 오는 대신, **같은 PNG 를 검게 칠해 흐리게 깔아** 모양을 그대로
+/// 따르는 그림자를 만든다. 투명 PNG 라 `BoxShadow` 는 사각형 그림자가 되어 못 쓴다.
+class _BannerPlatter extends StatelessWidget {
+  const _BannerPlatter();
+
+  static const _asset = 'assets/images/home/banner_platter.png';
+  static const _size = Size(152, 120);
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        width: _size.width,
+        // 그림자가 아래로 빠져나갈 만큼만 키운다.
+        height: _size.height + 10,
+        child: Stack(
+          children: [
+            Positioned(
+              left: 0,
+              top: 10,
+              child: ImageFiltered(
+                imageFilter: ui.ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                child: ColorFiltered(
+                  colorFilter: ColorFilter.mode(
+                    Colors.black.withValues(alpha: 0.22),
+                    BlendMode.srcIn,
+                  ),
+                  child: Image.asset(
+                    _asset,
+                    width: _size.width,
+                    height: _size.height,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+            Image.asset(
+              _asset,
+              width: _size.width,
+              height: _size.height,
+              fit: BoxFit.contain,
+            ),
+          ],
+        ),
+      );
+}
+
 class _Banner extends StatelessWidget {
   const _Banner({this.location});
 
@@ -92,15 +143,12 @@ class _Banner extends StatelessWidget {
                 ),
               ),
             ),
-            Positioned(
-              right: -8,
-              top: 24,
-              child: Image.asset(
-                'assets/images/home/banner_platter.png',
-                width: 152,
-                height: 120,
-                fit: BoxFit.contain,
-              ),
+            // 시안 681:6424 — x 218 / y 77, 152x120. 배너 폭 390 기준 오른쪽 20 이다.
+            // 예전에는 top 24 라 상태바(53)만큼 올라가 접시 윗부분이 잘렸다.
+            const Positioned(
+              right: 20,
+              top: 77,
+              child: _BannerPlatter(),
             ),
             SafeArea(
               bottom: false,

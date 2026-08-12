@@ -371,7 +371,15 @@ class AppFlow extends ChangeNotifier {
   /// 퀵메뉴 "먹방요기" — 공유 안내 화면으로 간다.
   void openShareGuide() => _setStage(AppStage.home);
 
-  void backToYogiyoHome() => _setStage(AppStage.yogiyoHome);
+  /// 홈으로 돌아간다.
+  ///
+  /// 인기 조합이 비어 있으면 다시 받아온다. 이 목록은 로그인 직후 한 번만 채우는데,
+  /// 그때 실패했거나 로그인을 거치지 않고 홈에 온 경우 시안(681:6436)의 카드 자리가
+  /// 빈 분홍 영역으로 남는다.
+  void backToYogiyoHome() {
+    _setStage(AppStage.yogiyoHome);
+    if (popularPosts.isEmpty) loadPopularPosts();
+  }
 
   // ── 결제 내역 ──────────────────────────────────────────────────────────────
 
