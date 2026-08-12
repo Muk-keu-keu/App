@@ -8,10 +8,15 @@
     <!-- allowBackup 을 끈 이유: 로그인 토큰이 SharedPreferences 에 남는다. 백업이
          켜져 있으면(기본값 true) 그 파일이 클라우드 자동 백업과 `adb backup` 으로
          기기 밖으로 나간다. 앱이 백업할 만한 다른 데이터가 없어 통째로 끈다. -->
+    <!-- 평문(HTTP) 통신을 허용한다. 서버가 `http://<IP>:8700` 이라 이 설정이 없으면
+         Android 9(API 28)부터 **모든 API 호출이 차단된다** — 로그인도, 목록도 실패한다.
+         iOS 쪽 `NSAllowsArbitraryLoads` 와 짝이 되는 설정이다.
+         서버가 HTTPS 를 서비스하면 양쪽 다 지워야 한다. -->
     <application
         android:label="먹방요기"
         android:name="${applicationName}"
         android:allowBackup="false"
+        android:usesCleartextTraffic="true"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
