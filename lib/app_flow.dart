@@ -373,12 +373,13 @@ class AppFlow extends ChangeNotifier {
 
   /// 홈으로 돌아간다.
   ///
-  /// 인기 조합이 비어 있으면 다시 받아온다. 이 목록은 로그인 직후 한 번만 채우는데,
-  /// 그때 실패했거나 로그인을 거치지 않고 홈에 온 경우 시안(681:6436)의 카드 자리가
-  /// 빈 분홍 영역으로 남는다.
+  /// 인기 조합을 **매번** 다시 받아온다. 비어 있을 때만 받으면 두 가지가 깨진다.
+  /// 하나는 로그인 때 실패했거나 로그인을 거치지 않고 홈에 온 경우 시안(681:6436)의
+  /// 카드 자리가 빈 분홍 영역으로 남는 것이고, 다른 하나는 이미 채워진 목록이
+  /// 세션 내내 갱신되지 않아 지워진 글이 계속 떠 있는 것이다.
   void backToYogiyoHome() {
     _setStage(AppStage.yogiyoHome);
-    if (popularPosts.isEmpty) loadPopularPosts();
+    loadPopularPosts();
   }
 
   // ── 결제 내역 ──────────────────────────────────────────────────────────────
@@ -1087,9 +1088,11 @@ class AppFlow extends ChangeNotifier {
 
   /// 반환된 Future 는 목록 로딩이 끝날 때 완료된다. 화면은 기다리지 않아도 되지만
   /// 테스트가 로딩 완료를 기다릴 수 있어야 한다.
-  Future<void> openJokbo() {
+  Future<void> openJokbo() async {
     _setStage(AppStage.jokboHome);
-    return loadPosts();
+    // 이 화면은 목록과 인기 배너를 함께 보여준다. 목록만 새로 받으면 배너는
+    // 로그인 시점 스냅샷으로 남아, 지워진 글이 위에만 계속 떠 있게 된다.
+    await Future.wait([loadPosts(), loadPopularPosts()]);
   }
 
   /// 다음 페이지 커서. null 이면 더 없다 (api-yogijokbo.md 1번).
@@ -1277,6 +1280,10 @@ class AppFlow extends ChangeNotifier {
     selectedPost = null;
     postComments = [];
     _setStage(AppStage.jokboHome);
+
+    // 로컬에서 빼는 것만으로는 부족하다. 자리가 하나 비었으니 순위에 밀려 있던
+    // 다음 글이 배너로 올라와야 한다. 서버 기준으로 다시 받는다.
+    await loadPopularPosts();
   }
 
   /// 댓글 삭제. 카운트는 남은 댓글 수로 다시 센다.

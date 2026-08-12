@@ -70,7 +70,13 @@ void main() {
     await flow.openJokbo();
     await pumpScreen(tester, const YogijokboHomeScreen(), flow);
 
-    await tester.tap(find.text('떵개 추천 두찜 로제 닭발').last);
+    // 같은 제목이 인기 배너와 목록 양쪽에 나온다. 목록 쪽은 배너 높이만큼
+    // 아래로 밀려 화면 밖에 있을 수 있으므로 먼저 끌어올린다.
+    final item = find.text('떵개 추천 두찜 로제 닭발').last;
+    await tester.ensureVisible(item);
+    await tester.pump();
+
+    await tester.tap(item);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
