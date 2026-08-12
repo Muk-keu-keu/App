@@ -32,6 +32,7 @@ enum AppStage {
   combo, // 영상에 나온 조합
   comboList, // 여러 매장 비교
   storeMenu, // 매장 메뉴 전체 (메뉴 수정하기)
+  menuDetail, // 메뉴 추가하기 (옵션 고르고 담기)
   cart, // 장바구니 (여러 매장 묶음 결제)
   orderDone, // 주문 접수 완료
   failed, // 실패 안내
@@ -800,8 +801,32 @@ class AppFlow extends ChangeNotifier {
 
   void closeStoreMenu() => _setStage(_storeMenuOrigin);
 
+  /// "메뉴 추가하기" 화면에 띄울 메뉴 (시안 925:4037).
+  Menu? menuDetail;
+
+  /// 메뉴를 눌러 상세로 들어간다. 목록의 + 는 옵션 없이 바로 담는 빠른 길이고,
+  /// 이 화면은 옵션을 고르고 담는 길이다.
+  void openMenuDetail(Menu menu) {
+    menuDetail = menu;
+    _setStage(AppStage.menuDetail);
+  }
+
+  void closeMenuDetail() {
+    menuDetail = null;
+    _setStage(AppStage.storeMenu);
+  }
+
   /// 매장 메뉴의 + 버튼. 이미 담긴 메뉴면 수량만 올린다.
-  void addMenuToCart(Menu menu) {
+  ///
+  /// [chosen] 이 오면 상세 화면에서 고른 옵션이다. 담은 뒤 그 값으로 줄을 고친다 —
+  /// `Menu.toCartLine` 은 미리 체크된 옵션만 담아서 사용자가 고른 것을 모른다.
+  /// [thenClose] 는 상세 화면에서 담은 경우다. 담고 그 화면을 닫는다.
+  void addMenuToCart(
+    Menu menu, {
+    List<MenuOption>? chosen,
+    SpiceLevel? spice,
+    bool thenClose = false,
+  }) {
     final restaurant = storeMenuRestaurant ??
         (storeMenuRestaurantId == null
             ? null
@@ -810,6 +835,20 @@ class AppFlow extends ChangeNotifier {
 
     cart.source ??= _cartSource();
     cart.ensureStore(restaurant).add(menu);
+
+    if (chosen != null) {
+      updateLineOptions(
+        restaurantId: restaurant.restaurantId,
+        menuId: menu.menuId,
+        chosen: chosen,
+        spice: spice,
+      );
+    }
+
+    if (thenClose) {
+      closeMenuDetail();
+      return;
+    }
     notifyListeners();
   }
 

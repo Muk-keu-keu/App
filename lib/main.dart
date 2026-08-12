@@ -18,6 +18,7 @@ import 'screens/home/yogiyo_home_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/keyword_select_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/menu_detail_screen.dart';
 import 'screens/order_done_screen.dart';
 import 'screens/signup_screen.dart';
 import 'screens/store_menu_screen.dart';
@@ -153,6 +154,7 @@ class _RootScreenState extends State<RootScreen> {
         AppStage.combo => const ComboResultScreen(),
         AppStage.comboList => const ComboListScreen(),
         AppStage.storeMenu => const StoreMenuScreen(),
+        AppStage.menuDetail => const MenuDetailScreen(),
         AppStage.cart => _CartStage(),
         AppStage.orderDone => const OrderDoneScreen(),
         AppStage.failed => const _FailedScreen(),

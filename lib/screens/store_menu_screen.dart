@@ -104,6 +104,7 @@ class _StoreMenuScreenState extends State<StoreMenuScreen> {
               // 표시가 없으면 눌린 건지 알 수 없다.
               inCart: flow.cartQuantityOf(visible[i].menuId),
               onAdd: () => context.read<AppFlow>().addMenuToCart(visible[i]),
+              onOpen: () => context.read<AppFlow>().openMenuDetail(visible[i]),
             ),
           ),
           const SliverToBoxAdapter(child: SizedBox(height: 40)),
@@ -266,6 +267,7 @@ class _ProductCard extends StatelessWidget {
     required this.menu,
     required this.inCart,
     required this.onAdd,
+    required this.onOpen,
   });
 
   final Menu menu;
@@ -273,10 +275,17 @@ class _ProductCard extends StatelessWidget {
   /// 장바구니에 담긴 수량. 0이면 표시하지 않는다.
   final int inCart;
 
+  /// 사진의 + — 옵션 없이 바로 담는다.
   final VoidCallback onAdd;
 
+  /// 카드를 누르면 옵션을 고르는 상세로 간다 (시안 925:4037, 피드백 25번).
+  final VoidCallback onOpen;
+
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onOpen,
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -347,6 +356,7 @@ class _ProductCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
         ),
       );
 }
