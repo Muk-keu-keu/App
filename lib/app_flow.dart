@@ -787,11 +787,20 @@ class AppFlow extends ChangeNotifier {
 
   /// 주문 실패 안내. 400 은 대개 프론트가 계산한 값이 서버와 어긋난 경우다 —
   /// 서버가 menuId 로 다시 계산하므로 사용자가 할 수 있는 건 다시 담는 것뿐이다.
-  static String _checkoutFailureMessage(ApiException e) => switch (e.statusCode) {
-        400 => '주문 내용을 다시 확인해 주세요.\n메뉴나 가격이 바뀌었을 수 있어요.',
-        404 => '지금은 주문할 수 없는 메뉴가 있어요.',
-        _ => '주문에 실패했어요.\n잠시 후 다시 시도해 주세요.',
-      };
+  ///
+  /// 디버그 빌드에서는 서버가 준 사유를 그대로 붙인다. 이게 없으면 어떤 필드가
+  /// 검증에 걸렸는지 기기에서는 알 방법이 없고, 실제로 그것 때문에 "메뉴나 가격이
+  /// 바뀌었을 수 있어요" 를 보며 엉뚱한 곳을 뒤졌다.
+  static String _checkoutFailureMessage(ApiException e) {
+    final base = switch (e.statusCode) {
+      400 => '주문 내용을 다시 확인해 주세요.\n메뉴나 가격이 바뀌었을 수 있어요.',
+      404 => '지금은 주문할 수 없는 메뉴가 있어요.',
+      _ => '주문에 실패했어요.\n잠시 후 다시 시도해 주세요.',
+    };
+    final detail = (e.message ?? '').trim();
+    if (!kDebugMode || detail.isEmpty) return base;
+    return '$base\n\n[HTTP ${e.statusCode}] $detail';
+  }
 
   /// 완료 화면의 "홈으로 이동하기" (시안 949:4470 의 유일한 버튼).
   void backToYogiyoHomeFromReceipt() {
