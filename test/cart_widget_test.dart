@@ -304,16 +304,42 @@ void main() {
     expect(flow.cart.storeCount, 2);
   });
 
-  testWidgets('완료 화면은 곳 수와 가게 이름만 보여준다', (tester) async {
+  // 피드백 29번 — 시안 949:4470 대로 금액 카드가 있고 버튼은 하나다.
+  testWidgets('완료 화면은 금액 카드와 홈으로 이동하기를 보여준다', (tester) async {
     final flow = await analyzedFlow();
     flow.openCartFromAnalysis();
     await flow.checkout();
     await pumpScreen(tester, const OrderDoneScreen(), flow);
 
     expect(tester.takeException(), isNull);
-    expect(find.text('주문이 접수되었습니다'), findsOneWidget);
-    expect(find.text('2건 · 엽기떡볶이 성수점, 명랑핫도그 성수점'), findsOneWidget);
-    expect(find.textContaining('가게마다 따로 배달'), findsOneWidget);
-    expect(find.text('주문 내역 보기'), findsOneWidget);
+    expect(find.text('결제가 완료되었습니다'), findsOneWidget);
+    expect(find.text('이제 먹방 속 조합을 직접 즐겨보세요!'), findsOneWidget);
+
+    // 주문 18,000 + 배달비 4,500 = 22,500
+    expect(find.text('결제 금액'), findsOneWidget);
+    expect(find.text('22,500원'), findsOneWidget);
+    expect(find.text('18,000원'), findsOneWidget);
+    expect(find.text('4,500원'), findsOneWidget);
+
+    expect(find.text('홈으로 이동하기'), findsOneWidget);
+    // 시안에는 버튼이 하나다. 주문내역은 홈의 탭에서 간다.
+    expect(find.text('주문 내역 보기'), findsNothing);
+  });
+
+  testWidgets('완료 화면의 금액은 장바구니를 비운 뒤에도 남는다', (tester) async {
+    final flow = await analyzedFlow();
+    flow.openCartFromAnalysis();
+    await flow.checkout();
+
+    // checkout 이 장바구니를 비우므로 화면이 읽을 값이 따로 있어야 한다.
+    expect(flow.cart.isEmpty, isTrue);
+    expect(flow.paidAmounts?.total, 22500);
+
+    await pumpScreen(tester, const OrderDoneScreen(), flow);
+    await tester.tap(find.text('홈으로 이동하기'));
+    await tester.pump();
+
+    expect(flow.stage, AppStage.yogiyoHome);
+    expect(flow.paidAmounts, isNull);
   });
 }

@@ -471,6 +471,10 @@ class DsIcons {
 
   /// 시안 `icon/home` (type=line). 하단 내비의 홈과 같은 글리프라 같은 파일을 쓴다.
   static const home = 'assets/icons/nav_home.svg';
+
+  /// 결제 완료의 체크 원 60x60 (시안 952:4591). 체크박스의 `check` 와 달리
+  /// 분홍 원까지 한 파일이다.
+  static const success = 'assets/icons/success.svg';
 }
 
 /// SVG 안에 색이 박혀 있어 다른 색으로 쓰려면 덧씌워야 한다.

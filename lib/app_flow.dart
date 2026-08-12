@@ -733,6 +733,13 @@ class AppFlow extends ChangeNotifier {
   /// `POST v1/orders` 의 응답. 완료 화면이 그린다.
   OrderReceipt? receipt;
 
+  /// 완료 화면이 보여줄 금액 (시안 949:4470 의 금액 카드).
+  ///
+  /// **앱이 계산한 값이다.** `POST v1/orders` 의 201 응답에 금액이 없어 서버 확정액을
+  /// 알 수 없다. 결제 직전 화면에서 사용자가 본 숫자와 같은 값을 그대로 보여준다 —
+  /// 서버가 다시 계산해 달라진다면 주문내역에서 드러난다.
+  ({int itemsTotal, int deliveryFee, int total})? paidAmounts;
+
   /// 장바구니를 통째로 보낸다. 가게가 여러 곳이어도 요청은 한 번이다.
   ///
   /// 응답에 `orderId` 가 없어 완료 화면에서 특정 상세로 갈 수 없다. 목록으로만 간다
@@ -745,6 +752,12 @@ class AppFlow extends ChangeNotifier {
 
     try {
       receipt = await _orderRepository.create(cart);
+      // 장바구니를 비우기 전에 금액을 붙잡아 둔다.
+      paidAmounts = (
+        itemsTotal: cart.itemsTotal,
+        deliveryFee: cart.deliveryFeeTotal,
+        total: cart.totalPrice,
+      );
       cart = Cart();
       _setStage(AppStage.orderDone);
     } on ApiException catch (e) {
@@ -765,9 +778,17 @@ class AppFlow extends ChangeNotifier {
         _ => '주문에 실패했어요.\n잠시 후 다시 시도해 주세요.',
       };
 
+  /// 완료 화면의 "홈으로 이동하기" (시안 949:4470 의 유일한 버튼).
+  void backToYogiyoHomeFromReceipt() {
+    receipt = null;
+    paidAmounts = null;
+    backToYogiyoHome();
+  }
+
   /// 완료 화면에서 결제 내역으로.
   Future<void> openOrdersFromReceipt() async {
     receipt = null;
+    paidAmounts = null;
     await openOrders();
   }
 
