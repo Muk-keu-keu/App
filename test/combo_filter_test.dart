@@ -100,15 +100,15 @@ void main() {
     test('필터에서 적용하면 AI 를 다시 부르지 않고 분석만 다시 요청한다', () async {
       flow.openFilter();
       flow.updatePreference(
-        TastePreference(mode: ServingMode.solo, spice: SpiceLevel.hot),
+        TastePreference(spice: SpiceLevel.hot, maxDeliveryMinutes: 25),
       );
 
       await flow.applyPreferenceAndAnalyze();
 
       // 분석은 한 번 다시 불렸고, 바뀐 취향이 그대로 넘어갔다.
       expect(repo.calls, 1);
-      expect(repo.lastPreference?.mode, ServingMode.solo);
       expect(repo.lastPreference?.spice, SpiceLevel.hot);
+      expect(repo.lastPreference?.maxDeliveryMinutes, 25);
 
       // 필터를 걸었으니 비교 목록으로 돌아온다.
       expect(flow.stage, AppStage.comboList);
@@ -118,19 +118,16 @@ void main() {
     test('취향은 명세의 preferences 세 필드로 나간다', () async {
       flow.openFilter();
       flow.updatePreference(
-        TastePreference(
-          mode: ServingMode.healthy,
-          spice: SpiceLevel.medium,
-          maxDeliveryMinutes: 35,
-        ),
+        TastePreference(spice: SpiceLevel.medium, maxDeliveryMinutes: 35),
       );
       await flow.applyPreferenceAndAnalyze();
 
       expect(repo.lastPreference?.toJson(), {
         'maxSpiceLevel': 'MEDIUM',
         'maxDeliveryMin': 35,
-        // 비건모드가 excludeMeat 로 나가는 유일한 화면 값이다.
-        'excludeMeat': true,
+        // 모드 섹션이 빠져 고기 제외를 켤 자리가 없다. 명세에 남아 있는 필드라
+        // 계속 보내되 항상 false 다.
+        'excludeMeat': false,
       });
     });
 

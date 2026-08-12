@@ -565,13 +565,6 @@ void main() {
       expect(result.exactMatches.first.items.first.imageUrl, url);
     });
 
-    test('1인 모드는 메인 메뉴를 하나로 줄인다', () {
-      final result = build(preference: TastePreference(mode: ServingMode.solo));
-      // 메인 1 + 사이드 1
-      expect(result.exactMatches.first.items, hasLength(2));
-      expect(result.exactMatches.first.items.first.name, '레드콤보');
-    });
-
     test('브랜드를 못 찾으면 exactMatches 가 비고 combos 만 남는다', () {
       final result = build(
         extraction: const ExtractionResult(
@@ -839,6 +832,161 @@ void main() {
       // `&amp;#39;` → 숫자 참조를 먼저 풀 수 없으니 이름 치환이 뒤에 와야 한다.
       expect(MetadataFetcher.decodeEntities('&amp;#39;'), "&#39;");
       expect(MetadataFetcher.decodeEntities('&#39;'), "'");
+    });
+  });
+
+  group('AI 추천 이유', () {
+    Restaurant store(int id, String name, {double rating = 4.2}) => Restaurant(
+          restaurantId: id,
+          name: name,
+          foodCategory: FoodCategory.snack,
+          area: '성수동',
+          rating: rating,
+          etaMin: 30,
+          deliveryFee: 2000,
+          minOrderPrice: 12000,
+          distanceKm: 1.2,
+        );
+
+    DishCandidate candidate(int id, {String? reason, int menuId = 0, double score = 0.8}) =>
+        DishCandidate(
+          reason: reason,
+          restaurant: store(id, '가게 $id'),
+          item: CartLine(
+            // 같은 가게의 후보라도 메뉴가 다르면 한 카드에 두 줄로 들어간다.
+            menuId: menuId == 0 ? id * 10 : menuId,
+            name: '메뉴 $id',
+            menuType: MenuType.main,
+            price: 12000,
+            quantity: 1,
+          ),
+          score: score,
+        );
+
+    test('서버 summary 가 오면 조립하지 않는다', () {
+      const result = AnalysisResult(summary: '서버가 쓴 문장이에요');
+      expect(result.reasonText(maxDeliveryMinutes: 30), '서버가 쓴 문장이에요');
+    });
+
+    test('찾은 요리와 못 찾은 요리를 조사까지 맞춰 설명한다', () {
+      final result = AnalysisResult(
+        dishResults: [
+          DishResult(dishName: '후라이드', candidates: [candidate(1), candidate(2)]),
+          const DishResult(dishName: '마라탕'),
+        ],
+      );
+
+      final text = result.reasonText(maxDeliveryMinutes: 30);
+      // 받침이 없는 '후라이드' 는 '는', 있는 '마라탕' 은 '은' 이다.
+      expect(text, contains('후라이드는 비슷한 집 2곳을 찾았어요.'));
+      expect(text, contains('마라탕은 배달 30분 조건 안에서는 찾지 못했어요.'));
+    });
+
+    test('영상에 나온 브랜드가 있으면 그것부터 말한다', () {
+      final result = AnalysisResult(
+        exactMatches: [
+          ComboSuggestion(brandName: '엽떡', restaurant: store(101, '엽떡 성수점'), items: []),
+        ],
+        dishResults: const [DishResult(dishName: '마라탕')],
+      );
+
+      final text = result.reasonText(maxDeliveryMinutes: 25);
+      expect(text, startsWith('영상 속 엽떡은 근처 지점에서 그대로 주문할 수 있어요.'));
+      expect(text, contains('배달 25분 조건'));
+    });
+
+    test('요리 결과가 없으면 찾은 조합 수로 말한다', () {
+      final result = AnalysisResult(
+        combos: [ComboSuggestion(restaurant: store(102, '신전떡볶이'), items: [])],
+      );
+      expect(
+        result.reasonText(maxDeliveryMinutes: 30),
+        '영상 속 메뉴와 가장 비슷한 조합 1개를 찾았어요.',
+      );
+    });
+
+    test('매장 불릿은 서버 reason 이 있으면 그걸 쓴다', () {
+      final combo = ComboSuggestion(
+        restaurant: store(101, '엽떡 성수점'),
+        items: [],
+        tags: const ['EXACT_MATCH'],
+        reasonLines: const ['영상에 나온 그 지점이고 분모자까지 담았어요', '  '],
+      );
+      // 빈 문자열은 불릿 자리만 차지하므로 걸러진다. 태그 문구보다 서버 문구가 앞선다.
+      expect(combo.reasonBullets, ['영상에 나온 그 지점이고 분모자까지 담았어요']);
+    });
+
+    test('문구가 없으면 태그를 문구로 옮긴다', () {
+      final combo = ComboSuggestion(
+        restaurant: store(101, '엽떡 성수점'),
+        items: [],
+        tags: const ['TASTE_SIMILAR', 'DISTANCE'],
+      );
+      expect(combo.reasonBullets, ['같은 요리 후보 중 가장 비슷해요', '가까운 편이에요']);
+    });
+
+    test('점수가 확연히 낮으면 커버리지가 많아도 앞서지 못한다', () {
+      // 치킨 영상: 치킨집은 치킨 하나만 정확히 맞추고(0.8),
+      // 한식집은 두 요리에 어중간하게 걸린다(0.45/0.4).
+      final result = AnalysisResult(
+        dishResults: [
+          DishResult(dishName: '치킨', candidates: [
+            candidate(1, menuId: 11, score: 0.8),
+            candidate(2, menuId: 21, score: 0.45),
+          ]),
+          DishResult(dishName: '치즈볼', candidates: [
+            candidate(2, menuId: 22, score: 0.4),
+          ]),
+        ],
+      );
+
+      // 커버리지를 먼저 보면 한식집(2)이 1등이 된다. 그게 신고된 증상이었다.
+      expect(result.combos.first.restaurant.restaurantId, 1);
+    });
+
+    test('점수가 비슷하면 많이 커버하는 집이 앞선다', () {
+      // 배달비가 한 번만 드는 이득은 후보 수준이 비슷할 때만 의미가 있다.
+      final result = AnalysisResult(
+        dishResults: [
+          DishResult(dishName: '치킨', candidates: [
+            candidate(1, menuId: 11, score: 0.78),
+            candidate(2, menuId: 21, score: 0.75),
+          ]),
+          DishResult(dishName: '치즈볼', candidates: [
+            candidate(2, menuId: 22, score: 0.72),
+          ]),
+        ],
+      );
+
+      expect(result.combos.first.restaurant.restaurantId, 2);
+    });
+
+    test('한 가게로 묶은 조합은 후보들의 근거를 모아 받는다', () {
+      final result = AnalysisResult(
+        dishResults: [
+          DishResult(
+            dishName: '떡볶이',
+            candidates: [candidate(1, menuId: 11, reason: '가장 비슷해요')],
+          ),
+          DishResult(
+            dishName: '치즈볼',
+            candidates: [candidate(1, menuId: 12, reason: '1.2km로 가까워요')],
+          ),
+        ],
+      );
+      // 같은 가게(1)의 후보 둘이 한 카드로 묶이고, 근거도 둘 다 실린다.
+      expect(result.combos, hasLength(1));
+      expect(result.combos.first.reasonBullets, ['가장 비슷해요', '1.2km로 가까워요']);
+    });
+
+    test('서버가 아무것도 안 주면 카드가 가진 사실로 만든다', () {
+      final combo = ComboSuggestion(
+        brandName: '엽떡',
+        restaurant: store(101, '엽떡 성수점', rating: 4.5),
+        items: [],
+      );
+      // 평점 4.5 여도 근거로 쓰지 않는다. 서버 랭킹이 평점을 안 보기 때문이다.
+      expect(combo.reasonBullets, ['영상에 나온 그 지점이에요']);
     });
   });
 }

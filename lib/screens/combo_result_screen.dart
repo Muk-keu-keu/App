@@ -9,6 +9,7 @@ import '../models/combo.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/ds.dart';
+import '../widgets/overlays.dart';
 import 'menu_option_sheet.dart';
 
 /// Figma "먹방 조합" (node 681:5981).
@@ -59,6 +60,14 @@ class _ComboResultScreenState extends State<ComboResultScreen> {
           _SelectionCount(
             total: combos.length,
             selected: combos.where((c) => flow.isInCart(c.id)).length,
+            onReason: () => RecommendationModal.show(
+              context,
+              title: '영상과 가장 비슷한 결과예요',
+              body: flow.analysis.reasonText(
+                maxDeliveryMinutes: flow.preference.maxDeliveryMinutes,
+              ),
+              hint: '다른 추천 결과는 ‘다른 결과 보기’에서 확인해 보세요.',
+            ),
           ),
           Expanded(
             child: Column(
@@ -193,30 +202,64 @@ class _ComboCard extends StatelessWidget {
       );
 }
 
-/// "N개 중 M개 선택" (시안 925:4305).
+/// "N개 중 M개 선택" 과 "AI 추천 이유" (시안 1059:5972).
 ///
 /// 고른 개수만 14 SemiBold primary500 이고 나머지는 12 Regular 다.
+///
+/// 오른쪽 "AI 추천 이유" 는 개정 시안에서 붙었다. 결과가 왜 이 순서인지 묻는
+/// 자리를 화면에 두지 않으면, 카드가 임의로 배열된 것처럼 보인다.
 class _SelectionCount extends StatelessWidget {
-  const _SelectionCount({required this.total, required this.selected});
+  const _SelectionCount({
+    required this.total,
+    required this.selected,
+    required this.onReason,
+  });
 
   final int total;
   final int selected;
+  final VoidCallback onReason;
 
   @override
   Widget build(BuildContext context) => Container(
         width: double.infinity,
-        padding: const EdgeInsets.only(left: 21, bottom: 12),
-        child: Text.rich(
-          TextSpan(
-            children: [
-              TextSpan(text: '$total개 중 ', style: AppText.caption()),
+        padding: const EdgeInsets.only(left: 21, right: 20, bottom: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text.rich(
               TextSpan(
-                text: '$selected개',
-                style: AppText.btn2(color: AppColors.primary500),
+                children: [
+                  TextSpan(text: '$total개 중 ', style: AppText.caption()),
+                  TextSpan(
+                    text: '$selected개',
+                    style: AppText.btn2(color: AppColors.primary500),
+                  ),
+                  TextSpan(text: ' 선택', style: AppText.caption()),
+                ],
               ),
-              TextSpan(text: ' 선택', style: AppText.caption()),
-            ],
-          ),
+            ),
+            // 글씨 12에 아이콘 20 짜리라 스크린 리더에는 이름이 안 잡힌다.
+            // 여는 창이 무엇인지 라벨로 말해 준다.
+            Semantics(
+              button: true,
+              label: 'AI 추천 이유',
+              child: GestureDetector(
+                onTap: onReason,
+                behavior: HitTestBehavior.opaque,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'AI 추천 이유',
+                      style: AppText.caption(color: AppColors.gray700),
+                    ),
+                    const SizedBox(width: 3),
+                    SvgPicture.asset(DsIcons.help, width: 20, height: 20),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       );
 }

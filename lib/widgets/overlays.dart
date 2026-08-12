@@ -12,6 +12,165 @@ import 'ds.dart';
 ///
 /// 삭제 확인은 전부 [AppConfirmDialog] 하나를 지난다.
 
+/// "AI 추천 이유" 모달 (시안 1059:5978, 350 폭).
+///
+/// 왜 이 조합이 먼저 나왔는지 설명한다. 결과 화면은 "가장 비슷한" 조합 하나를
+/// 앞에 놓는데, 근거가 안 보이면 사용자는 그게 임의로 고른 것인지 알 수 없다.
+///
+/// 닫기 버튼이 [confirmLabel] 하나뿐이라 결과를 바꾸지 않는다 — 읽고 나가는 창이다.
+class RecommendationModal extends StatelessWidget {
+  const RecommendationModal({
+    super.key,
+    required this.title,
+    required this.body,
+    required this.hint,
+  });
+
+  final String title;
+  final String body;
+
+  /// 본문 아래 회색 한 줄. 다음에 무엇을 할 수 있는지 알려 준다.
+  final String hint;
+
+  static Future<void> show(
+    BuildContext context, {
+    required String title,
+    required String body,
+    required String hint,
+  }) =>
+      showDialog<void>(
+        context: context,
+        builder: (_) => RecommendationModal(title: title, body: body, hint: hint),
+      );
+
+  @override
+  Widget build(BuildContext context) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        // 시안 폭 350 = 390 - 20 × 2.
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: AppText.h2().copyWith(letterSpacing: -0.48)),
+              const SizedBox(height: 8),
+              Text(
+                body,
+                style: AppText.body1(color: AppColors.gray700)
+                    .copyWith(letterSpacing: -0.32),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SvgPicture.asset(DsIcons.info, width: 20, height: 20),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      hint,
+                      style: AppText.body2(color: AppColors.gray600)
+                          .copyWith(letterSpacing: -0.28),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              DsButton(
+                label: '확인',
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+/// "이 매장을 추천한 이유" 팝오버 (시안 1052:8091, 280 폭).
+///
+/// [RecommendationModal] 과 달리 카드 한 장에 대한 설명이라 훨씬 짧고, 확인
+/// 버튼 대신 X 로 닫는다. 목록에서 카드를 비교하는 중에 뜨는 창이라 누르고
+/// 바로 돌아갈 수 있어야 한다.
+class StoreReasonPopover extends StatelessWidget {
+  const StoreReasonPopover({super.key, required this.reasons});
+
+  final List<String> reasons;
+
+  static Future<void> show(BuildContext context, {required List<String> reasons}) =>
+      showDialog<void>(
+        context: context,
+        builder: (_) => StoreReasonPopover(reasons: reasons),
+      );
+
+  @override
+  Widget build(BuildContext context) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 55),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '이 매장을 추천한 이유',
+                      style: AppText.sub2().copyWith(letterSpacing: -0.32),
+                    ),
+                  ),
+                  Semantics(
+                    button: true,
+                    label: '닫기',
+                    child: GestureDetector(
+                      onTap: () => Navigator.of(context).pop(),
+                      behavior: HitTestBehavior.opaque,
+                      // 에셋을 그냥 그리면 `+` 다. 돌리는 일은 [DsCloseIcon] 이 한다.
+                      child: const DsCloseIcon(size: 18.19, box: 20),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              for (final reason in reasons)
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 시안은 `list-disc` 다. Text 의 불릿 문자를 쓰면 줄바꿈된
+                      // 둘째 줄이 점 아래로 흘러 들여쓰기가 무너진다.
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8, right: 8),
+                        child: Container(
+                          width: 3,
+                          height: 3,
+                          decoration: const BoxDecoration(
+                            color: AppColors.gray700,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          reason,
+                          style: AppText.body2(color: AppColors.gray700)
+                              .copyWith(letterSpacing: -0.28),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+}
+
 /// 되돌릴 수 없는 동작 앞에 세우는 확인 창 (시안 925:3648, 335×163).
 ///
 /// `true` 를 돌려주면 사용자가 실행을 골랐다는 뜻이다. 바깥을 눌러 닫으면

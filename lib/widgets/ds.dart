@@ -495,6 +495,12 @@ class DsIcons {
   static const bubble = 'assets/icons/bubble.svg';
   static const camera = 'assets/icons/camera.svg';
 
+  /// 시안 `help button` (1052:6494). 원 안에 물음표. 추천 이유를 여는 자리에 쓴다.
+  static const help = 'assets/icons/help.svg';
+
+  /// 시안 `info button` (1052:7086). 같은 원에 글리프만 `i` 다.
+  static const info = 'assets/icons/info.svg';
+
   /// 시안 `icon/home` (type=line). 하단 내비의 홈과 같은 글리프라 같은 파일을 쓴다.
   static const home = 'assets/icons/nav_home.svg';
 
@@ -792,6 +798,7 @@ class DsStoreRow extends StatelessWidget {
     required this.distanceText,
     required this.deliveryText,
     this.trailing,
+    this.nameTrailing,
   });
 
   final Widget logo;
@@ -800,6 +807,10 @@ class DsStoreRow extends StatelessWidget {
   final String distanceText;
   final String deliveryText;
   final Widget? trailing;
+
+  /// 상호 바로 뒤에 붙는 것 (시안 1052:7319 의 `help button`).
+  /// 행 끝의 [trailing] 과 자리가 다르다 — 이쪽은 이름에 딸린 표시다.
+  final Widget? nameTrailing;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -811,7 +822,21 @@ class DsStoreRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: AppText.sub2().copyWith(letterSpacing: -0.4)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        name,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.sub2().copyWith(letterSpacing: -0.4),
+                      ),
+                    ),
+                    if (nameTrailing != null) ...[
+                      const SizedBox(width: 4),
+                      nameTrailing!,
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 4),
                 Row(
                   children: [

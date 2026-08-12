@@ -28,7 +28,23 @@ class ComboSuggestion {
     this.brandName,
     this.comboScore,
     this.totalPrice,
+    this.tags = const [],
+    this.reasonLines = const [],
   });
+
+  /// 서버가 붙인 추천 근거 태그. 우선순위 순으로 최대 2개다
+  /// (`MatchReasonTag`: EXACT_MATCH · OPTION_MATCH · TASTE_SIMILAR · DISTANCE).
+  ///
+  /// 내세울 것이 없는 카드에는 아무것도 안 붙는다. 서버가 의도한 것이다 —
+  /// 모든 카드에 배지를 달면 배지가 정보가 아니라 장식이 된다.
+  final List<String> tags;
+
+  /// 서버 `reason` 문구. "영상에 나온 그 지점이고 분모자까지 담았어요" 처럼
+  /// 옵션명·거리 같은 구체적인 값이 들어 있다.
+  ///
+  /// 서버는 카드당 한 줄을 주지만 여기서는 목록이다. [AnalysisResult.combos] 가
+  /// 여러 요리의 후보를 한 가게로 묶으면 근거도 그 수만큼 생기기 때문이다.
+  final List<String> reasonLines;
 
   /// 어느 브랜드 결과인지. `exactMatches` 에만 있다.
   final String? brandName;
@@ -52,6 +68,42 @@ class ComboSuggestion {
 
   /// 영상에 나온 그 브랜드인지.
   bool get isExactMatch => brandName != null;
+
+  /// 팝오버에 실제로 그릴 불릿 (시안 1052:8091).
+  ///
+  /// 서버 문구가 오면 그걸 쓰고, 태그만 오면 태그별 문구로 옮긴다. 둘 다 없을
+  /// 때만 카드가 들고 있는 사실로 만든다.
+  ///
+  /// **평점은 근거로 쓰지 않는다.** 시안에는 "주변 후보 중 평점이 높아요" 가
+  /// 있지만 서버 랭킹에 평점이 들어가지 않는다 — 평점 때문에 고른 것이 아닌데
+  /// 그렇게 적으면 거짓말이 된다 (서버 `MatchReasonTag` 주석과 같은 판단이다).
+  List<String> get reasonBullets {
+    final given = [
+      for (final line in reasonLines)
+        if (line.trim().isNotEmpty) line.trim(),
+    ];
+    if (given.isNotEmpty) return given;
+
+    final fromTags = [
+      for (final tag in tags)
+        if (_tagText[tag] != null) _tagText[tag]!,
+    ];
+    if (fromTags.isNotEmpty) return fromTags;
+
+    return [
+      if (isExactMatch) '영상에 나온 그 지점이에요',
+      if (items.length > 1) '한 곳에서 ${items.length}개 메뉴를 시킬 수 있어요',
+    ];
+  }
+
+  /// 서버가 태그만 주고 문구를 못 만든 경우의 대체 문구.
+  /// 서버 `MatchReasonTagger` 와 같은 뜻이되, 옵션명·거리 같은 값이 없어 더 짧다.
+  static const _tagText = {
+    'EXACT_MATCH': '영상에 나온 그 지점이에요',
+    'OPTION_MATCH': '영상에서 말한 옵션까지 맞출 수 있어요',
+    'TASTE_SIMILAR': '같은 요리 후보 중 가장 비슷해요',
+    'DISTANCE': '가까운 편이에요',
+  };
 
   /// 카드 식별자. 서버가 조합 id 를 주지 않아 매장 id 를 그대로 쓴다.
   /// 한 브랜드당 가장 가까운 지점 하나만 오므로 목록 안에서 겹치지 않는다.
@@ -81,6 +133,8 @@ class ComboSuggestion {
         restaurant: restaurant,
         items: [for (final i in items) i.copy()],
         totalPrice: totalPrice,
+        tags: tags,
+        reasonLines: reasonLines,
       );
 
   factory ComboSuggestion.fromJson(Map<String, dynamic> json) => ComboSuggestion(
@@ -94,6 +148,14 @@ class ComboSuggestion {
             if (e is Map<String, dynamic>) CartLine.fromJson(e),
         ],
         totalPrice: (json['totalPrice'] as num?)?.toInt(),
+        tags: [
+          for (final e in (json['tags'] ?? const []) as List)
+            if (e is String) e,
+        ],
+        reasonLines: [
+          if (json['reason'] is String && (json['reason'] as String).isNotEmpty)
+            json['reason'] as String,
+        ],
       );
 }
 
@@ -104,7 +166,14 @@ class DishCandidate {
     required this.restaurant,
     required this.item,
     required this.score,
+    this.tags = const [],
+    this.reason,
   });
+
+  /// 서버가 붙인 근거 태그·문구. 가게 단위로 묶은 [AnalysisResult.combos] 카드가
+  /// 이 값을 물려받는다.
+  final List<String> tags;
+  final String? reason;
 
   final Restaurant restaurant;
 
@@ -122,6 +191,11 @@ class DishCandidate {
           (json['item'] ?? const <String, dynamic>{}) as Map<String, dynamic>,
         ),
         score: ((json['score'] ?? 0) as num).toDouble(),
+        tags: [
+          for (final e in (json['tags'] ?? const []) as List)
+            if (e is String) e,
+        ],
+        reason: json['reason'] as String?,
       );
 }
 
@@ -148,6 +222,8 @@ class AnalysisResult {
   const AnalysisResult({
     this.exactMatches = const [],
     this.dishResults = const [],
+    this.summary,
+    this.emptyReason,
     List<ComboSuggestion>? combos,
     // 이름이 다른 이유가 있다. 밖에서는 `combos` 로 받고 안에서는 `_combos` 에
     // 둔다 — 같은 이름의 게터가 있어야 하고, named 파라미터는 private 일 수 없다.
@@ -157,7 +233,23 @@ class AnalysisResult {
   const AnalysisResult.empty()
       : exactMatches = const [],
         dishResults = const [],
+        summary = null,
+        emptyReason = null,
         _combos = null;
+
+  /// "AI 추천 이유" 모달 본문 (시안 1059:5981). 서버 `summary` 다.
+  ///
+  /// LLM 이 쓰고, 호출이 실패하거나 결과가 비면 null 이 온다. 그때는
+  /// [reasonText] 가 분석 결과로 대신 만든다.
+  final String? summary;
+
+  /// 결과가 완전히 비었을 때만 온다. 평소에는 null.
+  /// 서버 `EmptyReason` 값 그대로다.
+  final String? emptyReason;
+
+  /// 1등과 이만큼 벌어지면 "비슷한 수준" 이 아니다. 그 아래는 커버리지가 많아도
+  /// 앞으로 나오지 못한다. 점수는 0~1 이라 0.15 는 한 단계 차이쯤 된다.
+  static const _scoreGap = 0.15;
 
   /// 이미 가게 단위로 묶인 조합을 그대로 쓸 때만 채운다.
   ///
@@ -205,10 +297,30 @@ class AnalysisResult {
           items: [for (final c in entry.value) c.item],
           comboScore: entry.value.map((c) => c.score).reduce((a, b) => a + b) /
               entry.value.length,
+          // 근거는 후보마다 따로 붙어 온다. 한 가게로 묶었으니 근거도 모은다.
+          // 같은 문구가 두 요리에서 겹칠 수 있어 중복은 뺀다.
+          tags: {for (final c in entry.value) ...c.tags}.toList(),
+          reasonLines: {
+            for (final c in entry.value)
+              if ((c.reason ?? '').trim().isNotEmpty) c.reason!.trim(),
+          }.toList(),
         ),
     ];
 
+    // 커버리지는 **비슷한 수준의 후보끼리만** 따진다.
+    //
+    // 커버리지를 먼저 보면 관련 없는 집이 앞으로 나온다. 치킨 영상(치킨 + 치즈볼)에서
+    // 두 요리에 어중간하게 걸린 한식집이 커버리지 2로, 치킨 하나만 정확히 맞춘
+    // 치킨집(커버리지 1)을 제친다. 실제로 "치킨 영상인데 한식집이 뜬다" 는 것이
+    // 이 정렬이었다. 배달비 한 번은 이득이지만 안 시킬 집이면 이득이 아니다.
+    final best = result.fold<double>(
+      0,
+      (m, c) => (c.comboScore ?? 0) > m ? (c.comboScore ?? 0) : m,
+    );
+    bool strong(ComboSuggestion c) => (c.comboScore ?? 0) >= best - _scoreGap;
+
     result.sort((a, b) {
+      if (strong(a) != strong(b)) return strong(a) ? -1 : 1;
       final byCoverage = b.items.length.compareTo(a.items.length);
       if (byCoverage != 0) return byCoverage;
       return (b.comboScore ?? 0).compareTo(a.comboScore ?? 0);
@@ -228,7 +340,60 @@ class AnalysisResult {
   List<StoreCart> get exactStoreCarts =>
       [for (final m in exactMatches) m.toStoreCart()];
 
+  /// 모달에 실제로 그릴 본문.
+  ///
+  /// 서버 문장이 있으면 그대로 쓴다. 없으면 분석 결과로 조립한다 — 빈 모달을
+  /// 띄우느니 실제로 무엇을 찾고 무엇을 못 찾았는지 말해 주는 편이 낫다.
+  /// 서버가 `reason` 을 내려주기 시작하면 이 조립은 저절로 안 쓰인다.
+  ///
+  /// [maxDeliveryMinutes] 는 못 찾은 이유를 설명할 때 쓴다. 조건을 빼고 "못
+  /// 찾았어요" 라고만 하면 그 가게가 아예 없는 것처럼 읽힌다.
+  String reasonText({required int maxDeliveryMinutes}) {
+    final given = (summary ?? '').trim();
+    if (given.isNotEmpty) return given;
+
+    final sentences = <String>[];
+
+    final brands = [
+      for (final m in exactMatches)
+        if (m.brandName != null) m.brandName!,
+    ];
+    if (brands.isNotEmpty) {
+      final names = brands.join(', ');
+      sentences.add('영상 속 $names${_topicParticle(brands.last)} 근처 지점에서 '
+          '그대로 주문할 수 있어요.');
+    }
+
+    for (final dish in dishResults) {
+      if (dish.candidates.isEmpty) continue;
+      sentences.add('${dish.dishName}${_topicParticle(dish.dishName)} '
+          '비슷한 집 ${dish.candidates.length}곳을 찾았어요.');
+    }
+
+    final missing = [
+      for (final dish in dishResults)
+        if (dish.candidates.isEmpty) dish.dishName,
+    ];
+    if (missing.isNotEmpty) {
+      final names = missing.join(', ');
+      sentences.add('$names${_topicParticle(missing.last)} '
+          '배달 $maxDeliveryMinutes분 조건 안에서는 찾지 못했어요.');
+    }
+
+    if (sentences.isEmpty) {
+      // 더미 저장소처럼 `dishResults` 를 거치지 않고 카드만 오는 경로다.
+      final count = combos.length;
+      return count == 0
+          ? '영상 속 메뉴와 비슷한 조합을 찾지 못했어요.'
+          : '영상 속 메뉴와 가장 비슷한 조합 $count개를 찾았어요.';
+    }
+
+    return sentences.join(' ');
+  }
+
   factory AnalysisResult.fromJson(Map<String, dynamic> json) => AnalysisResult(
+        summary: json['summary'] as String?,
+        emptyReason: json['emptyReason'] as String?,
         exactMatches: [
           for (final e in (json['exactMatches'] ?? const []) as List)
             if (e is Map<String, dynamic>) ComboSuggestion.fromJson(e),
@@ -238,6 +403,17 @@ class AnalysisResult {
             if (e is Map<String, dynamic>) DishResult.fromJson(e),
         ],
       );
+}
+
+/// 은/는. 마지막 글자에 받침이 있으면 '은' 이다.
+///
+/// 요리 이름이 데이터에서 오므로 조사를 고정하면 "마라탕는" 같은 문장이 나온다.
+String _topicParticle(String word) {
+  if (word.isEmpty) return '는';
+  final code = word.codeUnitAt(word.length - 1);
+  // 한글 음절이 아니면(영문·숫자) 받침을 알 수 없다. 흔한 쪽으로 둔다.
+  if (code < 0xAC00 || code > 0xD7A3) return '는';
+  return (code - 0xAC00) % 28 == 0 ? '는' : '은';
 }
 
 /// 비교 목록 상단 정렬 기준.
