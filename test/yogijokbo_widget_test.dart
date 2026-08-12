@@ -85,10 +85,16 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('배고픈 요기요'), findsWidgets);
-    expect(find.text('2026.07.07'), findsOneWidget);
-    expect(find.text('두찜-잠실새내점'), findsOneWidget);
+    // 조합이 시트로 빠져 목록이 짧아지면서 댓글 날짜까지 화면에 들어온다.
+    // 같은 날짜가 여러 개라 개수를 고정하지 않는다.
+    expect(find.text('2026.07.07'), findsWidgets);
     expect(find.text('나도 주문하기'), findsOneWidget);
-    expect(find.text('[사이드] 치즈볼'), findsOneWidget);
+
+    // 시안 909:2578 — 조합은 상세에 펼쳐 두지 않고 "주문한 메뉴" 한 줄로 접는다.
+    // 펼쳐 두면 댓글이 한참 아래로 밀린다 (피드백 10번).
+    expect(find.text('주문한 메뉴'), findsOneWidget);
+    expect(find.text('두찜-잠실새내점'), findsNothing);
+    expect(find.text('[사이드] 치즈볼'), findsNothing);
 
     // 댓글 영역은 화면 밖이라 아직 만들어지지 않았다. 스크롤해서 확인한다.
     await tester.scrollUntilVisible(
@@ -98,6 +104,48 @@ void main() {
     );
     expect(find.text('댓글 4'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  // 피드백 10번 — 아코디언이 아니라 바텀시트다 (시안 893:1944).
+  testWidgets('"주문한 메뉴" 를 누르면 바텀시트로 조합이 열린다', (tester) async {
+    final flow = newFlow();
+    await flow.openPost('post_01H8X');
+    await pumpScreen(tester, const PostDetailScreen(), flow);
+
+    await tester.tap(find.text('주문한 메뉴'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('두찜-잠실새내점'), findsOneWidget);
+    expect(find.text('[사이드] 치즈볼'), findsOneWidget);
+    // 시트는 금액·수량까지 보여준다. 치즈볼 2,000 × 2 개.
+    expect(find.text('4,000원 2개'), findsOneWidget);
+    // 시트 하단 CTA. 상세의 알약 버튼과 같은 문구라 둘이 보인다.
+    expect(find.text('나도 주문하기'), findsWidgets);
+  });
+
+  // 피드백 7번 — 점 3개는 작성자 줄이 아니라 뒤로가기와 같은 줄에 있다.
+  testWidgets('점 3개는 헤더에 있고 내 글에만 보인다', (tester) async {
+    final flow = newFlow();
+    await flow.openPost('post_01H8X');
+    await pumpScreen(tester, const PostDetailScreen(), flow);
+
+    // 더미 글은 시연을 위해 mine 이라 아이콘이 보인다.
+    expect(flow.selectedPost!.mine, isTrue);
+
+    const dots = ValueKey('post-menu');
+    // 헤더 안에 있어야 한다. 예전에는 작성자 줄(게시물 영역)에 있었다.
+    expect(
+      find.descendant(of: find.byType(DsHeader), matching: find.byKey(dots)),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(dots));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('수정하기'), findsOneWidget);
+    expect(find.text('삭제하기'), findsOneWidget);
   });
 
   testWidgets('주문하기가 크래시 없이 그려지고 결제 금액이 맞다', (tester) async {

@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_flow.dart';
+import '../../models/combo.dart';
 import '../../models/post.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
@@ -50,9 +51,17 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       child: Column(
         children: [
           // 시안의 헤더는 뒤로가기만 있고 제목 자리가 비어 있다.
+          // 점 3개는 뒤로가기와 같은 줄(헤더 right_area)에 온다 — 시안 909:2583.
           DsHeader.detail(
             title: '',
             onBack: () => context.read<AppFlow>().backToJokboHome(),
+            actions: [
+              if (post.mine)
+                _MoreDots(
+                  key: const ValueKey('post-menu'),
+                  onTap: () => openPostMenu(context),
+                ),
+            ],
           ),
           Expanded(
             child: ListView(
@@ -60,7 +69,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               children: [
                 _PostSection(post: post),
                 const SizedBox(height: 16),
-                _MenuSection(post: post),
+                // 시안 909:2578 은 아코디언이 아니다. 누르면 바텀시트가 뜬다.
+                _OrderedMenuRow(
+                  onTap: () => _OrderedMenuSheet.show(context, post: post),
+                ),
                 const SizedBox(height: 16),
                 _CommentSection(
                   count: post.commentCount,
@@ -89,11 +101,7 @@ class _PostSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _Profile(
-              author: post.author,
-              dateText: post.dateText,
-              canEdit: post.mine,
-            ),
+            _Profile(author: post.author, dateText: post.dateText),
             const SizedBox(height: 16),
             Text(post.title, style: AppText.sub1().copyWith(letterSpacing: -0.45)),
             const SizedBox(height: 9),
@@ -113,45 +121,77 @@ class _PostSection extends StatelessWidget {
       );
 }
 
+/// 게시물 점 아이콘 → 수정하기 / 삭제하기 (시안 922:2734 —
+/// "게시물 헤더의 우측 점 아이콘 선택시 하단에 나타남").
+///
+/// 헤더에서 부르므로 작성자 줄 위젯 안에 두지 않는다.
+Future<void> openPostMenu(BuildContext context) async {
+  final flow = context.read<AppFlow>();
+  final picked = await AppActionSheet.show(
+    context,
+    items: const [
+      AppActionSheetItem(label: '수정하기', value: 'edit'),
+      AppActionSheetItem(label: '삭제하기', value: 'delete', destructive: true),
+    ],
+  );
+
+  if (picked == 'edit') {
+    flow.openPostEdit();
+    return;
+  }
+  if (picked != 'delete' || !context.mounted) return;
+
+  final ok = await AppConfirmDialog.show(
+    context,
+    title: '게시물을 삭제할까요?',
+    message: '삭제한 게시물은 복구할 수 없어요.',
+  );
+  if (ok) await flow.deleteCurrentPost();
+}
+
+/// 점 3개 (시안 909:2583 `right_area` 의 24x24 아이콘).
+///
+/// Figma 이름은 `icon/bell` 이지만 종 모양이 아니다 — 지름 2 원 세 개를 세로로,
+/// 중심에서 -6 / 0 / +6 에 놓는다. `Icons.more_vert` 는 점이 더 크고 간격도 달라
+/// 원본과 다르게 보인다.
+class _MoreDots extends StatelessWidget {
+  const _MoreDots({super.key, required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (var i = 0; i < 3; i++) ...[
+                // 중심 간격 6 = 점 2 + 여백 4.
+                if (i > 0) const SizedBox(height: 4),
+                Container(
+                  width: 2,
+                  height: 2,
+                  decoration: const BoxDecoration(
+                    color: AppColors.gray800,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+}
+
 class _Profile extends StatelessWidget {
-  const _Profile({
-    required this.author,
-    required this.dateText,
-    this.canEdit = false,
-  });
+  const _Profile({required this.author, required this.dateText});
 
   final PostAuthor author;
   final String dateText;
-
-  /// 내 글일 때만 점 아이콘을 그린다. 남의 글을 고치거나 지우려 하면 서버가
-  /// 403 을 주므로, 누를 수 있게 두면 반드시 실패하는 버튼이 된다.
-  final bool canEdit;
-
-  /// 헤더 점 아이콘 → 수정하기 / 삭제하기 (시안 922:2734 —
-  /// "게시물 헤더의 우측 점 아이콘 선택시 하단에 나타남").
-  Future<void> _openMenu(BuildContext context) async {
-    final flow = context.read<AppFlow>();
-    final picked = await AppActionSheet.show(
-      context,
-      items: const [
-        AppActionSheetItem(label: '수정하기', value: 'edit'),
-        AppActionSheetItem(label: '삭제하기', value: 'delete', destructive: true),
-      ],
-    );
-
-    if (picked == 'edit') {
-      flow.openPostEdit();
-      return;
-    }
-    if (picked != 'delete' || !context.mounted) return;
-
-    final ok = await AppConfirmDialog.show(
-      context,
-      title: '게시물을 삭제할까요?',
-      message: '삭제한 게시물은 복구할 수 없어요.',
-    );
-    if (ok) await flow.deleteCurrentPost();
-  }
 
   @override
   Widget build(BuildContext context) => Row(
@@ -178,19 +218,6 @@ class _Profile extends StatelessWidget {
               ],
             ),
           ),
-          if (canEdit)
-            GestureDetector(
-              onTap: () => _openMenu(context),
-              behavior: HitTestBehavior.opaque,
-              child: const Padding(
-                padding: EdgeInsets.only(left: 12),
-                child: Icon(
-                  Icons.more_vert,
-                  size: 20,
-                  color: AppColors.gray600,
-                ),
-              ),
-            ),
         ],
       );
 }
@@ -340,12 +367,111 @@ class _ActionRow extends StatelessWidget {
       );
 }
 
+/// "주문한 메뉴" 한 줄 (시안 909:2578, h 62).
+///
+/// 아코디언이 아니다 — 누르면 바텀시트가 뜬다. 텍스트 x 20 / 꺾쇠 x 350.
+class _OrderedMenuRow extends StatelessWidget {
+  const _OrderedMenuRow({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          width: double.infinity,
+          height: 62,
+          color: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('주문한 메뉴', style: AppText.sub2()),
+              const RotatedBox(quarterTurns: 2, child: DsChevron.left()),
+            ],
+          ),
+        ),
+      );
+}
+
+/// "주문한 메뉴" 바텀시트 (시안 893:1944, 390x780).
+///
+/// 상세에 조합을 펼쳐 두면 댓글이 한참 아래로 밀린다. 시안이 조합을 시트로 뺀
+/// 이유이고, 피드백에도 두 번 적혔다.
+class _OrderedMenuSheet extends StatelessWidget {
+  const _OrderedMenuSheet({required this.post});
+
+  final YogijokboPost post;
+
+  static void show(BuildContext context, {required YogijokboPost post}) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _OrderedMenuSheet(post: post),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+        // 시안은 937 중 780 이다. 화면 높이에 비례해 잡는다.
+        height: MediaQuery.sizeOf(context).height * 0.83,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.sheet)),
+        ),
+        child: Column(
+          children: [
+            // Drag Handle 48x5 at y 12 (893:1997).
+            const SizedBox(height: 12),
+            Container(
+              width: 48,
+              height: 5,
+              decoration: BoxDecoration(
+                color: AppColors.gray300,
+                borderRadius: BorderRadius.circular(100),
+              ),
+            ),
+            // header 56 (893:1996). 시트라 뒤로가기가 없고 제목만 있다.
+            SizedBox(
+              height: 56,
+              child: Center(child: Text('주문한 메뉴', style: AppText.h3())),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                child: _MenuSection(post: post, showPrice: true),
+              ),
+            ),
+            // Bottom CTA 104 — Button 350x52 at (20, 20) (900:1256).
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+              child: SafeArea(
+                top: false,
+                child: DsButton(
+                  label: '나도 주문하기',
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    context.read<AppFlow>().startReorder();
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
 /// 조합에 담긴 메뉴. 매장 이름을 누르면 그 매장 메뉴로 넘어간다.
 ///
 /// 회의(2026-08-04) 이후 글 하나에 매장이 여러 곳일 수 있다. 매장마다 섹션을
 /// 나눠 그린다 — 한 목록에 섞어 놓으면 어느 가게에서 시키는 메뉴인지 알 수 없다.
 class _MenuSection extends StatelessWidget {
-  const _MenuSection({required this.post});
+  const _MenuSection({required this.post, this.showPrice = false});
+
+  /// 시트에서는 금액·수량까지 보여준다 (시안 893:1944 의 cart item).
+  final bool showPrice;
 
   final YogijokboPost post;
 
@@ -397,6 +523,17 @@ class _MenuSection extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(item.optionsText,
                               style: AppText.caption(color: AppColors.gray600)),
+                          if (showPrice) ...[
+                            const SizedBox(height: 8),
+                            // 시트에서는 금액과 수량을 오른쪽에 붙여 준다.
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                '${wonFormat(item.lineTotal)}원 ${item.quantity}개',
+                                style: AppText.sub2(color: AppColors.gray800),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

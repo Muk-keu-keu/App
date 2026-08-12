@@ -70,21 +70,35 @@ class OrderHistoryScreen extends StatelessWidget {
 class _TabBar extends StatelessWidget {
   const _TabBar();
 
-  static const _labels = ['먹방요기', '배달/포장', '요마트/요편의점'];
+  /// 시안 850:4364 — 앞 두 탭만 108 고정이고 마지막은 글자 폭만큼이다.
+  /// 라벨 길이에 맡기면 "먹방요기" 가 좁고 "요마트/요편의점" 이 넓어 간격이 튄다.
+  static const _labels = [
+    ('먹방요기', 108.0),
+    ('배달/포장', 108.0),
+    ('요마트/요편의점', null),
+  ];
 
   @override
   Widget build(BuildContext context) => Container(
-        color: Colors.white,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          // 바 자체에도 하단 선이 있다. 안 고른 탭의 1px 선과 이어져 한 줄이 된다.
+          border: Border(bottom: BorderSide(color: AppColors.gray300)),
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            for (var i = 0; i < _labels.length; i++) _tab(_labels[i], selected: i == 0),
+            for (var i = 0; i < _labels.length; i++)
+              _tab(_labels[i].$1, width: _labels[i].$2, selected: i == 0),
           ],
         ),
       );
 
-  Widget _tab(String label, {required bool selected}) => Container(
+  Widget _tab(String label, {required double? width, required bool selected}) =>
+      Container(
+        width: width,
+        alignment: Alignment.center,
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           border: Border(
