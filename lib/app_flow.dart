@@ -1244,24 +1244,38 @@ class AppFlow extends ChangeNotifier {
   ///
   /// 저장했는지를 돌려준다. 사진을 다시 올릴 수 없어 멈춘 경우 false 이고, 화면은
   /// 수정 화면에 남아 사용자에게 알린다.
+  /// [images] 가 저장 후 남을 사진 **전부**다. 서버가 받은 것으로 통째로 갈아
+  /// 끼우므로, 뺀 사진은 목록에서 빠지는 것만으로 지워진다.
+  /// 넘기지 않으면 지금 붙어 있는 사진을 그대로 유지한다.
   Future<bool> savePostEdit({
     required String title,
     required String body,
+    List<PostImage>? images,
   }) async {
     final post = selectedPost;
     final trimmed = title.trim();
     if (post == null || trimmed.isEmpty) return false;
+
+    final next =
+        images ?? [for (final url in post.imageUrls) PostImage.kept(url)];
 
     try {
       await _postRepository.updatePost(
         post.id,
         title: trimmed,
         body: body.trim(),
-        images: [for (final url in post.imageUrls) PostImage.kept(url)],
+        images: next,
       );
     } on PostImagesUnavailableException {
       return false;
     }
+
+    // 화면에 떠 있는 글도 새 사진 목록으로 맞춘다. 서버에 올린 사진의 URL 은
+    // 응답이 주지 않으므로, 새로 고른 사진은 상세를 다시 열 때 채워진다.
+    post.imageUrls = [
+      for (final image in next)
+        if (image is KeptPostImage) image.url,
+    ];
 
     // 목록에도 같은 글이 떠 있다. 다시 받지 않고 그 자리에서 맞춘다 —
     // 수정 후 목록으로 돌아갔을 때 옛 제목이 남아 있으면 저장이 안 된 것처럼 보인다.
@@ -1361,6 +1375,7 @@ class AppFlow extends ChangeNotifier {
   Future<String?> submitPost({
     required String title,
     required String body,
+    List<String> imagePaths = const [],
   }) async {
     final checkoutId = composeCheckoutId;
     if (checkoutId == null || title.trim().isEmpty) return null;
@@ -1369,7 +1384,8 @@ class AppFlow extends ChangeNotifier {
       checkoutId: checkoutId,
       title: title.trim(),
       body: body.trim(),
-      // 사진 첨부(갤러리·카메라)는 이번 범위가 아니다. 명세상 0장도 허용된다.
+      // 명세상 0장도 허용된다. 고른 사진이 없으면 파트를 아예 안 보낸다.
+      imagePaths: imagePaths,
     );
 
     await _orderRepository.markPosted(checkoutId);

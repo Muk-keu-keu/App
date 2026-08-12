@@ -3,6 +3,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_flow.dart';
+import '../../repository/post_repository.dart';
+import '../../services/photo_picker.dart';
 import '../../theme.dart';
 import '../../widgets/ds.dart';
 import '../../widgets/overlays.dart';
@@ -28,6 +30,13 @@ class _PostEditScreenState extends State<PostEditScreen> {
   late final TextEditingController _bodyController;
   bool _saving = false;
 
+  /// 저장하면 남을 사진들. `http` 로 시작하면 이미 서버에 있는 사진이고,
+  /// 아니면 방금 고른 기기 안의 파일이다. **서버는 남길 사진 전부를 파일로 다시
+  /// 받으므로** 이 목록이 곧 저장 후의 사진 전체다 (빼면 지워진다).
+  late final List<String> _photos;
+
+  static const _photoMax = 5;
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +46,14 @@ class _PostEditScreenState extends State<PostEditScreen> {
       ..addListener(_onChanged);
     _bodyController = TextEditingController(text: post?.body ?? '')
       ..addListener(_onChanged);
+    _photos = [...?post?.imageUrls];
+  }
+
+  Future<void> _addPhotos() async {
+    final picked =
+        await const PhotoPicker().pick(remaining: _photoMax - _photos.length);
+    if (picked.isEmpty || !mounted) return;
+    setState(() => _photos.addAll(picked));
   }
 
   /// 글자수 카운터와 저장 버튼 활성 상태가 입력에 따라 다시 그려져야 한다.
@@ -57,6 +74,10 @@ class _PostEditScreenState extends State<PostEditScreen> {
     final saved = await context.read<AppFlow>().savePostEdit(
           title: _titleController.text,
           body: _bodyController.text,
+          images: [
+            for (final p in _photos)
+              p.startsWith('http') ? PostImage.kept(p) : PostImage.picked(p),
+          ],
         );
     if (!mounted) return;
     setState(() => _saving = false);
@@ -102,7 +123,12 @@ class _PostEditScreenState extends State<PostEditScreen> {
                   Text('사진 첨부',
                       style: AppText.sub2().copyWith(letterSpacing: 0)),
                   const SizedBox(height: 12),
-                  const JokboPhotoRow(),
+                  JokboPhotoRow(
+                    photos: _photos,
+                    maxCount: _photoMax,
+                    onAdd: _addPhotos,
+                    onRemove: (i) => setState(() => _photos.removeAt(i)),
+                  ),
                 ],
               ),
             ),

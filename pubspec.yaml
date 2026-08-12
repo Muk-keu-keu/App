@@ -49,6 +49,7 @@ dependencies:
   # 키체인이 아니라 UserDefaults/SharedPreferences 라 기기를 뜯으면 토큰이 보인다.
   # 데모 단계라 이대로 두고, 실서비스에서는 flutter_secure_storage 로 옮겨야 한다.
   shared_preferences: ^2.3.2
+  image_picker: ^1.2.3
 
 dev_dependencies:
   flutter_test:

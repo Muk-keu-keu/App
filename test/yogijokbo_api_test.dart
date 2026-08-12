@@ -352,6 +352,30 @@ void main() {
       expect(body, contains('name="body"'));
       // restaurantId 는 보내지 않는다. checkoutId 로 조합이 전부 정해진다.
       expect(body, isNot(contains('restaurantId')));
+
+      // 사진을 안 고르면 파트를 아예 안 보낸다. 명세상 0장도 허용된다.
+      expect(body, isNot(contains('name="images"')));
+    });
+
+    test('첨부한 사진이 images 파트로 함께 올라간다', () async {
+      final server = _FakeServer((_) => _json('{"postId": 9012}', 201));
+      final picked = File(
+        '${Directory.systemTemp.path}/mukbang_compose_picked.jpg',
+      )..writeAsBytesSync([7, 7, 7]);
+      addTearDown(() => picked.deleteSync());
+
+      await apiWith(server).repo.create(
+            checkoutId: 5001,
+            title: '내 로제닭발 조합',
+            body: '치즈 두 배가 정답',
+            imagePaths: [picked.path],
+          );
+
+      final body = utf8.decode(server.last.bodyBytes);
+      expect(body, contains('name="images"'));
+      expect(body, contains('filename="mukbang_compose_picked.jpg"'));
+      // 확장자로 Content-Type 을 정한다. octet-stream 으로 나가면 서버가 거른다.
+      expect(body, contains('image/jpeg'));
     });
   });
 

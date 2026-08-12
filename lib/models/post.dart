@@ -228,7 +228,9 @@ class YogijokboPost {
   final List<String> imagePaths;
 
   /// 서버가 준 이미지 URL. 있으면 이쪽을 먼저 쓴다.
-  final List<String> imageUrls;
+  /// 수정 저장 후 화면에 떠 있는 글을 그 자리에서 맞추므로 바뀔 수 있다
+  /// (제목·본문과 같은 이유다 — 다시 받지 않으면 지운 사진이 남아 보인다).
+  List<String> imageUrls;
 
   final PostSource? source;
 
