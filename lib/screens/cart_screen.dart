@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../app_flow.dart';
@@ -198,7 +197,8 @@ class _StoreSection extends StatelessWidget {
                 behavior: HitTestBehavior.opaque,
                 child: Padding(
                   padding: const EdgeInsets.only(left: 12),
-                  child: SvgPicture.asset(DsIcons.close, width: 20, height: 20),
+                  // 회전 없이 그리면 + 로 보인다 (피드백 27번).
+                  child: const DsCloseIcon(size: 20),
                 ),
               ),
             ],

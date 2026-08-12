@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../app_flow.dart';
@@ -180,21 +179,7 @@ class _Header extends StatelessWidget {
                   child: GestureDetector(
                     onTap: onClose,
                     behavior: HitTestBehavior.opaque,
-                    // 시안은 플러스 벡터를 135° 돌려 X 를 만든다. 같은 에셋을 쓴다.
-                    child: SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: Center(
-                        child: Transform.rotate(
-                          angle: 3 * 3.1415926535 / 4,
-                          child: SvgPicture.asset(
-                            DsIcons.close,
-                            width: 18.19,
-                            height: 18.19,
-                          ),
-                        ),
-                      ),
-                    ),
+                    child: const DsCloseIcon(size: 18.19, box: 24),
                   ),
                 ),
               ),

@@ -189,6 +189,32 @@ class DsHeader extends StatelessWidget {
       );
 }
 
+/// ✕ 아이콘.
+///
+/// 시안에 close 에셋이 따로 없다 — **플러스 벡터를 45° 돌려** X 를 만든다.
+/// 그래서 `DsIcons.close` 를 그냥 그리면 `+` 로 보인다 (피드백 27번이 지적한 지점).
+/// 돌리는 일을 부르는 쪽마다 되풀이하지 않도록 여기 한 벌만 둔다.
+class DsCloseIcon extends StatelessWidget {
+  const DsCloseIcon({super.key, this.size = 20, this.box});
+
+  /// 그려질 X 의 크기.
+  final double size;
+
+  /// 아이콘을 담을 정사각 박스. 시안이 24 박스 안에 18.19 를 넣는 자리가 있다.
+  final double? box;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = Transform.rotate(
+      angle: 0.7853981633974483, // 45°
+      child: SvgPicture.asset(DsIcons.close, width: size, height: size),
+    );
+    final side = box;
+    if (side == null) return icon;
+    return SizedBox(width: side, height: side, child: Center(child: icon));
+  }
+}
+
 // ── Bottom navigation ────────────────────────────────────────────────────────
 
 /// Figma `bottom navigation` — 탭 4개. 요기요 앱의 하단 바 틀을 따른다.
