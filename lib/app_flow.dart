@@ -721,16 +721,22 @@ class AppFlow extends ChangeNotifier {
   }
 
   /// 출처 영상을 주문 요청에 실을 형태로. 분석에 쓴 링크를 그대로 재사용한다.
+  ///
+  /// `title` 은 **영상 제목**이다. 예전에는 가게 이름(`primaryRestaurantName`)이
+  /// 들어갔는데, 주문내역 카드와 족보의 출처 줄이 이 값을 "어느 영상에서 담았는지"
+  /// 로 보여주기 때문에 가게 이름이 오면 카드마다 같은 글자가 반복된다.
+  /// 제목을 못 건진 링크에서만 예전처럼 가게 이름으로 채운다.
   OrderSource? _cartSource() {
     final s = source;
     if (s == null) return null;
+    final title = s.title.trim();
     return OrderSource(
       platform: s.platform == SourcePlatform.instagram
           ? SourceKind.instagram
           : SourceKind.youtube,
       url: s.url,
       thumbnailUrl: _lastThumbnailUrl,
-      title: extraction?.primaryRestaurantName ?? '',
+      title: title.isNotEmpty ? title : (extraction?.primaryRestaurantName ?? ''),
     );
   }
 
@@ -982,10 +988,14 @@ class AppFlow extends ChangeNotifier {
 
     String text;
     String? thumbnailUrl;
+    String videoTitle;
     try {
       final metadata = await const MetadataFetcher().fetch(uri);
       text = metadata.combinedText;
       thumbnailUrl = metadata.imageUrl;
+      // 주문내역 카드와 족보의 출처 줄이 쓸 값이다. `combinedText` 안에도 있지만
+      // 계정명·설명과 붙어 있어 거기서는 제목만 떼어낼 수 없다.
+      videoTitle = metadata.title ?? '';
       _lastThumbnailUrl = thumbnailUrl;
     } catch (_) {
       _fail('게시물 내용을 가져오지 못했어요.\n잠시 후 다시 시도해 주세요.');
@@ -994,7 +1004,7 @@ class AppFlow extends ChangeNotifier {
 
     // Gemini 에 넣은 텍스트를 그대로 보관한다. 서버로 분석을 넘길 때
     // 추출 결과만으로는 부족하고 원문이 함께 필요하다.
-    final input = AnalysisSource.fromUrl(url: uri, rawText: text);
+    final input = AnalysisSource.fromUrl(url: uri, rawText: text, title: videoTitle);
     source = input;
 
     // 호출 전에 키를 확인한다. 없거나 템플릿 값이면 네트워크를 태울 필요가 없고,

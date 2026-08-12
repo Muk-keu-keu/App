@@ -9,6 +9,7 @@ import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../../widgets/ds.dart';
 import '../../widgets/overlays.dart';
+import 'jokbo_widgets.dart';
 
 /// Figma "조합 상세" (node 681:8105).
 ///
@@ -112,7 +113,9 @@ class _PostSection extends StatelessWidget {
             ],
             const SizedBox(height: 20),
             if (post.source != null) ...[
-              _SourceLink(source: post.source!),
+              // 목록 카드와 같은 배지를 쓴다. 탭하면 그 영상이 열린다 —
+              // 상세에만 따로 만든 줄은 제목만 보여주고 눌러도 아무 일이 없었다.
+              YoutubeSourceBadge(source: post.source!),
               const SizedBox(height: 20),
             ],
             _ActionRow(post: post),
@@ -253,42 +256,6 @@ class _ImageRow extends StatelessWidget {
       ],
     );
   }
-}
-
-/// 출처 영상 한 줄. 회색 판 위에 아이콘과 제목을 얹는다.
-class _SourceLink extends StatelessWidget {
-  const _SourceLink({required this.source});
-
-  final PostSource source;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.gray100,
-          borderRadius: BorderRadius.circular(AppRadius.chip),
-        ),
-        child: Row(
-          children: [
-            // 시안은 유튜브 로고 이미지다. 아직 받지 않아 같은 치수의 아이콘으로 둔다.
-            const SizedBox(
-              width: 20,
-              height: 14,
-              child: Icon(Icons.play_arrow, size: 14, color: AppColors.primary500),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Text(
-                source.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppText.caption(color: AppColors.gray700),
-              ),
-            ),
-          ],
-        ),
-      );
 }
 
 class _ActionRow extends StatelessWidget {

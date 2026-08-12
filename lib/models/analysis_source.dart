@@ -44,12 +44,23 @@ class AnalysisSource {
     required this.url,
     required this.platform,
     required this.rawText,
+    this.title = '',
   });
 
   /// 공유받은 원본 링크.
   final String url;
 
   final SourcePlatform platform;
+
+  /// 공유받은 영상의 제목. `PageMetadata.title` (유튜브는 oEmbed, 그 밖은 og:title) 이다.
+  ///
+  /// [rawText] 에도 섞여 들어가지만 거기서는 계정명·설명과 붙어 있어 다시 꺼낼 수 없다.
+  /// 주문내역 카드와 족보의 출처 줄이 이 값을 그대로 보여주므로 따로 들고 있는다.
+  ///
+  /// **`toJson` 에는 넣지 않는다.** `POST v1/analyses` 의 `source` 는 서버
+  /// `AnalysisRequest.Source` 가 platform·url·rawText 셋만 받는다. 제목은
+  /// `POST v1/orders` 의 `source.title` 로 나가고, 목록 응답이 그대로 돌려준다.
+  final String title;
 
   /// **Gemini 에 실제로 넣은 텍스트 그대로.**
   /// `PageMetadata.combinedText` (siteName + title + description) 다.
@@ -60,18 +71,29 @@ class AnalysisSource {
   /// 인스타 캡션이 막혔을 때 계정명 한 줄만 남는 상황을 잡아낸다.
   bool get isThin => rawText.trim().length < 20;
 
-  AnalysisSource copyWith({String? url, SourcePlatform? platform, String? rawText}) =>
+  AnalysisSource copyWith({
+    String? url,
+    SourcePlatform? platform,
+    String? rawText,
+    String? title,
+  }) =>
       AnalysisSource(
         url: url ?? this.url,
         platform: platform ?? this.platform,
         rawText: rawText ?? this.rawText,
+        title: title ?? this.title,
       );
 
-  factory AnalysisSource.fromUrl({required Uri url, required String rawText}) =>
+  factory AnalysisSource.fromUrl({
+    required Uri url,
+    required String rawText,
+    String title = '',
+  }) =>
       AnalysisSource(
         url: url.toString(),
         platform: SourcePlatform.fromUrl(url),
         rawText: rawText,
+        title: title,
       );
 
   /// 서버 `POST v1/analyses` 의 `source` 에 그대로 들어갈 형태.
