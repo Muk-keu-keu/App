@@ -171,13 +171,39 @@ class GeminiRequestException implements Exception {
   String toString() => 'GeminiRequestException(HTTP $statusCode) — $message';
 }
 
+/// 할당량 초과(429).
+///
+/// 무료 등급은 모델·프로젝트당 **하루 20건**이다
+/// (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`). 시연 준비로 몇 번만
+/// 돌려도 닫히고, 그러면 하루가 지나기 전에는 무엇을 해도 열리지 않는다.
+///
+/// 네트워크 오류와 반드시 구분해야 한다. 재시도로 처리하면 남은 한도를 그만큼
+/// 더 빨리 태우면서 화면에는 "잠시 후 다시 시도" 만 뜬다 — 원인을 못 찾는다.
+class GeminiQuotaException implements Exception {
+  const GeminiQuotaException(this.statusCode, this.message);
+
+  final int statusCode;
+  final String message;
+
+  @override
+  String toString() => 'GeminiQuotaException(HTTP $statusCode) — $message';
+}
+
 /// Google Gemini generateContent 를 raw HTTP 로 호출한다.
 /// responseMimeType + responseSchema 로 응답이 항상 스키마에 맞는 JSON 이 되도록 강제한다.
 class GeminiExtractor {
-  const GeminiExtractor({required this.apiKey, this.model = 'gemini-2.5-flash'});
+  const GeminiExtractor({
+    required this.apiKey,
+    this.model = 'gemini-2.5-flash',
+    this.client,
+  });
 
   final String apiKey;
   final String model;
+
+  /// 테스트가 응답을 대신 주기 위한 자리. null 이면 실제 네트워크로 나간다.
+  /// 429·5xx 처리는 실제로 그 응답을 받아 봐야 확인할 수 있어 열어 둔다.
+  final http.Client? client;
 
   static const List<String> _dishFields = [
     'name', 'brandName', 'restaurantName', 'foodCategory', 'description', 'options',
@@ -269,7 +295,7 @@ $text
       'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent',
     );
 
-    final response = await http
+    final response = await (client ?? http.Client())
         .post(
           uri,
           headers: {'content-type': 'application/json', 'x-goog-api-key': apiKey},
@@ -302,6 +328,11 @@ $text
       // 재시도가 소용없지만 고칠 곳이 다르므로 다른 예외로 던진다.
       if (response.statusCode == 400) {
         throw GeminiRequestException(response.statusCode, detail);
+      }
+      // 429 는 할당량이다. **재시도하면 안 된다** — 무료 등급은 모델당 하루
+      // 20건이라 실패 한 번에 두 건을 태우고, 그만큼 한도가 더 빨리 닫힌다.
+      if (response.statusCode == 429) {
+        throw GeminiQuotaException(response.statusCode, detail);
       }
       throw Exception('Gemini HTTP ${response.statusCode} — $detail');
     }

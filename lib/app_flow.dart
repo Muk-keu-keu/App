@@ -1028,8 +1028,14 @@ class AppFlow extends ChangeNotifier {
         // 사용자가 할 수 있는 일이 없고, 키를 의심하게 두면 원인을 놓친다.
         _fail(_requestProblemMessage(e));
         return;
-      } catch (_) {
-        // 그 밖의 실패(네트워크·타임아웃)는 1회 자동 재시도
+      } on GeminiQuotaException catch (e) {
+        // 재시도하지 않는다. 한도가 닫힌 상태라 한 번 더 부르면 남은 몫만 준다.
+        _fail(_quotaProblemMessage(e));
+        return;
+      } catch (e) {
+        // 그 밖의 실패(네트워크·타임아웃)는 1회 자동 재시도.
+        // 삼키면 기기에서 무엇이 터졌는지 알 방법이 없어 로그로는 남긴다.
+        debugPrint('Gemini 추출 실패 (재시도 ${attempt + 1}/2): $e');
       }
     }
     if (result == null) {
@@ -1406,6 +1412,12 @@ class AppFlow extends ChangeNotifier {
   /// 디버그 빌드에서는 Gemini 가 준 설명을 그대로 보여준다. 이게 없으면 스키마
   /// 오류가 "AI 분석에 실패했어요" 로만 보여서, 네트워크 문제인지 우리 버그인지
   /// 화면만 보고는 구분할 수 없다.
+  /// 할당량이 닫혔을 때. **사용자가 다시 눌러도 열리지 않는다** — 무료 등급은
+  /// 하루 단위라 "잠시 후 다시 시도" 라고 하면 계속 누르게 만든다.
+  static String _quotaProblemMessage(GeminiQuotaException e) => kDebugMode
+      ? 'Gemini 하루 사용량 한도를 넘었어요.\n${e.message}'
+      : '오늘 AI 분석 사용량을 다 썼어요.\n내일 다시 시도해 주세요.';
+
   static String _requestProblemMessage(GeminiRequestException e) => kDebugMode
       ? 'AI 요청이 거부됐어요 (HTTP ${e.statusCode}).\n${e.message}'
       : 'AI 분석에 실패했어요.\n담당자에게 문의해 주세요.';
