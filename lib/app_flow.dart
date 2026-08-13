@@ -118,6 +118,18 @@ class AppFlow extends ChangeNotifier {
   AppStage get stage => _stage;
 
   String _pendingLink = '';
+
+  /// 공유로 함께 들어온 원문. 링크 말고 남은 부분이다.
+  ///
+  /// **인스타는 로그인 없이 캡션을 주지 않는다.** URL 로 다시 붙어 봐야 og 태그가
+  /// `Instagram / null` 뿐이라 추출이 0건이 되고, 그러면 카테고리 필터까지 무력화돼
+  /// (`AnalysisResult.withCategoryFilter` 는 기준이 없으면 통과시킨다) 서버가 추측한
+  /// 결과가 "영상에서 읽은 것" 처럼 화면에 뜬다. 동파육 릴스에 탕수육이 뜬 게 그거다.
+  ///
+  /// 공유 시점에 넘어온 텍스트는 그 로그인 벽 너머의 것이라 다시 구할 수 없다.
+  /// 버리지 않고 들고 있다가 메타데이터가 빈약하면 이걸로 채운다.
+  String _pendingSharedText = '';
+
   String _failureMessage = '';
   String get failureMessage => _failureMessage;
 
@@ -150,8 +162,12 @@ class AppFlow extends ChangeNotifier {
   }
 
   /// 링크를 받으면 바로 분석하지 않고 취향 설정 화면을 먼저 보여준다.
-  void start(String link) {
+  ///
+  /// [sharedText] 는 공유로 들어온 원문 전체다. 링크만 남기고 버리면 인스타
+  /// 게시물에서 쓸 수 있는 유일한 캡션을 잃는다 — [_pendingSharedText] 참고.
+  void start(String link, {String sharedText = ''}) {
     _pendingLink = link;
+    _pendingSharedText = sharedText;
     _setStage(AppStage.keyword);
   }
 
@@ -1011,6 +1027,19 @@ class AppFlow extends ChangeNotifier {
     _setStage(AppStage.comboList);
   }
 
+  /// 공유 원문에서 링크를 걷어낸 나머지.
+  ///
+  /// 공유 텍스트는 보통 "캡션 …\nhttps://instagram.com/reel/…" 모양이다. 링크는
+  /// [_pendingLink] 로 따로 들고 있어 중복이고, 모델에 URL 을 넣어 봐야 토큰만 먹는다.
+  @visibleForTesting
+  String get sharedCaption {
+    final raw = _pendingSharedText.replaceAll(RegExp(r'https?://\S+'), ' ');
+    final cleaned = raw.replaceAll(RegExp(r'[ \t]+'), ' ').trim();
+    // 링크만 공유된 경우 남는 건 빈 문자열이거나 부스러기뿐이다. 그걸 캡션이라고
+    // 넘기면 rawText 가 그럴듯해져 서버의 재수집 신호(isThin)까지 가려 버린다.
+    return cleaned.length < 4 ? '' : cleaned;
+  }
+
   Future<void> _analyze() async {
     final link = _pendingLink;
     // 이전 분석의 입력·결과가 남아 새 링크의 것으로 오인되지 않게 먼저 비운다.
@@ -1033,9 +1062,11 @@ class AppFlow extends ChangeNotifier {
       return;
     }
 
-    String text;
+    final shared = sharedCaption;
+
+    String text = '';
     String? thumbnailUrl;
-    String videoTitle;
+    String videoTitle = '';
     try {
       final metadata = await const MetadataFetcher().fetch(uri);
       text = metadata.combinedText;
@@ -1045,11 +1076,21 @@ class AppFlow extends ChangeNotifier {
       videoTitle = metadata.title ?? '';
       _lastThumbnailUrl = thumbnailUrl;
     } catch (_) {
-      _fail('게시물 내용을 가져오지 못했어요.\n잠시 후 다시 시도해 주세요.');
-      return;
+      // 공유 원문이 있으면 그것만으로 분석할 수 있다. 메타데이터는 보조다 —
+      // 인스타에서 얻을 수 있는 건 어차피 계정명 정도뿐이다.
+      if (shared.isEmpty) {
+        _fail('게시물 내용을 가져오지 못했어요.\n잠시 후 다시 시도해 주세요.');
+        return;
+      }
     }
 
-    // Gemini 에 넣은 텍스트를 그대로 보관한다. 서버로 분석을 넘길 때
+    // 공유 원문을 뒤에 붙인다. 메타데이터가 비어 있을 때 이게 유일한 캡션이고,
+    // 둘 다 있으면 서로를 보강한다.
+    if (shared.isNotEmpty) {
+      text = text.trim().isEmpty ? shared : '${text.trim()}\n$shared';
+    }
+
+    // 모델에 넣은 텍스트를 그대로 보관한다. 서버로 분석을 넘길 때
     // 추출 결과만으로는 부족하고 원문이 함께 필요하다.
     final input = AnalysisSource.fromUrl(url: uri, rawText: text, title: videoTitle);
     source = input;

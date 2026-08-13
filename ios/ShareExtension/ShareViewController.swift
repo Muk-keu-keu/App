@@ -34,7 +34,8 @@ final class ShareViewController: UIViewController {
     }
 
     private func process() async {
-        guard let link = await extractLink() else {
+        let shared = await extractShared()
+        guard let link = shared.link else {
             label.text = "링크를 못 찾았어요 😢\n게시물 링크를 복사해서 앱에 붙여넣어 주세요"
             label.isHidden = false
             try? await Task.sleep(nanoseconds: 1_400_000_000)
@@ -45,7 +46,7 @@ final class ShareViewController: UIViewController {
         // 앱 전환이 실패하는 환경을 대비한 폴백 경로.
         UIPasteboard.general.string = link
 
-        if await openMainApp(link) {
+        if await openMainApp(link, text: shared.text) {
             // openURL: 이 처리될 최소한의 틈만 주고 곧바로 시트를 닫는다.
             try? await Task.sleep(nanoseconds: 250_000_000)
         } else {
@@ -56,35 +57,55 @@ final class ShareViewController: UIViewController {
         extensionContext?.completeRequest(returningItems: nil)
     }
 
-    private func extractLink() async -> String? {
-        guard let items = extensionContext?.inputItems as? [NSExtensionItem] else { return nil }
+    /// 공유로 들어온 링크와 원문.
+    ///
+    /// **원문을 버리지 않는다.** 인스타는 로그인 없이 캡션을 주지 않아서, 링크로
+    /// 다시 요청해 봐야 og 태그가 `Instagram / null` 뿐이다. 그러면 추출이 0건이
+    /// 되고 그 빈자리를 서버 추측이 채워, 영상에 없던 음식이 결과로 뜬다.
+    /// 공유 시점의 텍스트가 그 캡션을 얻을 수 있는 유일한 창이다.
+    private func extractShared() async -> (link: String?, text: String?) {
+        guard let items = extensionContext?.inputItems as? [NSExtensionItem] else {
+            return (nil, nil)
+        }
+
+        var link: String?
+        var text: String?
+
         let urlTypes = [UTType.url.identifier, "public.file-url"]
         for item in items {
             for provider in item.attachments ?? [] {
                 for type in urlTypes where provider.hasItemConformingToTypeIdentifier(type) {
-                    if let raw = try? await provider.loadItem(forTypeIdentifier: type) {
-                        if let url = raw as? URL { return url.absoluteString }
-                        if let s = raw as? String, let u = URL(string: s) { return u.absoluteString }
+                    if link == nil, let raw = try? await provider.loadItem(forTypeIdentifier: type) {
+                        if let url = raw as? URL { link = url.absoluteString }
+                        else if let s = raw as? String, let u = URL(string: s) { link = u.absoluteString }
                     }
                 }
             }
         }
+
+        // 텍스트 첨부는 링크가 이미 있어도 계속 본다 — 캡션이 여기 담겨 온다.
         for item in items {
             for provider in item.attachments ?? [] where provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
                 if let raw = try? await provider.loadItem(forTypeIdentifier: UTType.plainText.identifier),
-                   let text = raw as? String,
-                   let range = text.range(of: #"https?://\S+"#, options: .regularExpression) {
-                    return String(text[range])
+                   let s = raw as? String {
+                    if text == nil { text = s }
+                    if link == nil, let range = s.range(of: #"https?://\S+"#, options: .regularExpression) {
+                        link = String(s[range])
+                    }
                 }
             }
         }
+
         for item in items {
-            if let text = item.attributedContentText?.string,
-               let range = text.range(of: #"https?://\S+"#, options: .regularExpression) {
-                return String(text[range])
+            if let s = item.attributedContentText?.string {
+                if text == nil { text = s }
+                if link == nil, let range = s.range(of: #"https?://\S+"#, options: .regularExpression) {
+                    link = String(s[range])
+                }
             }
         }
-        return nil
+
+        return (link, text)
     }
 
     /// 익스텐션에는 UIApplication.shared 가 없다.
@@ -96,9 +117,15 @@ final class ShareViewController: UIViewController {
     ///
     /// extensionContext.open 은 Share Extension 에서 true 를 반환하고도 전환되지
     /// 않는 것이 실기기에서 확인돼, 응답자 체인이 모두 실패했을 때만 시도한다.
-    private func openMainApp(_ link: String) async -> Bool {
+    private func openMainApp(_ link: String, text: String?) async -> Bool {
         var comps = URLComponents(string: "mukbang://analyze")!
-        comps.queryItems = [URLQueryItem(name: "u", value: link)]
+        var query = [URLQueryItem(name: "u", value: link)]
+        // 캡션은 `t` 로 함께 넘긴다. URL 스킴 길이 제한이 있어 넉넉히 자른다 —
+        // 앞부분만 있어도 어떤 음식인지 가려내기에는 충분하다.
+        if let text, !text.isEmpty {
+            query.append(URLQueryItem(name: "t", value: String(text.prefix(1200))))
+        }
+        comps.queryItems = query
         guard let url = comps.url else { return false }
 
         if openViaResponderChain(url) { return true }
