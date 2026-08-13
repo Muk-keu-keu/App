@@ -34,7 +34,9 @@ class Restaurant {
   /// 동 단위 지역명. `성수동`
   final String area;
 
-  final double rating;
+  /// 평점. **리뷰가 없으면 null 이다** — 서버가 일부러 0.0 으로 채우지 않는다.
+  /// 0.0 으로 받아 그리면 리뷰가 없는 새 가게가 최악의 평점처럼 보인다.
+  final double? rating;
 
   /// 이동시간 + 조리시간. "실제로 몇 분 걸리는지" 다.
   /// DB `delivery_min` 은 배달 시간 **필터**용이고 이 값과 다르다.
@@ -66,9 +68,16 @@ class Restaurant {
   final int pickupMinutes;
 
   /// 리뷰 수가 없으면 평점만 보여준다 — 없는 값을 0으로 그리면 "리뷰 0개" 로 읽힌다.
-  String get ratingText => reviewCount == null
-      ? '${rating.toStringAsFixed(1)}/5'
-      : '${rating.toStringAsFixed(1)}/5 ($reviewCount)';
+  ///
+  /// 평점 자체가 없으면(리뷰가 하나도 없는 가게) "0.0/5" 대신 아무것도 없다고 말한다.
+  /// 0.0 은 "최악" 으로 읽혀서, 아직 평가가 없는 가게에 없는 사실을 씌운다.
+  String get ratingText {
+    final r = rating;
+    if (r == null) return '평가 없음';
+    return reviewCount == null
+        ? '${r.toStringAsFixed(1)}/5'
+        : '${r.toStringAsFixed(1)}/5 ($reviewCount)';
+  }
 
   String get heroPath => heroImagePath.isEmpty ? imagePath : heroImagePath;
   String get distanceText => '${distanceKm.toStringAsFixed(1)} km';
@@ -97,13 +106,14 @@ class Restaurant {
         foodCategory:
             FoodCategory.fromWire(json['foodCategory'] as String?) ?? FoodCategory.korean,
         area: (json['area'] ?? '') as String,
-        rating: ((json['rating'] ?? 0) as num).toDouble(),
+        // null 을 0.0 으로 바꾸지 않는다. 서버가 "리뷰가 없다" 는 뜻으로 null 을 준다.
+        rating: (json['rating'] as num?)?.toDouble(),
         etaMin: ((json['etaMin'] ?? 0) as num).toInt(),
         deliveryFee: ((json['deliveryFee'] ?? 0) as num).toInt(),
         minOrderPrice: ((json['minOrderPrice'] ?? 0) as num).toInt(),
         distanceKm: ((json['distanceKm'] ?? 0) as num).toDouble(),
         imageUrl: (json['imageUrl'] ?? '') as String,
-        // 메뉴 조회에는 오고 분석 응답에는 아직 없다. 있을 때만 담는다.
+        // 분석 응답에도 온다 (2026-08-13 명세). 없으면 null 이다.
         reviewCount: (json['reviewCount'] as num?)?.toInt(),
       );
 
@@ -123,7 +133,8 @@ class Restaurant {
         name: name,
         foodCategory: FoodCategory.korean,
         area: '',
-        rating: 0,
+        // 모르는 값이다. 0 으로 두면 "0.0/5" 로 그려져 없는 사실을 만든다.
+        rating: null,
         etaMin: 0,
         deliveryFee: deliveryFee,
         minOrderPrice: 0,

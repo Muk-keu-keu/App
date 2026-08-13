@@ -1227,7 +1227,9 @@ class AppFlow extends ChangeNotifier {
     });
 
     if (filtered.isEmpty) {
-      _fail('조건에 맞는 조합을 찾지 못했어요.');
+      // 서버가 왜 0개인지 말해 준다(emptyReason). 앱이 카테고리로 더 걸러서 0이
+      // 된 경우에는 그 값이 없으므로 일반 문구로 떨어진다.
+      _fail(analyzed.emptyMessage);
       return null;
     }
     return filtered;

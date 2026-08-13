@@ -149,13 +149,11 @@ class YogijokboPost {
 
   /// 목록 항목. `GET v1/posts` 의 `posts[]`.
   ///
-  /// 목록은 조합도 본문도 내려주지 않는다 — 메뉴·옵션·금액은 상세에서 받는다.
-  /// 카드에 필요한 만큼만 채워진 객체다.
+  /// 조합은 내려오지 않는다 — 메뉴·옵션·금액은 상세에서 받는다.
+  /// 본문은 2026-08-13 명세부터 자르지 않고 전체가 온다(카드가 2줄만 그린다).
   factory YogijokboPost.fromListJson(Map<String, dynamic> json) => YogijokboPost(
         id: '${json['postId'] ?? json['id'] ?? ''}',
         title: '${json['title'] ?? ''}',
-        // 목록 응답에 본문이 없다 (`docs/api-yogijokbo.md` 확인 필요 항목).
-        // 값이 붙으면 그대로 읽히도록 키는 미리 본다.
         body: '${json['body'] ?? ''}',
         author: PostAuthor.fromWire(json),
         stores: const [],

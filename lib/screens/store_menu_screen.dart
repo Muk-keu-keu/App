@@ -210,11 +210,17 @@ class _StoreInfo extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      Text('리뷰 ${store.rating.toStringAsFixed(1)}',
-                          style: AppText.btn2(color: AppColors.gray800)),
-                      // 메뉴 조회는 리뷰 수를 준다. 분석 응답에서 온 매장은 아직
-                      // 없어서, (0) 으로 "리뷰 0개" 처럼 보이지 않게 있을 때만 붙인다.
-                      if (store.reviewCount != null) ...[
+                      // 평점이 없는 가게는 리뷰가 하나도 없다는 뜻이다. 0.0 으로
+                      // 그리면 최악의 평점으로 읽힌다.
+                      Text(
+                        store.rating == null
+                            ? '평가 없음'
+                            : '리뷰 ${store.rating!.toStringAsFixed(1)}',
+                        style: AppText.btn2(color: AppColors.gray800),
+                      ),
+                      // 리뷰 수도 없을 수 있다. (0) 으로 "리뷰 0개" 처럼 보이지
+                      // 않게 있을 때만 붙인다.
+                      if (store.rating != null && store.reviewCount != null) ...[
                         const SizedBox(width: 4),
                         Text('(${store.reviewCount})',
                             style: AppText.btn3(color: AppColors.gray600)),
