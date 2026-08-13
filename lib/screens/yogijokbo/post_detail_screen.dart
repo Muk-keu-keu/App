@@ -69,7 +69,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               padding: EdgeInsets.zero,
               children: [
                 _PostSection(post: post),
-                const SizedBox(height: 16),
+                // 본문과 "주문한 메뉴" 사이에는 회색 띠를 두지 않는다. 같은 글에
+                // 딸린 정보라 붙어 있어야 하고, 띠를 넣으면 아래 댓글과 같은
+                // 무게의 별개 블록으로 읽힌다 (디자이너 피드백 2026-08-13).
+                const DsDivider(color: AppColors.gray300),
                 // 시안 909:2578 은 아코디언이 아니다. 누르면 바텀시트가 뜬다.
                 _OrderedMenuRow(
                   onTap: () => _OrderedMenuSheet.show(context, post: post),
