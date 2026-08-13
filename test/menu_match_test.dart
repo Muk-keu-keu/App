@@ -24,25 +24,35 @@ DishCandidate candidate(String store, String menu, double score) => DishCandidat
 /// 걸러지지 않았고, 점수도 0.44~0.54 로 평평했다.
 void main() {
   group('dishHeadNoun — 핵심 음식명', () {
-    test('마지막 낱말을 쓴다', () {
+    test('띄어 쓴 이름은 뒤엣말이 정체다', () {
       expect(AnalysisResult.dishHeadNoun('마라로제 떡볶이'), '떡볶이');
       expect(AnalysisResult.dishHeadNoun('오리지널 떡볶이'), '떡볶이');
       expect(AnalysisResult.dishHeadNoun('간장 치킨'), '치킨');
     });
 
-    test('띄어쓰기가 없으면 이름 전체다', () {
+    test('붙여 쓴 이름도 표에서 찾아낸다', () {
+      // 여기가 처음 규칙이 무너진 자리다. 통째로 핵심어로 쓰면
+      // "럭키치즈떡볶이" 가 "치즈떡볶이" 와 다른 음식이 되어 버린다.
+      expect(AnalysisResult.dishHeadNoun('럭키치즈떡볶이'), '떡볶이');
+      expect(AnalysisResult.dishHeadNoun('마라로제찜닭'), '찜닭');
       expect(AnalysisResult.dishHeadNoun('동파육'), '동파육');
-      expect(AnalysisResult.dishHeadNoun('마라로제찜닭'), '마라로제찜닭');
     });
 
-    test('양·형태를 가리키는 말은 건너뛴다', () {
-      // "떡볶이 2인분" 의 정체는 2인분이 아니다.
+    test('긴 이름을 먼저 잡는다', () {
+      // "떡볶이" 를 "볶이" 로 자르면 라볶이까지 같은 음식이 된다.
+      expect(AnalysisResult.dishHeadNoun('치즈라볶이'), '라볶이');
+      expect(AnalysisResult.dishHeadNoun('매운 제육볶음'), '제육볶음');
+    });
+
+    test('뒤에 수량이 붙어도 찾는다', () {
       expect(AnalysisResult.dishHeadNoun('떡볶이 2인분'), '떡볶이');
       expect(AnalysisResult.dishHeadNoun('치킨 세트'), '치킨');
-      expect(AnalysisResult.dishHeadNoun('제육볶음 도시락'), '제육볶음');
     });
 
-    test('비어 있으면 빈 문자열이다', () {
+    test('모르는 음식은 빈 문자열이다', () {
+      // 표에 없는 이름이다. 여기서 억지로 정하면 멀쩡한 후보가 전부 떨어진다.
+      expect(AnalysisResult.dishHeadNoun('인기폭탄세트'), '');
+      expect(AnalysisResult.dishHeadNoun('오징어 먹물 슬러쉬'), '');
       expect(AnalysisResult.dishHeadNoun(''), '');
       expect(AnalysisResult.dishHeadNoun('   '), '');
     });
@@ -70,9 +80,19 @@ void main() {
       expect(AnalysisResult.isSameDish('마라 로제 떡볶이', '마라로제 떡 볶 이'), isTrue);
     });
 
+    test('붙여 쓴 이름도 같은 음식으로 본다', () {
+      // 실제로 "럭키치즈떡볶이 를 파는 곳이 근처에 없어요" 가 떴던 건이다.
+      expect(AnalysisResult.isSameDish('럭키치즈떡볶이', '치즈떡볶이'), isTrue);
+      expect(AnalysisResult.isSameDish('럭키치즈떡볶이', '오리지널 떡볶이'), isTrue);
+      expect(AnalysisResult.isSameDish('럭키치즈떡볶이', '마라로제찜닭'), isFalse);
+    });
+
     test('판단할 근거가 없으면 거르지 않는다', () {
-      // 추출이 요리명을 못 준 경우까지 빈 화면으로 만들면 더 나쁘다.
+      // 추출이 요리명을 못 준 경우나 표에 없는 음식까지 빈 화면으로 만들면
+      // 더 나쁘다. 실제로 인기폭탄세트·슬러쉬가 전부 빈 화면이 됐다.
       expect(AnalysisResult.isSameDish('', '아무 메뉴'), isTrue);
+      expect(AnalysisResult.isSameDish('인기폭탄세트', '엽기떡볶이 세트'), isTrue);
+      expect(AnalysisResult.isSameDish('오징어 먹물 슬러쉬', '아무 메뉴'), isTrue);
     });
   });
 
