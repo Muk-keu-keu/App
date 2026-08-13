@@ -655,16 +655,21 @@ class AppFlow extends ChangeNotifier {
     required int menuId,
     required int delta,
   }) {
+    // 장바구니에 담긴 카드면 그쪽도 함께 고친다. **카드를 그리는 건 언제나
+    // `combo.items` 다** — 예전에는 담긴 카드일 때 장바구니만 고치고 돌아가서,
+    // 체크된 카드에서는 수량도 휴지통도 눌러도 아무 일이 없어 보였다
+    // (디자이너 피드백 2026-08-13).
     final store = cart.storeOf(combo.id);
     if (store != null) {
       store.changeQuantity(menuId: menuId, delta: delta);
       cart.pruneEmptyStores();
-      notifyListeners();
-      return;
     }
 
     final line = combo.lineOf(menuId);
-    if (line == null) return;
+    if (line == null) {
+      notifyListeners();
+      return;
+    }
     final next = line.quantity + delta;
 
     // 수량 1에서 한 번 더 내리면 휴지통 아이콘이 되고, 그때는 그 메뉴를 뺀다
@@ -890,11 +895,43 @@ class AppFlow extends ChangeNotifier {
       );
     }
 
+    // 먹방 조합·다른 결과보기의 카드에도 같이 넣는다. 그 화면들은 장바구니가
+    // 아니라 `ComboSuggestion.items` 를 그리므로, 장바구니에만 담으면 돌아갔을 때
+    // 추가된 것이 보이지 않는다 (디자이너 피드백 2026-08-13).
+    _addToSuggestion(restaurant.restaurantId, menu, chosen: chosen, spice: spice);
+
     if (thenClose) {
       closeMenuDetail();
       return;
     }
     notifyListeners();
+  }
+
+  /// 매장 메뉴에서 담은 것을 그 매장의 조합 카드에도 넣는다.
+  ///
+  /// 조합 카드는 분석 결과의 스냅샷이라 장바구니와 별개의 목록을 들고 있다.
+  /// 해당 매장의 카드가 없으면(장바구니에서 연 경우) 아무 일도 하지 않는다.
+  void _addToSuggestion(
+    int restaurantId,
+    Menu menu, {
+    List<MenuOption>? chosen,
+    SpiceLevel? spice,
+  }) {
+    for (final combo in suggestions) {
+      if (combo.id != restaurantId) continue;
+
+      final line = combo.lineOf(menu.menuId);
+      if (line != null) {
+        // 이미 있는 메뉴면 수량만 올린다. 장바구니와 같은 규칙이다.
+        line.quantity += 1;
+      } else {
+        final added = menu.toCartLine();
+        if (chosen != null) added.applySelection(chosen);
+        if (spice != null) added.selectedSpice = spice;
+        combo.items = [...combo.items, added];
+      }
+      return;
+    }
   }
 
   /// 그 메뉴가 장바구니에 몇 개 담겼는지. 매장 메뉴 화면이 수량을 보여준다.
