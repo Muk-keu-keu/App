@@ -426,8 +426,11 @@ class _JokboChart extends StatelessWidget {
                 GestureDetector(
                   onTap: () => context.read<AppFlow>().openJokbo(),
                   behavior: HitTestBehavior.opaque,
-                  child: const Icon(Icons.chevron_right,
-                      size: 16, color: AppColors.gray700),
+                  // 섹션 하나를 여는 자리라 목록 줄의 꺾쇠보다 크다.
+                  child: const DsChevron.right(
+                    large: true,
+                    color: AppColors.gray700,
+                  ),
                 ),
               ],
             ),

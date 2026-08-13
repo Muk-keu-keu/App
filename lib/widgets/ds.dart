@@ -516,18 +516,27 @@ ColorFilter _tint(Color color) => ColorFilter.mode(color, BlendMode.srcIn);
 /// (시안 컴포넌트도 같은 벡터를 회전해 쓴다).
 class DsChevron extends StatelessWidget {
   const DsChevron.left({super.key, this.color = Colors.black})
-      : _dir = _ChevronDir.left;
+      : _dir = _ChevronDir.left,
+        large = false;
   const DsChevron.down({super.key, this.color = AppColors.gray800})
-      : _dir = _ChevronDir.down;
+      : _dir = _ChevronDir.down,
+        large = false;
 
   /// "상세보기 >" · 토스트의 "보러가기 >" 가 쓰는 오른쪽 꺾쇠 (시안 icon/chevron).
-  const DsChevron.right({super.key, this.color = AppColors.gray800})
+  ///
+  /// [large] 는 섹션 전체로 넘어가는 자리에 쓴다(홈의 요기족보 배너). 그 자리는
+  /// 목록 한 줄이 아니라 화면 하나를 여는 버튼이라 같은 치수면 눌러야 할 것으로
+  /// 안 보인다 (디자이너 피드백 2026-08-13).
+  const DsChevron.right({super.key, this.color = AppColors.gray800, this.large = false})
       : _dir = _ChevronDir.right;
 
   final Color color;
   final _ChevronDir _dir;
 
-  bool get _small => _dir != _ChevronDir.left;
+  /// 오른쪽 꺾쇠만 쓰는 확대 플래그. left 는 원래 큰 치수다.
+  final bool large;
+
+  bool get _small => _dir != _ChevronDir.left && !large;
 
   @override
   Widget build(BuildContext context) {
