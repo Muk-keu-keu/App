@@ -863,6 +863,118 @@ void main() {
           score: score,
         );
 
+    // 2026-08-13 실사용 — 포테이토피자 릴스에 한솥도시락 돈치마요가 추천됐다.
+    // 서버 벡터 검색은 "가장 가까운 N개" 라 그 카테고리 가게가 반경 안에 없으면
+    // 전혀 다른 음식이 1등으로 올라온다.
+    test('요리와 카테고리가 다른 후보는 걷어낸다', () {
+      DishCandidate at(int id, FoodCategory category) => DishCandidate(
+            restaurant: Restaurant(
+              restaurantId: id,
+              name: '가게 $id',
+              foodCategory: category,
+              area: '청담동',
+              rating: 4.7,
+              etaMin: 33,
+              deliveryFee: 2000,
+              minOrderPrice: 12000,
+              distanceKm: 2.3,
+            ),
+            item: CartLine(
+              menuId: id * 10,
+              name: '메뉴 $id',
+              menuType: MenuType.main,
+              price: 10000,
+              quantity: 1,
+            ),
+            score: 0.4,
+          );
+
+      final result = AnalysisResult(
+        dishResults: [
+          DishResult(dishName: '포테이토피자', candidates: [
+            at(1, FoodCategory.korean),   // 한솥도시락 같은 곳
+            at(2, FoodCategory.pizza),
+          ]),
+        ],
+      );
+
+      final filtered = result.withCategoryFilter(
+        const {'포테이토피자': FoodCategory.pizza},
+      );
+
+      expect(filtered.combos, hasLength(1));
+      expect(filtered.combos.single.restaurant.restaurantId, 2);
+    });
+
+    test('같은 카테고리가 하나도 없으면 그 요리는 비운다', () {
+      // 엉뚱한 집을 다섯 개 보여주느니 "찾지 못했어요" 가 맞다.
+      final result = AnalysisResult(
+        dishResults: [
+          DishResult(dishName: '포테이토피자', candidates: [
+            DishCandidate(
+              restaurant: Restaurant(
+                restaurantId: 1,
+                name: '한솥도시락 청담점',
+                foodCategory: FoodCategory.korean,
+                area: '청담동',
+                rating: 4.7,
+                etaMin: 33,
+                deliveryFee: 2000,
+                minOrderPrice: 12000,
+                distanceKm: 2.3,
+              ),
+              item: CartLine(
+                menuId: 10,
+                name: '돈치마요',
+                menuType: MenuType.main,
+                price: 10000,
+                quantity: 1,
+              ),
+              score: 0.4,
+            ),
+          ]),
+        ],
+      );
+
+      final filtered = result.withCategoryFilter(
+        const {'포테이토피자': FoodCategory.pizza},
+      );
+      expect(filtered.combos, isEmpty);
+      expect(filtered.isEmpty, isTrue);
+    });
+
+    test('추출이 카테고리를 못 정한 요리는 손대지 않는다', () {
+      final result = AnalysisResult(
+        dishResults: [
+          DishResult(dishName: '무언가', candidates: [
+            DishCandidate(
+              restaurant: Restaurant(
+                restaurantId: 1,
+                name: '가게',
+                foodCategory: FoodCategory.korean,
+                area: '청담동',
+                rating: 4.0,
+                etaMin: 30,
+                deliveryFee: 0,
+                minOrderPrice: 0,
+                distanceKm: 1.0,
+              ),
+              item: CartLine(
+                menuId: 10,
+                name: '메뉴',
+                menuType: MenuType.main,
+                price: 1000,
+                quantity: 1,
+              ),
+              score: 0.4,
+            ),
+          ]),
+        ],
+      );
+
+      expect(result.withCategoryFilter(const {}).combos, hasLength(1));
+    });
+
     test('서버 summary 가 오면 조립하지 않는다', () {
       const result = AnalysisResult(summary: '서버가 쓴 문장이에요');
       expect(result.reasonText(maxDeliveryMinutes: 30), '서버가 쓴 문장이에요');

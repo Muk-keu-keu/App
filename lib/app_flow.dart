@@ -1125,11 +1125,19 @@ class AppFlow extends ChangeNotifier {
       return null;
     }
 
-    if (analyzed.isEmpty) {
+    // 요리와 카테고리가 다른 후보를 걷어낸다. 서버가 "가장 가까운 N개" 를 주기
+    // 때문에, 그 카테고리 가게가 반경 안에 없으면 전혀 다른 음식이 올라온다
+    // (포테이토피자 릴스에 한솥도시락이 추천된 건이 그랬다).
+    final filtered = analyzed.withCategoryFilter({
+      for (final dish in result.dishes)
+        if (dish.foodCategory != null) dish.name: dish.foodCategory!,
+    });
+
+    if (filtered.isEmpty) {
       _fail('조건에 맞는 조합을 찾지 못했어요.');
       return null;
     }
-    return analyzed;
+    return filtered;
   }
 
   // ── 요기족보 ───────────────────────────────────────────────────────────────

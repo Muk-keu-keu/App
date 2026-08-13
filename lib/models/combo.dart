@@ -11,6 +11,7 @@
 library;
 
 import 'cart.dart';
+import 'enums.dart';
 import 'menu.dart';
 import 'restaurant.dart';
 
@@ -331,6 +332,42 @@ class AnalysisResult {
   /// 결과가 하나도 없는지. 명세는 이때도 에러가 아니라 200 + 빈 배열을 준다.
   bool get isEmpty => exactMatches.isEmpty && combos.isEmpty;
   bool get isNotEmpty => !isEmpty;
+
+  /// 요리와 카테고리가 다른 후보를 걷어낸 결과.
+  ///
+  /// 서버 벡터 검색은 "가장 가까운 N개" 를 주므로 그 카테고리 가게가 반경 안에
+  /// 하나도 없으면 전혀 다른 음식이 그대로 1등으로 올라온다. 실제로 포테이토피자
+  /// 릴스에서 한솥도시락의 돈치마요가 추천됐다 (2026-08-13).
+  ///
+  /// **같은 카테고리가 하나도 없으면 그 요리는 빈 결과로 둔다.** 엉뚱한 집을
+  /// 다섯 개 보여주는 것보다 "찾지 못했어요" 가 맞다.
+  ///
+  /// [categoryByDish] 에 없는 요리(추출이 카테고리를 못 정한 경우)는 손대지 않는다.
+  /// `exactMatches` 도 손대지 않는다 — 브랜드로 직접 찾은 것이라 카테고리와
+  /// 무관하게 정확하다.
+  AnalysisResult withCategoryFilter(Map<String, FoodCategory> categoryByDish) {
+    if (categoryByDish.isEmpty) return this;
+
+    return AnalysisResult(
+      summary: summary,
+      emptyReason: emptyReason,
+      exactMatches: exactMatches,
+      dishResults: [
+        for (final dish in dishResults)
+          _filterDish(dish, categoryByDish[dish.dishName]),
+      ],
+    );
+  }
+
+  static DishResult _filterDish(DishResult dish, FoodCategory? wanted) {
+    if (wanted == null || dish.candidates.isEmpty) return dish;
+
+    final matched = [
+      for (final c in dish.candidates)
+        if (c.restaurant.foodCategory == wanted) c,
+    ];
+    return DishResult(dishName: dish.dishName, candidates: matched);
+  }
 
   /// 영상에 나온 것을 앞에, 비슷한 곳을 뒤에. 카드를 한 줄로 넘겨 볼 때 쓴다.
   List<ComboSuggestion> get all => [...exactMatches, ...combos];
