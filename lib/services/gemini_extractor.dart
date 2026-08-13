@@ -3,195 +3,29 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import '../models/enums.dart';
+import 'extraction.dart';
 
-/// 영상에 나온 음식 하나. `POST v1/analyses` 의 `extracted.dishes[]` 와 1:1이다.
-///
-/// **브랜드는 영상 전체가 아니라 메뉴마다 붙는다.** 엽떡 떡볶이 + 명랑핫도그처럼
-/// 두 가게가 나오는 영상이 있기 때문이다 (명세 비고). 전부 같은 브랜드면 같은 값이
-/// 반복될 뿐이고, 그게 다중 매장 묶음 주문의 출발점이 된다.
-class ExtractedDish {
-  const ExtractedDish({
-    required this.name,
-    this.brandName,
-    this.restaurantName,
-    this.foodCategory,
-    this.description = '',
-    this.options = const [],
-  });
+// 계약(ExtractedDish·ExtractionResult·예외)은 provider 중립인 extraction.dart 에
+// 있다. 이 파일을 import 하던 곳이 그대로 돌도록 함께 내보낸다.
+export 'extraction.dart';
 
-  /// 메뉴명. `오리지널 떡볶이` — 필수다.
-  final String name;
+/// 이전 이름. 예외는 이제 제공자와 무관해 [ExtractorAuthException] 로 합쳤다.
+typedef GeminiAuthException = ExtractorAuthException;
 
-  /// 브랜드명만. **지점명을 붙이면 안 된다** — 서버가 `restaurant.brand_name`
-  /// (지점 제외 정제 브랜드명)과 맞춰 보기 때문에 `교촌치킨 성수점` 은 매칭이 깨진다.
-  /// 영상에 가게가 안 나오면 null.
-  final String? brandName;
+/// 이전 이름. [ExtractorRequestException] 을 보라.
+typedef GeminiRequestException = ExtractorRequestException;
 
-  /// 화면 표시용 상호명. `엽기떡볶이 강남점` 처럼 지점이 붙어도 된다.
-  final String? restaurantName;
-
-  /// 9개 카테고리 중 하나. 판단 불가면 null.
-  final FoodCategory? foodCategory;
-
-  /// 맛·식감만 한 줄 30~50자. 홍보 문구 금지 (명세).
-  final String description;
-
-  /// 영상에서 들린 말 그대로. 정규화하지 않는다. `["분모자 넣어서"]`
-  final List<String> options;
-
-  factory ExtractedDish.fromJson(Map<String, dynamic> json) => ExtractedDish(
-        name: (json['name'] ?? '') as String,
-        brandName: _nullIfBlank(json['brandName']),
-        restaurantName: _nullIfBlank(json['restaurantName']),
-        // AI 가 한글 카테고리를 뱉을 수 있어 wire 와 한글 양쪽으로 찾는다.
-        foodCategory: FoodCategory.fromWire(json['foodCategory'] as String?) ??
-            FoodCategory.fromLabel(json['foodCategory'] as String?),
-        description: (json['description'] ?? '') as String,
-        options: [for (final e in (json['options'] ?? const []) as List) '$e'],
-      );
-
-  /// nullable 필드는 빈 문자열이 아니라 null 로 보낸다. 명세가 "영상에 가게가 안
-  /// 나오면 생략" 이라고 했고, 빈 문자열을 보내면 서버가 브랜드 `''` 로 검색한다.
-  static String? _nullIfBlank(Object? raw) {
-    final value = '${raw ?? ''}'.trim();
-    return value.isEmpty ? null : value;
-  }
-
-  Map<String, dynamic> toJson() => {
-        'name': name,
-        'brandName': brandName,
-        'restaurantName': restaurantName,
-        'foodCategory': foodCategory?.wire,
-        'description': description,
-        'options': options,
-      };
-}
-
-/// AI 추출 결과. `POST v1/analyses` 의 `extracted` 블록 그대로다.
-///
-/// **이 구조가 백엔드와 주고받을 계약이다.** 모델을 Gemini 에서 다른 것으로 바꾸더라도
-/// 스키마만 유지하면 앱과 서버는 손댈 필요가 없다.
-class ExtractionResult {
-  const ExtractionResult({this.dishes = const [], this.keywords = const []});
-
-  const ExtractionResult.empty() : dishes = const [], keywords = const [];
-
-  /// 영상에 나온 음식들. 등장 순서대로.
-  final List<ExtractedDish> dishes;
-
-  /// 검색 보조. 명세상 당분간 미사용이지만 계약에 있어 채워 보낸다.
-  final List<String> keywords;
-
-  bool get isEmpty => dishes.isEmpty;
-
-  /// 메뉴 이름만 쉼표로 이어붙인 값. 분석 중 화면에 보여준다.
-  String get menu => dishes.map((d) => d.name).join(', ');
-
-  /// 영상에 나온 브랜드들. 중복을 없애고 순서를 지킨다.
-  /// 이 개수가 곧 `exactMatches` 로 돌아올 브랜드 수다.
-  List<String> get brandNames {
-    final seen = <String>[];
-    for (final d in dishes) {
-      final brand = d.brandName;
-      if (brand != null && !seen.contains(brand)) seen.add(brand);
-    }
-    return seen;
-  }
-
-  /// 화면 표시용 상호명 하나. 첫 메뉴의 것을 쓰고, 없으면 브랜드명으로 대신한다.
-  String get primaryRestaurantName {
-    for (final d in dishes) {
-      final name = d.restaurantName ?? d.brandName;
-      if (name != null && name.isNotEmpty) return name;
-    }
-    return '';
-  }
-
-  /// 대표 카테고리. 가장 많이 나온 것을 고른다. 없으면 null.
-  FoodCategory? get primaryCategory {
-    final counts = <FoodCategory, int>{};
-    for (final d in dishes) {
-      final c = d.foodCategory;
-      if (c != null) counts[c] = (counts[c] ?? 0) + 1;
-    }
-    if (counts.isEmpty) return null;
-    var best = counts.keys.first;
-    for (final entry in counts.entries) {
-      if (entry.value > counts[best]!) best = entry.key;
-    }
-    return best;
-  }
-
-  factory ExtractionResult.fromJson(Map<String, dynamic> json) => ExtractionResult(
-        dishes: [
-          for (final e in (json['dishes'] ?? const []) as List)
-            if (e is Map<String, dynamic>) ExtractedDish.fromJson(e),
-        ],
-        keywords: [for (final e in (json['keywords'] ?? const []) as List) '$e'],
-      );
-
-  Map<String, dynamic> toJson() => {
-        'dishes': [for (final d in dishes) d.toJson()],
-        'keywords': keywords,
-      };
-}
-
-/// API 키가 잘못됐을 때. 재시도 대상이 아니다.
-///
-/// Gemini 는 키가 틀리면 `400 INVALID_ARGUMENT — API key not valid` 를 돌려준다.
-/// 401 이 아니라 400 이라 일반 오류와 섞이기 쉬워 따로 표시해 둔다.
-class GeminiAuthException implements Exception {
-  const GeminiAuthException(this.statusCode);
-
-  final int statusCode;
-
-  @override
-  String toString() => 'GeminiAuthException(HTTP $statusCode) — API 키를 확인하세요';
-}
-
-/// 우리가 보낸 요청이 잘못됐을 때 (`400 INVALID_ARGUMENT`).
-///
-/// 키와 무관한 400 이다. 재시도해도 같은 결과라는 점은 [GeminiAuthException] 과
-/// 같지만 고칠 곳이 다르다 — 이쪽은 우리 코드의 버그다.
-///
-/// 이 예외를 나눈 이유가 있다. responseSchema 의 enum 에 빈 문자열이 들어가
-/// 요청이 통째로 거부되던 때, 400 을 전부 키 문제로 보고하는 바람에 화면이
-/// "AI 분석을 쓸 수 없어요" 만 띄웠다. 키는 멀쩡했는데 키를 의심하느라 원인을
-/// 찾는 데 한참 걸렸다. 서버가 준 설명을 [message] 에 그대로 들고 온다.
-class GeminiRequestException implements Exception {
-  const GeminiRequestException(this.statusCode, this.message);
-
-  final int statusCode;
-
-  /// Gemini 가 준 `error.message` 원문.
-  final String message;
-
-  @override
-  String toString() => 'GeminiRequestException(HTTP $statusCode) — $message';
-}
-
-/// 할당량 초과(429).
-///
-/// 무료 등급은 모델·프로젝트당 **하루 20건**이다
-/// (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`). 시연 준비로 몇 번만
-/// 돌려도 닫히고, 그러면 하루가 지나기 전에는 무엇을 해도 열리지 않는다.
-///
-/// 네트워크 오류와 반드시 구분해야 한다. 재시도로 처리하면 남은 한도를 그만큼
-/// 더 빨리 태우면서 화면에는 "잠시 후 다시 시도" 만 뜬다 — 원인을 못 찾는다.
-class GeminiQuotaException implements Exception {
-  const GeminiQuotaException(this.statusCode, this.message);
-
-  final int statusCode;
-  final String message;
-
-  @override
-  String toString() => 'GeminiQuotaException(HTTP $statusCode) — $message';
-}
+/// 이전 이름. [ExtractorQuotaException] 을 보라.
+typedef GeminiQuotaException = ExtractorQuotaException;
 
 /// Google Gemini generateContent 를 raw HTTP 로 호출한다.
 /// responseMimeType + responseSchema 로 응답이 항상 스키마에 맞는 JSON 이 되도록 강제한다.
-class GeminiExtractor {
+///
+/// 무료 등급은 모델·프로젝트당 **하루 20건**이다
+/// (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`). 시연 준비로 몇 번만
+/// 돌려도 닫히고, 그러면 하루가 지나기 전에는 무엇을 해도 열리지 않는다. 이 한도
+/// 때문에 [OpenAiExtractor] 를 함께 두고 키로 고른다.
+class GeminiExtractor implements DishExtractor {
   const GeminiExtractor({
     required this.apiKey,
     this.model = 'gemini-2.5-flash',
@@ -205,10 +39,9 @@ class GeminiExtractor {
   /// 429·5xx 처리는 실제로 그 응답을 받아 봐야 확인할 수 있어 열어 둔다.
   final http.Client? client;
 
-  static const List<String> _dishFields = [
-    'name', 'brandName', 'restaurantName', 'foodCategory', 'description', 'options',
-  ];
-
+  /// Gemini 는 OpenAPI 서브셋을 쓴다 — 타입이 `OBJECT` 처럼 **대문자**고
+  /// `propertyOrdering` 이 따로 있다. OpenAI 의 JSON Schema 와 방언이 달라
+  /// 스키마를 공유하지 않고 제공자별로 둔다.
   @visibleForTesting
   static const Map<String, dynamic> dishSchema = {
     'type': 'OBJECT',
@@ -219,28 +52,15 @@ class GeminiExtractor {
       // 빈 문자열은 ExtractedDish._nullIfBlank 가 null 로 되돌린다.
       'brandName': {'type': 'STRING'},
       'restaurantName': {'type': 'STRING'},
-      // 판단 불가는 빈 문자열이 아니라 UNKNOWN 이다.
-      //
-      // responseSchema 의 enum 에 빈 문자열을 넣으면 Gemini 가 요청 자체를 거부한다
-      // (`400 INVALID_ARGUMENT — enum[9]: cannot be empty`). 다른 필드처럼 빈
-      // 문자열로 통일하려다 이 화면 전체가 죽어 있었다.
-      //
-      // UNKNOWN 은 FoodCategory 에 없는 값이라 `fromWire` 가 null 로 돌려준다.
-      'foodCategory': {
-        'type': 'STRING',
-        'enum': [
-          ...['KOREAN', 'CHINESE', 'JAPANESE', 'WESTERN', 'SNACK'],
-          ...['CHICKEN', 'PIZZA', 'ASIAN', 'CAFE_DESSERT', 'UNKNOWN'],
-        ],
-      },
+      'foodCategory': {'type': 'STRING', 'enum': extractionCategoryEnum},
       'description': {'type': 'STRING'},
       'options': {
         'type': 'ARRAY',
         'items': {'type': 'STRING'},
       },
     },
-    'required': _dishFields,
-    'propertyOrdering': _dishFields,
+    'required': extractionDishFields,
+    'propertyOrdering': extractionDishFields,
   };
 
   /// 서버가 이 스키마를 거부하면 화면 전체가 죽는다. 테스트가 모양을 지킨다.
@@ -258,38 +78,7 @@ class GeminiExtractor {
     'propertyOrdering': ['dishes', 'keywords'],
   };
 
-  String _prompt(String text) => '''
-아래는 SNS 게시물(릴스/영상/카드뉴스)의 제목·설명·계정명 텍스트입니다.
-이 사람이 먹은 음식을 요기요에서 그대로 주문할 수 있도록 정보를 뽑아주세요.
-근거가 있으면 추론해도 되지만, 전혀 없으면 빈 문자열로 두세요.
-
-dishes: 영상에 나온 음식들을 등장 순서대로. 각 항목은
-  · name: 메뉴 이름 (예: "오리지널 떡볶이", "레드콤보"). 필수입니다.
-  · brandName: 그 메뉴를 파는 브랜드/체인명만. **지점명은 절대 붙이지 마세요.**
-      맞는 예: "교촌치킨", "엽기떡볶이"
-      틀린 예: "교촌치킨 성수점", "엽기떡볶이 강남점"
-      영상에 가게가 안 나오면 빈 문자열.
-  · restaurantName: 지점까지 붙은 상호명 (예: "엽기떡볶이 강남점"). 모르면 빈 문자열.
-  · foodCategory: KOREAN, CHINESE, JAPANESE, WESTERN, SNACK, CHICKEN, PIZZA,
-      ASIAN, CAFE_DESSERT 중 하나. 판단 불가면 UNKNOWN.
-  · description: 그 음식의 맛과 식감만 한 줄로, 30~50자.
-      "쫄깃한 밀떡에 매운 양념을 넉넉히 버무린 떡볶이" 처럼 쓰세요.
-      "인생 맛집", "꼭 드세요" 같은 홍보·감상 문구는 넣지 마세요.
-  · options: 영상에서 말한 추가·변경 사항을 **들린 말 그대로** 배열로.
-      예: ["분모자 넣어서"], ["순살로", "치즈 추가"]
-      영상에 언급이 없으면 빈 배열.
-
-★ 브랜드는 영상 전체가 아니라 메뉴마다 붙습니다.
-  한 영상에 가게가 두 곳 나오면(예: 엽떡 떡볶이 + 명랑핫도그) 메뉴별로 다른
-  brandName 을 쓰세요. 전부 같은 가게면 같은 값을 반복하면 됩니다.
-
-keywords: 매칭·검색에 쓸 단어를 중복 없이 3~15개. 음식명, 재료, 조리법, 식감,
-  먹는 상황("야식", "혼술", "해장")까지.
-
-텍스트:
-$text
-''';
-
+  @override
   Future<ExtractionResult> extract(String text) async {
     final uri = Uri.parse(
       'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent',
@@ -303,7 +92,7 @@ $text
             'contents': [
               {
                 'parts': [
-                  {'text': _prompt(text)},
+                  {'text': extractionPrompt(text)},
                 ],
               },
             ],
@@ -317,22 +106,22 @@ $text
         .timeout(const Duration(seconds: 30));
 
     if (response.statusCode != 200) {
-      final detail = _errorMessage(response.bodyBytes);
+      final detail = extractorErrorMessage(response.bodyBytes);
 
       // 키 문제는 재시도해도 절대 안 된다. 호출한 쪽이 구분해서 바로 포기하도록
       // 별도 예외로 던진다. 그냥 재시도하면 실패까지 걸리는 시간만 두 배가 된다.
       if (_isAuthFailure(response.statusCode, detail)) {
-        throw GeminiAuthException(response.statusCode);
+        throw ExtractorAuthException(response.statusCode);
       }
       // 400 인데 키 문제가 아니면 우리가 보낸 요청이 잘못된 것이다. 이것도
       // 재시도가 소용없지만 고칠 곳이 다르므로 다른 예외로 던진다.
       if (response.statusCode == 400) {
-        throw GeminiRequestException(response.statusCode, detail);
+        throw ExtractorRequestException(response.statusCode, detail);
       }
       // 429 는 할당량이다. **재시도하면 안 된다** — 무료 등급은 모델당 하루
       // 20건이라 실패 한 번에 두 건을 태우고, 그만큼 한도가 더 빨리 닫힌다.
       if (response.statusCode == 429) {
-        throw GeminiQuotaException(response.statusCode, detail);
+        throw ExtractorQuotaException(response.statusCode, detail);
       }
       throw Exception('Gemini HTTP ${response.statusCode} — $detail');
     }
@@ -357,32 +146,6 @@ $text
     return lower.contains('api key') || lower.contains('api_key');
   }
 
-  /// 오류 본문에서 `error.message` 를 꺼낸다. JSON 이 아니어도 터지지 않는다.
-  static String _errorMessage(List<int> bodyBytes) {
-    try {
-      final decoded = jsonDecode(utf8.decode(bodyBytes));
-      if (decoded is Map && decoded['error'] is Map) {
-        final message = (decoded['error'] as Map)['message'];
-        if (message != null) return '$message'.trim();
-      }
-    } catch (_) {
-      // 본문이 JSON 이 아니면 아래에서 원문을 짧게 준다.
-    }
-    try {
-      return utf8.decode(bodyBytes).trim();
-    } catch (_) {
-      return '';
-    }
-  }
-
-  /// responseSchema 로 유효한 JSON 이 보장되지만, 방어적으로 앞뒤 잡음을 제거하고 파싱한다.
-  static ExtractionResult parseResponse(String answer) {
-    final start = answer.indexOf('{');
-    final end = answer.lastIndexOf('}');
-    if (start < 0 || end <= start) {
-      throw const FormatException('JSON 을 찾지 못했습니다');
-    }
-    final map = jsonDecode(answer.substring(start, end + 1)) as Map<String, dynamic>;
-    return ExtractionResult.fromJson(map);
-  }
+  /// 이전 이름. 지금은 [parseExtraction] 이 한다.
+  static ExtractionResult parseResponse(String answer) => parseExtraction(answer);
 }
