@@ -94,6 +94,10 @@ class _RootScreenState extends State<RootScreen> {
   /// App Group 없이 URL 스킴만 쓰는 구조라 익스텐션 코드를 그대로 재사용한다.
   void _listenForIosShareExtension() {
     final links = AppLinks();
+    // 스트림과 초기 링크를 **둘 다** 듣는다. 앱이 꺼져 있다가 이 URL 로 켜지는
+    // 경우 SceneDelegate 가 뒤늦게 흘려 주는데, 그 시점이 `getInitialLink()`
+    // 앞뒤 어디든 될 수 있다. 두 경로가 같은 링크를 주면 뒤엣것이 앞엣것을
+    // 그대로 덮으므로 중복이 문제되지 않는다.
     _linkSub = links.uriLinkStream.listen(_handleIncomingUri, onError: (Object _) {});
     links.getInitialLink().then((uri) {
       if (uri != null) _handleIncomingUri(uri);

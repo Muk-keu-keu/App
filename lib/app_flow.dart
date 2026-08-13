@@ -172,14 +172,32 @@ class AppFlow extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 공유로 들어온 링크가 아직 조건 선택 화면까지 못 간 상태.
+  ///
+  /// 앱이 꺼져 있을 때 공유로 열면 세션 복원과 링크 처리가 같이 달린다. 링크가
+  /// 먼저 도착해 조건 화면으로 보내 놔도, 복원이 끝나면서 [completeLogin] 이
+  /// 홈으로 덮어써 공유가 통째로 사라진다. 그 경합을 이 깃발이 막는다.
+  ///
+  /// 로그인이 안 돼 있던 경우도 같은 깃발로 잇는다 — 로그인 화면을 거친 뒤
+  /// 홈이 아니라 조건 화면으로 이어져야 공유한 링크가 살아 있다.
+  bool _sharePending = false;
+
   /// 링크를 받으면 바로 분석하지 않고 취향 설정 화면을 먼저 보여준다.
+  ///
+  /// **앱이 어느 화면에 있든, 꺼져 있었든 여기로 온다.** 화면 전환은 스테이지
+  /// 하나로만 이뤄져서(main.dart 의 `_screenFor`) 덮을 라우트가 없다. 남는
+  /// 문제는 로그인·세션 복원과의 순서뿐이고 그건 [_sharePending] 이 잇는다.
   ///
   /// [sharedText] 는 공유로 들어온 원문 전체다. 링크만 남기고 버리면 인스타
   /// 게시물에서 쓸 수 있는 유일한 캡션을 잃는다 — [_pendingSharedText] 참고.
   void start(String link, {String sharedText = ''}) {
     _pendingLink = link;
     _pendingSharedText = sharedText;
-    _setStage(AppStage.keyword);
+    _sharePending = true;
+
+    // 아직 로그인 전이면 분석을 시작할 수 없다(서버가 401 을 준다). 로그인
+    // 화면에 세워 두고, 끝나면 completeLogin 이 조건 화면으로 데려온다.
+    _setStage(_hasSession ? AppStage.keyword : AppStage.login);
   }
 
   // ── 인증 ──────────────────────────────────────────────────────────────────
@@ -226,6 +244,10 @@ class AppFlow extends ChangeNotifier {
     } on Object {
       // 만료·위조된 토큰이다. 지우고 로그인 화면에 남는다.
       await _clearSession();
+      // 공유로 열린 참이라면 이미 조건 화면에 서 있다. 그대로 두면 로그인 없이
+      // 분석을 시작해 401 을 맞는다. 로그인부터 시키고, 끝나면 completeLogin 이
+      // 다시 조건 화면으로 데려온다 (_sharePending 은 그대로 둔다).
+      if (_sharePending) _setStage(AppStage.login);
     } finally {
       isRestoringSession = false;
       notifyListeners();
@@ -288,6 +310,12 @@ class AppFlow extends ChangeNotifier {
   Future<void> logout() async {
     await _authRepository.logout();
     await _clearSession();
+
+    // 기다리던 공유도 이 사람 것이다. 다음에 로그인한 사람을 남의 링크 분석
+    // 화면으로 떨어뜨리면 안 된다.
+    _sharePending = false;
+    _pendingLink = '';
+    _pendingSharedText = '';
 
     cart = Cart();
     orders = [];
@@ -376,7 +404,10 @@ class AppFlow extends ChangeNotifier {
   /// 곧바로 위치를 1회 수집한다. 배달 주소가 필요한 화면에 도달했을 때 이미
   /// 준비돼 있어야 흐름이 끊기지 않는다.
   void completeLogin() {
-    _setStage(AppStage.yogiyoHome);
+    // 공유로 들어온 링크가 기다리고 있으면 홈을 거치지 않는다. 여기서 홈으로
+    // 보내면 앱이 꺼져 있을 때 공유한 링크가 매번 사라진다 — 세션 복원이
+    // 링크 처리보다 늦게 끝나기 때문이다.
+    _setStage(_sharePending ? AppStage.keyword : AppStage.yogiyoHome);
     refreshLocation();
     loadPopularPosts();
   }
@@ -406,6 +437,9 @@ class AppFlow extends ChangeNotifier {
   /// 카드 자리가 빈 분홍 영역으로 남는 것이고, 다른 하나는 이미 채워진 목록이
   /// 세션 내내 갱신되지 않아 지워진 글이 계속 떠 있는 것이다.
   void backToYogiyoHome() {
+    // 공유를 분석하지 않고 나왔다. 깃발을 들고 있으면 다음 로그인이 엉뚱하게
+    // 조건 화면으로 떨어진다.
+    _sharePending = false;
     _setStage(AppStage.yogiyoHome);
     loadPopularPosts();
   }
@@ -1019,6 +1053,9 @@ class AppFlow extends ChangeNotifier {
       _keywordIsFilter = false;
       return _reapplyPreference();
     }
+    // 공유가 여기까지 왔다. 깃발을 내려 두지 않으면 다음 로그인이 엉뚱하게
+    // 조건 화면으로 떨어진다.
+    _sharePending = false;
     return _analyze();
   }
 
