@@ -137,9 +137,12 @@ class _Hero extends StatelessWidget {
                 radius: 0,
               ),
             ),
+            // 상태바 바로 아래에 붙인다. `top: 55` 는 SafeArea 가 더하는 상태바
+            // 높이만큼 한 번 더 밀려 사진 한가운데까지 내려와 있었다
+            // (디자이너 피드백 2026-08-13).
             Positioned(
               left: 20,
-              top: 55,
+              top: 8,
               child: SafeArea(
                 bottom: false,
                 child: GestureDetector(
