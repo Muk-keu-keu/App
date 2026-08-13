@@ -103,7 +103,11 @@ class _StoreMenuScreenState extends State<StoreMenuScreen> {
               // 담긴 수량을 보여준다. 같은 메뉴를 다시 누르면 수량만 올라가는데,
               // 표시가 없으면 눌린 건지 알 수 없다.
               inCart: flow.cartQuantityOf(visible[i].menuId),
-              onAdd: () => context.read<AppFlow>().addMenuToCart(visible[i]),
+              // + 도 카드와 같이 옵션 화면을 연다. 프로토타입 기준이고, 바로
+              // 담으면 옵션을 고르러 메뉴를 다시 눌러야 했다. 게다가 담긴 것을
+              // 확인하려면 화면을 두 번 나가야 해서 추가됐는지 알 수 없었다
+              // (디자이너 피드백 2026-08-13).
+              onAdd: () => context.read<AppFlow>().openMenuDetail(visible[i]),
               onOpen: () => context.read<AppFlow>().openMenuDetail(visible[i]),
             ),
           ),
