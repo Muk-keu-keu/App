@@ -218,21 +218,27 @@ class _ComboCard extends StatelessWidget {
             name: store.name,
             // 시안 1052:7319 — 상호 뒤의 (?). 목록에서 카드끼리 비교하는 중에
             // "왜 이 집이?" 가 바로 안 풀리면 아래로 계속 내리게 된다.
+            // **근거가 있는 카드에만 붙인다.** 서버는 내세울 것이 있는 카드에만
+            // 태그를 달아 준다(2026-08-13 서버 확인) — 빈 카드까지 (?) 를 그리면
+            // 눌렀을 때 아무것도 없는 창이 열린다.
+            //
             // 글자 없는 20짜리 아이콘이라 라벨이 없으면 스크린 리더에 아무것도
             // 읽히지 않는다.
-            nameTrailing: Semantics(
-              button: true,
-              label: '${store.name} 추천 이유',
-              child: GestureDetector(
-                key: ValueKey('store-reason-${combo.id}'),
-                onTap: () => StoreReasonPopover.show(
-                  context,
-                  reasons: combo.reasonBullets,
-                ),
-                behavior: HitTestBehavior.opaque,
-                child: SvgPicture.asset(DsIcons.help, width: 20, height: 20),
-              ),
-            ),
+            nameTrailing: combo.reasonBullets.isEmpty
+                ? null
+                : Semantics(
+                    button: true,
+                    label: '${store.name} 추천 이유',
+                    child: GestureDetector(
+                      key: ValueKey('store-reason-${combo.id}'),
+                      onTap: () => StoreReasonPopover.show(
+                        context,
+                        reasons: combo.reasonBullets,
+                      ),
+                      behavior: HitTestBehavior.opaque,
+                      child: SvgPicture.asset(DsIcons.help, width: 20, height: 20),
+                    ),
+                  ),
             ratingText: store.ratingText,
             distanceText: store.distanceText,
             deliveryText: store.etaText,
