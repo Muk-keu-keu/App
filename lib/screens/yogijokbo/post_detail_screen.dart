@@ -3,11 +3,11 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_flow.dart';
-import '../../models/combo.dart';
 import '../../models/post.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../../widgets/ds.dart';
+import '../../widgets/order_card.dart';
 import '../../widgets/overlays.dart';
 import 'jokbo_widgets.dart';
 
@@ -403,14 +403,40 @@ class _OrderedMenuSheet extends StatelessWidget {
                 borderRadius: BorderRadius.circular(100),
               ),
             ),
-            // header 56 (893:1996). 시트라 뒤로가기가 없고 제목만 있다.
+            // header 56 (893:1996). 시트라 뒤로가기가 없고, 오른쪽은 닫기다.
             SizedBox(
               height: 56,
-              child: Center(child: Text('주문한 메뉴', style: AppText.h3())),
+              child: Row(
+                children: [
+                  const SizedBox(width: 64),
+                  Expanded(
+                    child: Center(child: Text('주문한 메뉴', style: AppText.h3())),
+                  ),
+                  SizedBox(
+                    width: 64,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 20),
+                        child: Semantics(
+                          button: true,
+                          label: '닫기',
+                          child: GestureDetector(
+                            onTap: () => Navigator.of(context).pop(),
+                            behavior: HitTestBehavior.opaque,
+                            child: const DsCloseIcon(size: 18.19, box: 24),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
+            const SizedBox(height: 16),
             Expanded(
               child: SingleChildScrollView(
-                child: _MenuSection(post: post, showPrice: true),
+                child: _MenuSection(post: post),
               ),
             ),
             // Bottom CTA 104 — Button 350x52 at (20, 20) (900:1256).
@@ -437,69 +463,30 @@ class _OrderedMenuSheet extends StatelessWidget {
 ///
 /// 회의(2026-08-04) 이후 글 하나에 매장이 여러 곳일 수 있다. 매장마다 섹션을
 /// 나눠 그린다 — 한 목록에 섞어 놓으면 어느 가게에서 시키는 메뉴인지 알 수 없다.
+/// 시트에 그릴 조합. **매장마다 카드 한 장**이다 (시안 893:1944 cart item).
+///
+/// 배달이 매장 단위로 따로 가므로 목록을 한 줄로 이어 붙이면 어디까지가 한
+/// 가게인지 읽히지 않는다. 카드 안은 상호 → 구분선 → 메뉴들이고, 금액과 수량은
+/// 오른쪽 아래에 붙는다.
 class _MenuSection extends StatelessWidget {
-  const _MenuSection({required this.post, this.showPrice = false});
-
-  /// 시트에서는 금액·수량까지 보여준다 (시안 893:1944 의 cart item).
-  final bool showPrice;
+  const _MenuSection({required this.post});
 
   final YogijokboPost post;
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        color: Colors.white,
-        padding: const EdgeInsets.all(20),
+  Widget build(BuildContext context) => Padding(
+        // 시안은 좌우 10 이다. 카드 자체가 20 을 물고 있어 더 주면 좁아 보인다.
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             for (var s = 0; s < post.stores.length; s++) ...[
-              if (s > 0) const SizedBox(height: 24),
-              // **눌리지 않는다.** 예전에는 매장 이름을 누르면 그 매장 메뉴판으로
-              // 넘어갔는데, 남의 글에 담긴 조합에 메뉴를 더해도 반영될 곳이 없고
-              // (그 글은 남의 결제 스냅샷이다) 뒤로가기도 이 글로 돌아오지 못했다.
-              // 시안(893:1944)대로 확인만 하는 자리로 되돌린다. 주문은 아래
-              // "나도 주문하기" 가 장바구니를 새로 만들어 가져간다.
-              Text(post.stores[s].restaurant.name, style: AppText.sub2()),
-              const SizedBox(height: 16),
-              const DsDivider(color: AppColors.gray300),
-              for (final item in post.stores[s].lines) ...[
-                const SizedBox(height: 16),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    RemoteOrAssetImage(
-                      imageUrl: item.imageUrl,
-                      assetPath: item.imagePath,
-                      size: 48,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(item.name,
-                              style: AppText.sub2().copyWith(letterSpacing: -0.4)),
-                          const SizedBox(height: 4),
-                          Text(item.optionsText,
-                              style: AppText.caption(color: AppColors.gray600)),
-                          if (showPrice) ...[
-                            const SizedBox(height: 8),
-                            // 시트에서는 금액과 수량을 오른쪽에 붙여 준다.
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: Text(
-                                '${wonFormat(item.lineTotal)}원 ${item.quantity}개',
-                                style: AppText.sub2(color: AppColors.gray800),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              if (s > 0) const SizedBox(height: 16),
+              OrderedStoreCard(
+                storeName: post.stores[s].restaurant.name,
+                logoUrl: post.stores[s].restaurant.imageUrl,
+                logoAsset: post.stores[s].restaurant.imagePath,
+                lines: post.stores[s].lines,
+              ),
             ],
           ],
         ),
