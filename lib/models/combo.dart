@@ -359,12 +359,33 @@ class AnalysisResult {
     );
   }
 
+  /// **임시 표다.** 서버가 유사도로 걸러 주면 이 표와 [withCategoryFilter] 는
+  /// 통째로 사라진다.
+  ///
+  /// 값은 "같은 카테고리가 없을 때 대신 보여줘도 되는 곳" 이다. 피자를 찾는데
+  /// 피자집이 없으면 파스타집까지는 납득이 되지만 한식집은 아니다.
+  /// 여기 없는 카테고리는 아예 다른 음식으로 본다.
+  ///
+  /// 카페·디저트는 대체할 곳을 두지 않는다 — 디저트 대신 밥집을 주면 안 된다.
+  static const _nearby = {
+    FoodCategory.pizza: {FoodCategory.western},
+    FoodCategory.western: {FoodCategory.pizza},
+    FoodCategory.chicken: {FoodCategory.snack},
+    FoodCategory.snack: {FoodCategory.korean, FoodCategory.chicken},
+    FoodCategory.korean: {FoodCategory.snack},
+    FoodCategory.chinese: {FoodCategory.asian},
+    FoodCategory.asian: {FoodCategory.chinese, FoodCategory.japanese},
+    FoodCategory.japanese: {FoodCategory.asian},
+    FoodCategory.cafeDessert: <FoodCategory>{},
+  };
+
   static DishResult _filterDish(DishResult dish, FoodCategory? wanted) {
     if (wanted == null || dish.candidates.isEmpty) return dish;
 
+    final allowed = {wanted, ...?_nearby[wanted]};
     final matched = [
       for (final c in dish.candidates)
-        if (c.restaurant.foodCategory == wanted) c,
+        if (allowed.contains(c.restaurant.foodCategory)) c,
     ];
     return DishResult(dishName: dish.dishName, candidates: matched);
   }

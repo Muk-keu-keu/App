@@ -906,6 +906,49 @@ void main() {
       expect(filtered.combos.single.restaurant.restaurantId, 2);
     });
 
+    test('가까운 카테고리는 남기고 먼 카테고리만 버린다', () {
+      // 피자를 찾는데 피자집이 없으면 파스타집까지는 납득이 되지만
+      // 한식집은 아니다 (임시 표 _nearby).
+      DishCandidate at(int id, FoodCategory category) => DishCandidate(
+            restaurant: Restaurant(
+              restaurantId: id,
+              name: '가게 $id',
+              foodCategory: category,
+              area: '청담동',
+              rating: 4.5,
+              etaMin: 30,
+              deliveryFee: 2000,
+              minOrderPrice: 12000,
+              distanceKm: 2.0,
+            ),
+            item: CartLine(
+              menuId: id * 10,
+              name: '메뉴 $id',
+              menuType: MenuType.main,
+              price: 10000,
+              quantity: 1,
+            ),
+            score: 0.4,
+          );
+
+      final result = AnalysisResult(
+        dishResults: [
+          DishResult(dishName: '포테이토피자', candidates: [
+            at(1, FoodCategory.western),      // 허용
+            at(2, FoodCategory.korean),       // 제외
+            at(3, FoodCategory.cafeDessert),  // 제외
+          ]),
+        ],
+      );
+
+      final ids = result
+          .withCategoryFilter(const {'포테이토피자': FoodCategory.pizza})
+          .combos
+          .map((c) => c.restaurant.restaurantId)
+          .toList();
+      expect(ids, [1]);
+    });
+
     test('같은 카테고리가 하나도 없으면 그 요리는 비운다', () {
       // 엉뚱한 집을 다섯 개 보여주느니 "찾지 못했어요" 가 맞다.
       final result = AnalysisResult(
