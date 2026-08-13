@@ -141,12 +141,24 @@ class AppFlow extends ChangeNotifier {
   /// 마지막 분석 결과. `exactMatches` + `combos` 를 그대로 들고 있는다.
   AnalysisResult analysis = const AnalysisResult.empty();
 
-  /// **첫 화면에 그릴 카드.** 영상에 나온 것과 같은 메뉴를 파는 곳만이다.
+  /// **첫 화면에 그릴 카드.**
   ///
-  /// "먹방 속 조합" 이라고 써 놓고 다른 음식을 보여주면 안 된다. 마라로제 떡볶이
-  /// 영상에 마라로제찜닭이 뜨던 것을 여기서 막는다 — 비슷한 집은 [sortedSuggestions]
-  /// 가 그리는 "다른 결과 보기" 의 몫이다.
-  List<ComboSuggestion> get suggestions => analysis.withMenuFilter().all;
+  /// 서버가 결과를 두 블록으로 나눠 주는 것을 화면 단계로 그대로 옮긴다.
+  ///
+  ///   exactMatches  — 영상에 나온 **그 브랜드**의 지점 → 첫 화면
+  ///   dishResults   — 그 요리와 비슷한 다른 가게      → "다른 결과 보기"
+  ///
+  /// 영상 속 그 가게를 찾았으면 그것만 보여준다. "먹방 속 조합" 이라고 써 놓고
+  /// 옆에 비슷한 집을 같이 세우면 어느 것이 영상에 나온 것인지 알 수 없다.
+  ///
+  /// 못 찾았을 때는 같은 메뉴를 파는 곳까지 내려서 보여준다. 그마저 없으면 빈
+  /// 화면이 되고 [hasOnlySimilar] 가 안내를 세운다 — 비슷한 집으로 자리를 채우지
+  /// 않는다. 마라로제 떡볶이 영상에 마라로제찜닭이 뜨던 것을 여기서 막는다.
+  List<ComboSuggestion> get suggestions {
+    final exact = analysis.exactMatches;
+    if (exact.isNotEmpty) return exact;
+    return analysis.withMenuFilter().all;
+  }
 
   /// 비슷한 곳까지 전부. 카드 조작(담기·수량)은 두 화면이 함께 쓰므로 이쪽을 본다.
   List<ComboSuggestion> get allSuggestions => analysis.all;

@@ -388,7 +388,9 @@ class DsPostItem extends StatelessWidget {
               Row(
                 children: [
                   _count(
-                    asset: DsIcons.heart,
+                    // 누르면 채워진다. 색만 바꾸면 외곽선만 분홍이 되어 눌렀는지
+                    // 알기 어렵다 — 상세 화면과 같은 규칙이다.
+                    asset: liked ? DsIcons.heartFill : DsIcons.heart,
                     width: 15.5,
                     height: 14.5,
                     color: liked ? AppColors.primary500 : null,
@@ -986,19 +988,17 @@ class DsMenuItem extends StatelessWidget {
 ///
 /// 족보 작성과 주문하기 화면이 같은 컴포넌트를 쓴다. 썸네일과 글이 화면을
 /// 반씩 나눠 갖고, 제목은 세 줄까지 보인다.
+/// 크리에이터 줄은 두지 않는다. 서버가 크리에이터를 주지 않아 회색 원과 빈
+/// 이름만 남았고, 그 자리가 제목을 세 줄로 눌러 뒤를 잘라 먹었다.
 class DsVideoSummary extends StatelessWidget {
   const DsVideoSummary({
     super.key,
     required this.thumbnail,
     required this.videoTitle,
-    required this.creatorName,
-    this.creatorAvatar,
   });
 
   final Widget thumbnail;
   final String videoTitle;
-  final String creatorName;
-  final Widget? creatorAvatar;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1016,41 +1016,13 @@ class DsVideoSummary extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    height: 66,
-                    child: Text(
-                      videoTitle,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppText.sub2(color: AppColors.gray800)
-                          .copyWith(letterSpacing: 0),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: creatorAvatar ??
-                            Container(
-                              decoration: const BoxDecoration(
-                                color: AppColors.gray300,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          creatorName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppText.body2(color: AppColors.gray700)
-                              .copyWith(letterSpacing: 0),
-                        ),
-                      ),
-                    ],
+                  // 크리에이터 줄이 없어진 만큼 제목이 그 자리를 쓴다.
+                  Text(
+                    videoTitle,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.sub2(color: AppColors.gray800)
+                        .copyWith(letterSpacing: 0),
                   ),
                 ],
               ),

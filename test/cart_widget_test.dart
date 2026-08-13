@@ -253,10 +253,12 @@ void main() {
     await pumpScreen(tester, const ComboResultScreen(), flow);
 
     expect(tester.takeException(), isNull);
-    // 분석 결과는 영상 브랜드 2곳 + 비슷한 곳 1곳이다.
-    expect(flow.suggestions, hasLength(3));
+    // 분석 결과는 영상 브랜드 2곳 + 비슷한 곳 1곳인데, 첫 화면은 영상에 나온
+    // 브랜드만 세운다. 비슷한 곳은 "다른 결과 보기" 의 몫이다.
+    expect(flow.suggestions, hasLength(2));
+    expect(flow.sortedSuggestions, hasLength(3));
     // 개수만 색·크기가 달라 Text.rich 다. 이어붙인 문자열로 찾는다.
-    expect(find.text('3개 중 0개 선택', findRichText: true), findsOneWidget);
+    expect(find.text('2개 중 0개 선택', findRichText: true), findsOneWidget);
   });
 
   testWidgets('체크로 담고 다시 눌러 뺀다', (tester) async {
@@ -269,13 +271,13 @@ void main() {
     await tester.tap(find.byType(DsCheckbox).first);
     await tester.pump();
     expect(flow.isInCart(first.id), isTrue);
-    expect(find.text('3개 중 1개 선택', findRichText: true), findsOneWidget);
+    expect(find.text('2개 중 1개 선택', findRichText: true), findsOneWidget);
 
     // 해제가 되어야 한다 — 피드백 17번이 지적한 지점이다.
     await tester.tap(find.byType(DsCheckbox).first);
     await tester.pump();
     expect(flow.isInCart(first.id), isFalse);
-    expect(find.text('3개 중 0개 선택', findRichText: true), findsOneWidget);
+    expect(find.text('2개 중 0개 선택', findRichText: true), findsOneWidget);
   });
 
   testWidgets('체크한 조합만 장바구니로 넘어간다', (tester) async {
@@ -346,7 +348,7 @@ void main() {
     await tester.tap(find.text('확인'));
     await tester.pumpAndSettle();
     expect(find.text('영상과 가장 비슷한 결과예요'), findsNothing);
-    expect(flow.suggestions, hasLength(3));
+    expect(flow.suggestions, hasLength(2));
   });
 
   // 시안 1052:8091 — 목록에서 카드끼리 비교하는 중에 뜨는 짧은 창.

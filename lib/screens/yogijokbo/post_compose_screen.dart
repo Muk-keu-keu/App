@@ -162,12 +162,6 @@ class _VideoSection extends StatelessWidget {
           radius: 0,
         ),
         videoTitle: source.title,
-        // 가게가 여러 곳이면 "외 N곳" 으로 줄인다.
-        creatorName: switch (cart.restaurantNames.length) {
-          0 => '',
-          1 => cart.restaurantNames.first,
-          final n => '${cart.restaurantNames.first} 외 ${n - 1}곳',
-        },
       ),
     );
   }

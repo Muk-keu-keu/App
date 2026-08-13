@@ -403,76 +403,70 @@ class _SheetRow extends StatelessWidget {
 class AppOverflowMenu {
   const AppOverflowMenu._();
 
-  /// [anchorKey] 는 점 아이콘의 키. 그 오른쪽 아래에 메뉴를 붙인다.
+  /// [link] 는 점 아이콘에 걸어 둔 링크. 그 오른쪽 아래에 메뉴를 붙인다.
+  ///
+  /// 좌표를 직접 재서 [Positioned] 로 놓지 않는다. 아이콘이 스크롤 안에 있으면
+  /// 잰 좌표와 오버레이 좌표계가 어긋나 메뉴가 아이콘에서 한참 떨어진 자리에
+  /// 떴다. [CompositedTransformFollower] 는 그 계산을 프레임워크가 맡는다.
   static Future<String?> show(
     BuildContext context, {
-    required GlobalKey anchorKey,
+    required LayerLink link,
     required List<AppActionSheetItem> items,
   }) {
-    final box = anchorKey.currentContext?.findRenderObject() as RenderBox?;
-    final overlayBox =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (box == null || overlayBox == null) return Future<String?>.value();
-
-    final corner = box.localToGlobal(
-      box.size.bottomRight(Offset.zero),
-      ancestor: overlayBox,
-    );
-
     return showDialog<String>(
       context: context,
       barrierColor: Colors.transparent,
       builder: (dialogContext) => Stack(
         children: [
-          Positioned(
-            // 오른쪽 끝을 아이콘에 맞추고 4px 아래로 띄운다.
-            left: corner.dx - 120,
-            top: corner.dy + 4,
-            width: 120,
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF4A4A4A).withValues(alpha: 0.25),
-                      blurRadius: 10,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final item in items)
-                      GestureDetector(
-                        onTap: () =>
-                            Navigator.of(dialogContext).pop(item.value),
-                        behavior: HitTestBehavior.opaque,
-                        child: Container(
-                          height: 36,
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 12),
-                          child: Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                item.label,
-                                style:
-                                    AppText.body2(color: AppColors.gray800),
-                              ),
-                              SvgPicture.asset(
-                                DsIcons.delete,
-                                width: 20,
-                                height: 20,
-                              ),
-                            ],
+          CompositedTransformFollower(
+            link: link,
+            // 아이콘의 오른쪽 아래에 메뉴의 오른쪽 위를 붙이고 4px 띄운다.
+            targetAnchor: Alignment.bottomRight,
+            followerAnchor: Alignment.topRight,
+            offset: const Offset(0, 4),
+            child: SizedBox(
+              width: 120,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF4A4A4A).withValues(alpha: 0.25),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final item in items)
+                        GestureDetector(
+                          onTap: () => Navigator.of(dialogContext).pop(item.value),
+                          behavior: HitTestBehavior.opaque,
+                          child: Container(
+                            height: 36,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  item.label,
+                                  style: AppText.body2(color: AppColors.gray800),
+                                ),
+                                SvgPicture.asset(
+                                  DsIcons.delete,
+                                  width: 20,
+                                  height: 20,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

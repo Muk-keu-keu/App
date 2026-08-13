@@ -316,14 +316,10 @@ class JokboPhotoRow extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            for (var i = 0; i < photos.length; i++) ...[
-              _Thumbnail(
-                source: photos[i],
-                onRemove: onRemove == null ? null : () => onRemove!(i),
-              ),
-              const SizedBox(width: 8),
-            ],
-            if (onAdd != null && photos.length < maxCount)
+            // 추가 버튼이 왼쪽에 고정되고 담은 사진이 오른쪽으로 쌓인다. 버튼을
+            // 뒤에 두면 사진을 담을수록 버튼이 화면 밖으로 밀려 나가, 다음 장을
+            // 넣으려면 매번 옆으로 밀어야 했다.
+            if (onAdd != null && photos.length < maxCount) ...[
               GestureDetector(
                 onTap: onAdd,
                 behavior: HitTestBehavior.opaque,
@@ -343,6 +339,15 @@ class JokboPhotoRow extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+            ],
+            for (var i = 0; i < photos.length; i++) ...[
+              _Thumbnail(
+                source: photos[i],
+                onRemove: onRemove == null ? null : () => onRemove!(i),
+              ),
+              if (i != photos.length - 1) const SizedBox(width: 8),
+            ],
           ],
         ),
       );

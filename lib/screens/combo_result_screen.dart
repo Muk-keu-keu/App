@@ -576,8 +576,11 @@ class _BottomCta extends StatelessWidget {
                 behavior: HitTestBehavior.opaque,
                 child: Text(
                   '다른 결과 보기',
-                  style: AppText.btn2(color: AppColors.primary500)
-                      .copyWith(decoration: TextDecoration.underline),
+                  // 밑줄 색을 따로 주지 않으면 글자색을 따라가지 않고 검게 그려진다.
+                  style: AppText.btn2(color: AppColors.primary500).copyWith(
+                    decoration: TextDecoration.underline,
+                    decorationColor: AppColors.primary500,
+                  ),
                 ),
               ),
             ],

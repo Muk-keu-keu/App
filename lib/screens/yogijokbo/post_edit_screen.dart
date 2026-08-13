@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_flow.dart';
@@ -161,13 +160,11 @@ class _EditHeader extends StatelessWidget {
                   behavior: HitTestBehavior.opaque,
                   child: SizedBox(
                     width: 64,
-                    child: Align(
+                    child: const Align(
                       alignment: Alignment.centerLeft,
-                      child: SvgPicture.asset(
-                        DsIcons.close,
-                        width: 20,
-                        height: 20,
-                      ),
+                      // 에셋을 그대로 그리면 `+` 로 보인다. 45° 돌리는 일은
+                      // DsCloseIcon 이 맡는다.
+                      child: DsCloseIcon(size: 20),
                     ),
                   ),
                 ),

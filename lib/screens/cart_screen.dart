@@ -99,7 +99,6 @@ class _VideoSection extends StatelessWidget {
             radius: 0,
           ),
           videoTitle: cart.source!.title,
-          creatorName: '',
         ),
       );
 }

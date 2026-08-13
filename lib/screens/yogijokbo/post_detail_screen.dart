@@ -532,7 +532,7 @@ class _CommentItem extends StatefulWidget {
 
 class _CommentItemState extends State<_CommentItem> {
   /// 메뉴를 점 아이콘 바로 아래에 띄우기 위한 기준점.
-  final _anchorKey = GlobalKey();
+  final _menuLink = LayerLink();
 
   PostComment get comment => widget.comment;
 
@@ -541,7 +541,7 @@ class _CommentItemState extends State<_CommentItem> {
     final flow = context.read<AppFlow>();
     final picked = await AppOverflowMenu.show(
       context,
-      anchorKey: _anchorKey,
+      link: _menuLink,
       items: const [
         AppActionSheetItem(label: '삭제하기', value: 'delete', destructive: true),
       ],
@@ -588,16 +588,18 @@ class _CommentItemState extends State<_CommentItem> {
               ),
               // 내 댓글만 지울 수 있다. 남의 댓글은 서버가 403 을 준다.
               if (comment.mine)
-                GestureDetector(
-                  key: _anchorKey,
-                  onTap: _openMenu,
-                  behavior: HitTestBehavior.opaque,
-                  child: const Padding(
-                    padding: EdgeInsets.only(left: 8),
-                    child: Icon(
-                      Icons.more_horiz,
-                      size: 20,
-                      color: AppColors.gray500,
+                CompositedTransformTarget(
+                  link: _menuLink,
+                  child: GestureDetector(
+                    onTap: _openMenu,
+                    behavior: HitTestBehavior.opaque,
+                    child: const Padding(
+                      padding: EdgeInsets.only(left: 8),
+                      child: Icon(
+                        Icons.more_horiz,
+                        size: 20,
+                        color: AppColors.gray500,
+                      ),
                     ),
                   ),
                 ),
