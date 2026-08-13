@@ -1,6 +1,9 @@
 @Tags(['manual'])
 library;
 
+// 결과를 눈으로 보는 것이 목적인 스크립트라 print 를 그대로 쓴다.
+// ignore_for_file: avoid_print
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mukbang_ttaradamgi/services/gemini_extractor.dart';
 import 'package:mukbang_ttaradamgi/services/metadata_fetcher.dart';
