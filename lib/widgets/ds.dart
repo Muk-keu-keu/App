@@ -223,7 +223,7 @@ class DsCloseIcon extends StatelessWidget {
 /// 선택된 탭 뒤에 회색 알약이 깔린다.
 enum DsTab {
   home('홈', 'assets/icons/nav_home.svg', 'assets/icons/nav_home_fill.svg'),
-  orders('주문내역', 'assets/icons/nav_order.svg', null),
+  orders('주문내역', 'assets/icons/nav_order.svg', 'assets/icons/nav_order_fill.svg'),
   jokbo('요기족보', 'assets/icons/nav_jokbo.svg', 'assets/icons/nav_jokbo_fill.svg'),
   my('마이요기요', 'assets/icons/nav_my.svg', null);
 
@@ -233,7 +233,8 @@ enum DsTab {
   final String icon;
 
   /// 선택됐을 때 쓰는 채운 아이콘. 시안에 fill 변형이 있는 탭만 가진다
-  /// (홈·요기족보). 없는 탭은 선택돼도 같은 선 아이콘을 쓴다.
+  /// (홈·주문내역·요기족보). 마이요기요는 시안의 `icon/my` 에 fill 변형이 없어
+  /// 선택돼도 같은 선 아이콘을 쓴다 (2026-08-13 피그마 확인).
   final String? _selectedIcon;
 
   String iconFor({required bool selected}) =>

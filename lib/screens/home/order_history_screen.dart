@@ -21,28 +21,38 @@ class OrderHistoryScreen extends StatelessWidget {
 
     return Container(
       color: AppColors.bg,
-      child: Column(
+      // 내비는 목록 **위에 떠 있다**. 홈·요기족보와 같은 구조다 — 예전에는 이
+      // 화면만 Column 의 마지막 자식이라 내비가 목록을 밀어냈고, 그 아래가
+      // 별도 블록처럼 보였다 (디자이너 피드백 2026-08-13).
+      // 목록 아래 여백 120 이 내비 자리다.
+      child: Stack(
         children: [
-          const DsHeader.main(title: '주문내역'),
-          const _TabBar(),
-          Expanded(
-            child: flow.orders.isEmpty
-                ? const _Empty()
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(20, 15, 20, 120),
-                    itemCount: flow.orders.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (context, i) => _OrderCard(
-                      order: flow.orders[i],
-                      posted: flow.isPostedToJokbo(flow.orders[i].checkoutId),
-                    ),
-                  ),
+          Column(
+            children: [
+              const DsHeader.main(title: '주문내역'),
+              const _TabBar(),
+              Expanded(
+                child: flow.orders.isEmpty
+                    ? const _Empty()
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(20, 15, 20, 120),
+                        itemCount: flow.orders.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
+                        itemBuilder: (context, i) => _OrderCard(
+                          order: flow.orders[i],
+                          posted: flow.isPostedToJokbo(flow.orders[i].checkoutId),
+                        ),
+                      ),
+              ),
+            ],
           ),
-          SafeArea(
-            top: false,
-            child: DsBottomNavigation(
-              current: DsTab.orders,
-              onChanged: (tab) => _onTab(context, tab),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: SafeArea(
+              child: DsBottomNavigation(
+                current: DsTab.orders,
+                onChanged: (tab) => _onTab(context, tab),
+              ),
             ),
           ),
         ],
