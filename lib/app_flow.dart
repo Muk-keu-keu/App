@@ -18,6 +18,7 @@ import 'env.dart';
 import 'services/gemini_extractor.dart';
 import 'services/location_service.dart';
 import 'services/metadata_fetcher.dart';
+import 'services/openai_extractor.dart';
 import 'services/token_store.dart';
 
 enum AppStage {
@@ -1055,33 +1056,34 @@ class AppFlow extends ChangeNotifier {
 
     // 호출 전에 키를 확인한다. 없거나 템플릿 값이면 네트워크를 태울 필요가 없고,
     // "잠시 후 다시 시도"는 거짓말이 된다 — 키 문제는 재시도로 낫지 않는다.
-    if (!Env.hasGeminiKey) {
+    if (!Env.hasAiKey) {
       _fail(_keyProblemMessage);
       return;
     }
 
+    final extractor = _extractor();
     ExtractionResult? result;
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
-        result = await GeminiExtractor(apiKey: Env.geminiApiKey).extract(text);
+        result = await extractor.extract(text);
         break;
-      } on GeminiAuthException {
+      } on ExtractorAuthException {
         // 키가 거부됐다. 재시도해도 같은 결과라 즉시 포기한다.
         _fail(_keyProblemMessage);
         return;
-      } on GeminiRequestException catch (e) {
+      } on ExtractorRequestException catch (e) {
         // 우리가 보낸 요청이 잘못됐다. 재시도가 소용없는 건 키 문제와 같지만
         // 사용자가 할 수 있는 일이 없고, 키를 의심하게 두면 원인을 놓친다.
         _fail(_requestProblemMessage(e));
         return;
-      } on GeminiQuotaException catch (e) {
+      } on ExtractorQuotaException catch (e) {
         // 재시도하지 않는다. 한도가 닫힌 상태라 한 번 더 부르면 남은 몫만 준다.
         _fail(_quotaProblemMessage(e));
         return;
       } catch (e) {
         // 그 밖의 실패(네트워크·타임아웃)는 1회 자동 재시도.
         // 삼키면 기기에서 무엇이 터졌는지 알 방법이 없어 로그로는 남긴다.
-        debugPrint('Gemini 추출 실패 (재시도 ${attempt + 1}/2): $e');
+        debugPrint('AI 추출 실패 (재시도 ${attempt + 1}/2): $e');
       }
     }
     if (result == null) {
@@ -1468,17 +1470,30 @@ class AppFlow extends ChangeNotifier {
   /// 화면만 보고는 구분할 수 없다.
   /// 할당량이 닫혔을 때. **사용자가 다시 눌러도 열리지 않는다** — 무료 등급은
   /// 하루 단위라 "잠시 후 다시 시도" 라고 하면 계속 누르게 만든다.
-  static String _quotaProblemMessage(GeminiQuotaException e) => kDebugMode
-      ? 'Gemini 하루 사용량 한도를 넘었어요.\n${e.message}'
-      : '오늘 AI 분석 사용량을 다 썼어요.\n내일 다시 시도해 주세요.';
+  /// 쓸 모델을 키로 고른다. [Env.prefersOpenAi] 가 우선순위를 들고 있다.
+  static DishExtractor _extractor() => Env.prefersOpenAi
+      ? OpenAiExtractor(
+          apiKey: Env.openAiApiKey,
+          model: Env.openAiModel.isEmpty
+              ? OpenAiExtractor.defaultModel
+              : Env.openAiModel,
+        )
+      : GeminiExtractor(apiKey: Env.geminiApiKey);
 
-  static String _requestProblemMessage(GeminiRequestException e) => kDebugMode
+  static String _quotaProblemMessage(ExtractorQuotaException e) => kDebugMode
+      ? 'AI 사용량 한도를 넘었어요.\n${e.message}'
+      : e.isDaily
+          ? '오늘 AI 분석 사용량을 다 썼어요.\n내일 다시 시도해 주세요.'
+          : '지금 요청이 몰렸어요.\n잠시 후 다시 시도해 주세요.';
+
+  static String _requestProblemMessage(ExtractorRequestException e) => kDebugMode
       ? 'AI 요청이 거부됐어요 (HTTP ${e.statusCode}).\n${e.message}'
       : 'AI 분석에 실패했어요.\n담당자에게 문의해 주세요.';
 
   static String get _keyProblemMessage => kDebugMode
-      ? 'Gemini API 키가 설정되지 않았어요.\n'
-          '.env 의 GEMINI_API_KEY 를 실제 키로 채우고 다시 빌드해 주세요.'
+      ? 'AI API 키가 설정되지 않았어요.\n'
+          '.env 의 OPENAI_API_KEY 또는 GEMINI_API_KEY 를 실제 키로 채우고\n'
+          '다시 빌드해 주세요.'
       : '지금 AI 분석을 쓸 수 없어요.\n담당자에게 문의해 주세요.';
 
   void _fail(String message) {

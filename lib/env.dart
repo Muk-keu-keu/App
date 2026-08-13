@@ -29,6 +29,11 @@ class Env {
 
   static String get geminiApiKey => _read('GEMINI_API_KEY');
 
+  static String get openAiApiKey => _read('OPENAI_API_KEY');
+
+  /// 구조화 출력을 지원하는 모델이면 무엇이든 된다. 비우면 어댑터 기본값을 쓴다.
+  static String get openAiModel => _read('OPENAI_MODEL').trim();
+
   /// 백엔드 주소. `https://host` 또는 `http://192.168.0.10:8080`.
   ///
   /// 비어 있으면 앱이 더미 데이터로 돈다. 백엔드가 아직 없는 동안 시연이 멈추지
@@ -49,6 +54,17 @@ class Env {
   /// 버린다. 그 상태로 빌드하면 Gemini 가 `400 API key not valid` 를 돌려주고
   /// 분석이 매번 실패한다. 실제로 TestFlight 빌드에서 이 일이 있었다.
   static bool get hasGeminiKey => isUsableKey(geminiApiKey);
+
+  static bool get hasOpenAiKey => isUsableKey(openAiApiKey);
+
+  /// 추출에 쓸 키가 하나라도 있는지. 둘 다 없으면 네트워크를 태울 필요가 없다.
+  static bool get hasAiKey => hasOpenAiKey || hasGeminiKey;
+
+  /// OpenAI 키가 있으면 그쪽을 쓴다.
+  ///
+  /// Gemini 무료 등급의 하루 20건 한도가 시연 도중 닫히는 일이 반복돼 우선순위를
+  /// 이렇게 뒀다. `.env` 에서 `OPENAI_API_KEY` 를 지우면 그대로 Gemini 로 돌아간다.
+  static bool get prefersOpenAi => hasOpenAiKey;
 
   /// 템플릿 값은 무효로 본다. `.env.example` 의 자리표시자는 `YOUR_` 로 시작한다.
   static bool isUsableKey(String key) {

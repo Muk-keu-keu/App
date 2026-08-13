@@ -26,9 +26,16 @@ Android 패키지 `com.yunsu.mukbang_ttaradamgi`
 cp .env.example .env
 ```
 
-`GEMINI_API_KEY` 에 실제 키를 채운다. 값은 팀 채널에서 공유한다.
-**자리표시자(`YOUR_GEMINI_API_KEY`)를 그대로 두면 AI 분석이 매번 실패한다.**
+`OPENAI_API_KEY` 에 실제 키를 채운다. 값은 팀 채널에서 공유한다.
+**자리표시자(`YOUR_OPENAI_API_KEY`)를 그대로 두면 AI 분석이 매번 실패한다.**
 앱이 이 상태를 감지해 안내하지만 빌드 전에 확인하는 편이 빠르다.
+
+`GEMINI_API_KEY` 도 그대로 쓸 수 있다. 둘 다 있으면 OpenAI 를 쓰고,
+`OPENAI_API_KEY` 를 비우면 Gemini 로 돌아간다. Gemini 무료 등급은 모델·프로젝트당
+**하루 20건**이라 시연 준비 중에 닫히므로 기본을 OpenAI 로 둔다.
+
+모델은 `OPENAI_MODEL` 로 바꾼다. 비우면 `gpt-4.1-mini` 를 쓰고, 구조화
+출력(`response_format: json_schema`)을 지원하는 모델이어야 한다.
 
 **2. 의존성 설치**
 
