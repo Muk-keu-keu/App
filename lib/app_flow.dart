@@ -1040,6 +1040,46 @@ class AppFlow extends ChangeNotifier {
     return cleaned.length < 4 ? '' : cleaned;
   }
 
+  /// 제공자를 앞에서부터 써 보고 첫 성공을 돌려준다.
+  ///
+  /// 앞쪽이 한도로 닫히면 남은 제공자로 넘어간다. 시연 도중 하루 한도가 닫혀
+  /// 아무것도 못 하게 되는 걸 막는 자리다 — 키가 하나뿐이면 목록도 하나다.
+  ///
+  /// 두 번째 값은 마지막으로 제공자를 접게 만든 이유다. 전부 실패했을 때 화면에
+  /// 무슨 말을 할지가 여기서 갈린다.
+  @visibleForTesting
+  Future<(ExtractionResult?, Object?)> extractWithFallback(String text) async {
+    Object? lastFatal;
+
+    for (final extractor in _extractors()) {
+      var giveUp = false;
+      for (var attempt = 0; attempt < 2 && !giveUp; attempt++) {
+        try {
+          return (await extractor.extract(text), null);
+        } on ExtractorAuthException catch (e) {
+          // 키가 거부됐다. 재시도해도 같은 결과라 이 제공자는 즉시 접는다.
+          lastFatal = e;
+          giveUp = true;
+        } on ExtractorQuotaException catch (e) {
+          // 재시도하지 않는다. 한도가 닫힌 상태라 한 번 더 부르면 남은 몫만 준다.
+          debugPrint('${extractor.runtimeType} 한도: ${e.message}');
+          lastFatal = e;
+          giveUp = true;
+        } on ExtractorRequestException catch (e) {
+          // 우리가 보낸 요청이 잘못됐다. 제공자를 바꿔도 같은 요청을 보낼 것이라
+          // 다음으로 넘기지 않는다 — 고칠 곳은 우리 코드다.
+          return (null, e);
+        } catch (e) {
+          // 그 밖의 실패(네트워크·타임아웃)는 1회 자동 재시도.
+          // 삼키면 기기에서 무엇이 터졌는지 알 방법이 없어 로그로는 남긴다.
+          debugPrint('AI 추출 실패 (재시도 ${attempt + 1}/2): $e');
+        }
+      }
+    }
+
+    return (null, lastFatal);
+  }
+
   Future<void> _analyze() async {
     final link = _pendingLink;
     // 이전 분석의 입력·결과가 남아 새 링크의 것으로 오인되지 않게 먼저 비운다.
@@ -1102,33 +1142,17 @@ class AppFlow extends ChangeNotifier {
       return;
     }
 
-    final extractor = _extractor();
-    ExtractionResult? result;
-    for (var attempt = 0; attempt < 2; attempt++) {
-      try {
-        result = await extractor.extract(text);
-        break;
-      } on ExtractorAuthException {
-        // 키가 거부됐다. 재시도해도 같은 결과라 즉시 포기한다.
-        _fail(_keyProblemMessage);
-        return;
-      } on ExtractorRequestException catch (e) {
-        // 우리가 보낸 요청이 잘못됐다. 재시도가 소용없는 건 키 문제와 같지만
-        // 사용자가 할 수 있는 일이 없고, 키를 의심하게 두면 원인을 놓친다.
-        _fail(_requestProblemMessage(e));
-        return;
-      } on ExtractorQuotaException catch (e) {
-        // 재시도하지 않는다. 한도가 닫힌 상태라 한 번 더 부르면 남은 몫만 준다.
-        _fail(_quotaProblemMessage(e));
-        return;
-      } catch (e) {
-        // 그 밖의 실패(네트워크·타임아웃)는 1회 자동 재시도.
-        // 삼키면 기기에서 무엇이 터졌는지 알 방법이 없어 로그로는 남긴다.
-        debugPrint('AI 추출 실패 (재시도 ${attempt + 1}/2): $e');
-      }
-    }
+    final (result, fatal) = await extractWithFallback(text);
+
     if (result == null) {
-      _fail('AI 분석에 실패했어요.\n잠시 후 다시 시도해 주세요.');
+      // 마지막 이유를 그대로 전한다 — "잠시 후 다시 시도" 로 뭉개면 키 문제도
+      // 한도 문제도 네트워크 탓으로 보여 원인을 못 찾는다.
+      _fail(switch (fatal) {
+        ExtractorAuthException() => _keyProblemMessage,
+        ExtractorQuotaException() => _quotaProblemMessage(fatal),
+        ExtractorRequestException() => _requestProblemMessage(fatal),
+        _ => 'AI 분석에 실패했어요.\n잠시 후 다시 시도해 주세요.',
+      });
       return;
     }
     extraction = result;
@@ -1511,15 +1535,26 @@ class AppFlow extends ChangeNotifier {
   /// 화면만 보고는 구분할 수 없다.
   /// 할당량이 닫혔을 때. **사용자가 다시 눌러도 열리지 않는다** — 무료 등급은
   /// 하루 단위라 "잠시 후 다시 시도" 라고 하면 계속 누르게 만든다.
-  /// 쓸 모델을 키로 고른다. [Env.prefersOpenAi] 가 우선순위를 들고 있다.
-  static DishExtractor _extractor() => Env.prefersOpenAi
-      ? OpenAiExtractor(
-          apiKey: Env.openAiApiKey,
-          model: Env.openAiModel.isEmpty
-              ? OpenAiExtractor.defaultModel
-              : Env.openAiModel,
-        )
-      : GeminiExtractor(apiKey: Env.geminiApiKey);
+  /// 테스트가 제공자 목록을 대신 주는 자리. 실제 키·네트워크 없이 폴백을 본다.
+  @visibleForTesting
+  List<DishExtractor>? extractorsOverride;
+
+  /// 쓸 모델을 키로 고른다. 앞엣것부터 쓰고, 한도로 닫히면 다음으로 넘어간다.
+  ///
+  /// OpenAI 를 앞에 두는 이유는 Gemini 무료 등급이 모델·프로젝트당 하루 20건이라
+  /// 시연 준비 중에 닫히기 때문이다. 키가 하나뿐이면 목록도 하나다.
+  List<DishExtractor> _extractors() =>
+      extractorsOverride ??
+      [
+        if (Env.hasOpenAiKey)
+          OpenAiExtractor(
+            apiKey: Env.openAiApiKey,
+            model: Env.openAiModel.isEmpty
+                ? OpenAiExtractor.defaultModel
+                : Env.openAiModel,
+          ),
+        if (Env.hasGeminiKey) GeminiExtractor(apiKey: Env.geminiApiKey),
+      ];
 
   static String _quotaProblemMessage(ExtractorQuotaException e) => kDebugMode
       ? 'AI 사용량 한도를 넘었어요.\n${e.message}'
