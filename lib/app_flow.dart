@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 import 'api/api_client.dart';
@@ -843,6 +845,14 @@ class AppFlow extends ChangeNotifier {
       cart = Cart();
       _setStage(AppStage.orderDone);
     } on ApiException catch (e) {
+      // 실패한 요청을 그대로 남긴다. 서버가 500 에 사유를 주지 않는 경우가 있어
+      // (source.title 이 길어 컬럼을 넘긴 건이 그랬다) 본문 없이는 어느 필드가
+      // 문제인지 기기에서 알 방법이 없다.
+      if (kDebugMode) {
+        debugPrint('[주문실패] HTTP ${e.statusCode} code=${e.code} '
+            'message=${e.message} path=${e.path}');
+        debugPrint('[주문요청] ${jsonEncode(cart.toOrderJson())}');
+      }
       _fail(_checkoutFailureMessage(e));
     } on NetworkException {
       _fail('주문을 보내지 못했어요.\n연결을 확인하고 다시 시도해 주세요.');

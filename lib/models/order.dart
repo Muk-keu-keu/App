@@ -8,6 +8,8 @@
 ///   밖으로 노출되지 않는다.
 library;
 
+import 'dart:convert';
+
 import 'cart.dart';
 import 'menu.dart';
 
@@ -38,8 +40,39 @@ class OrderSource {
         'platform': platform.wire,
         'url': url,
         'thumbnailUrl': thumbnailUrl,
-        'title': title,
+        'title': clampTitle(title),
       };
+
+  /// 서버가 저장할 수 있는 길이로 자른다.
+  ///
+  /// **인스타 제목은 캡션 전문이다.** `og:title` 이 본문을 통째로 담고 있어 600자를
+  /// 넘기기 일쑤인데, 서버 컬럼이 그만큼을 못 받아 `POST v1/orders` 가 500 으로
+  /// 떨어진다. 실측한 경계는 UTF-8 300바이트 통과 · 310바이트 실패였다.
+  ///
+  /// 이것 때문에 엽떡 릴스는 결제 자체가 불가능했다. 유튜브는 제목이 짧아 멀쩡히
+  /// 되고 인스타만 안 되니, 원인이 결제가 아니라 영상 쪽에 있다는 게 드러나지 않았다.
+  ///
+  /// 서버가 컬럼을 늘리면 이 함수는 사라진다.
+  static const titleMaxBytes = 300;
+
+  static String clampTitle(String raw) {
+    if (utf8.encode(raw).length <= titleMaxBytes) return raw;
+
+    // 글자 중간에서 자르면 깨진 바이트가 남는다. 코드포인트 단위로 담다가
+    // 넘치는 순간 멈춘다. 말줄임표(3바이트)까지 미리 빼 둔다.
+    const ellipsis = '…';
+    final budget = titleMaxBytes - utf8.encode(ellipsis).length;
+
+    final kept = <int>[];
+    var used = 0;
+    for (final rune in raw.runes) {
+      final size = utf8.encode(String.fromCharCode(rune)).length;
+      if (used + size > budget) break;
+      kept.add(rune);
+      used += size;
+    }
+    return '${String.fromCharCodes(kept)}$ellipsis';
+  }
 }
 
 /// 영상 플랫폼. `POST v1/analyses` 와 `POST v1/orders` 가 공유한다.
