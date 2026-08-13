@@ -43,6 +43,17 @@ class _ComboResultScreenState extends State<ComboResultScreen> {
   Widget build(BuildContext context) {
     final flow = context.watch<AppFlow>();
     final combos = flow.suggestions;
+
+    // 영상 속 메뉴를 파는 곳이 반경 안에 없을 때. 비슷한 집을 여기에 대신 세우면
+    // 안 된다 — 이 화면은 "먹방 속 조합" 이라고 말하고 있다.
+    if (flow.hasOnlySimilar) {
+      return _NoExactMatch(
+        dishNames: flow.analysis.dishResults.map((d) => d.dishName).toList(),
+        onHome: () => context.read<AppFlow>().backToYogiyoHome(),
+        onOthers: () => context.read<AppFlow>().showComboList(),
+      );
+    }
+
     if (combos.isEmpty) return const SizedBox.shrink();
 
     return Container(
@@ -442,6 +453,94 @@ class _PageIndicator extends StatelessWidget {
             ),
         ],
       );
+}
+
+/// 영상 속 메뉴를 파는 곳이 없을 때의 첫 화면.
+///
+/// 비슷한 집으로 자리를 채우지 않는다. 무엇을 찾았고 왜 못 담았는지 말한 다음
+/// "다른 결과 보기" 로 넘긴다 — 대체품은 그 화면의 몫이다.
+class _NoExactMatch extends StatelessWidget {
+  const _NoExactMatch({
+    required this.dishNames,
+    required this.onHome,
+    required this.onOthers,
+  });
+
+  /// 영상에서 뽑은 요리들. 무엇을 찾았는지 그대로 보여준다.
+  final List<String> dishNames;
+
+  final VoidCallback onHome;
+  final VoidCallback onOthers;
+
+  @override
+  Widget build(BuildContext context) {
+    final dishes = dishNames.where((d) => d.trim().isNotEmpty).toList();
+
+    return Container(
+      color: AppColors.bg,
+      child: Column(
+        children: [
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(21, 3, 20, 0),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: GestureDetector(
+                  onTap: onHome,
+                  behavior: HitTestBehavior.opaque,
+                  child: SvgPicture.asset(DsIcons.home, width: 24, height: 24),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 21),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    dishes.isEmpty
+                        ? '영상 속 메뉴를 파는 곳을\n찾지 못했어요'
+                        : '${dishes.join(', ')}${objectParticle(dishes.last)}\n'
+                            '파는 곳이 근처에 없어요',
+                    style: AppText.h2(),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '배달 가능한 거리 안에 같은 메뉴가 없었어요.\n'
+                    '비슷한 메뉴는 아래에서 골라 보세요.',
+                    style: AppText.body2(color: AppColors.gray600),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF5D5D5D).withValues(alpha: 0.15),
+                  blurRadius: 10,
+                  offset: const Offset(0, -4),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            child: SafeArea(
+              top: false,
+              child: DsButton(label: '비슷한 메뉴 보기', onPressed: onOthers),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _BottomCta extends StatelessWidget {

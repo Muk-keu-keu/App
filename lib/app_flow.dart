@@ -139,8 +139,19 @@ class AppFlow extends ChangeNotifier {
   /// 마지막 분석 결과. `exactMatches` + `combos` 를 그대로 들고 있는다.
   AnalysisResult analysis = const AnalysisResult.empty();
 
-  /// 카드를 넘겨 볼 순서. 영상에 나온 브랜드가 앞, 비슷한 곳이 뒤다.
-  List<ComboSuggestion> get suggestions => analysis.all;
+  /// **첫 화면에 그릴 카드.** 영상에 나온 것과 같은 메뉴를 파는 곳만이다.
+  ///
+  /// "먹방 속 조합" 이라고 써 놓고 다른 음식을 보여주면 안 된다. 마라로제 떡볶이
+  /// 영상에 마라로제찜닭이 뜨던 것을 여기서 막는다 — 비슷한 집은 [sortedSuggestions]
+  /// 가 그리는 "다른 결과 보기" 의 몫이다.
+  List<ComboSuggestion> get suggestions => analysis.withMenuFilter().all;
+
+  /// 비슷한 곳까지 전부. 카드 조작(담기·수량)은 두 화면이 함께 쓰므로 이쪽을 본다.
+  List<ComboSuggestion> get allSuggestions => analysis.all;
+
+  /// 첫 화면은 비었는데 비슷한 곳은 있는 상태.
+  /// 그냥 빈 화면을 두면 분석이 실패한 것처럼 보인다.
+  bool get hasOnlySimilar => suggestions.isEmpty && allSuggestions.isNotEmpty;
 
   int selectedComboIndex = 0;
 
@@ -934,7 +945,8 @@ class AppFlow extends ChangeNotifier {
     List<MenuOption>? chosen,
     SpiceLevel? spice,
   }) {
-    for (final combo in suggestions) {
+    // 첫 화면에 안 뜬 가게라도 "다른 결과 보기" 에서 열었을 수 있다. 전체를 본다.
+    for (final combo in allSuggestions) {
       if (combo.id != restaurantId) continue;
 
       final line = combo.lineOf(menu.menuId);
@@ -982,7 +994,7 @@ class AppFlow extends ChangeNotifier {
   }
 
   /// 정렬을 적용한 비교 목록.
-  List<ComboSuggestion> get sortedSuggestions => sort.apply(suggestions);
+  List<ComboSuggestion> get sortedSuggestions => sort.apply(allSuggestions);
 
   /// 취향 설정 화면을 필터로 다시 열었는지.
   ///
@@ -1190,6 +1202,20 @@ class AppFlow extends ChangeNotifier {
     } on ApiNotConfiguredException {
       _fail('서버 주소가 설정되지 않았어요.\n.env 의 API_BASE_URL 을 확인해 주세요.');
       return null;
+    }
+
+    // 후보가 왜 그렇게 뽑혔는지는 점수를 봐야 안다. 화면만 보면 "비슷한 집" 인지
+    // "아무거나 채운 것" 인지 구분할 수 없다.
+    if (kDebugMode) {
+      for (final d in analyzed.dishResults) {
+        debugPrint('[분석] 요리="${d.dishName}"');
+        for (final c in d.candidates) {
+          debugPrint('  score=${c.score.toStringAsFixed(4)} '
+              '${c.restaurant.name} / ${c.item.name} '
+              '(${c.restaurant.foodCategory.wire})');
+        }
+      }
+      debugPrint('[분석] exactMatches=${analyzed.exactMatches.length}');
     }
 
     // 요리와 카테고리가 다른 후보를 걷어낸다. 서버가 "가장 가까운 N개" 를 주기

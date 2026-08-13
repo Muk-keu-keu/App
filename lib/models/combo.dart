@@ -10,6 +10,8 @@
 /// 이 파일은 화면들이 쓰는 배럴이기도 하다 — 매장·메뉴·장바구니를 함께 내보낸다.
 library;
 
+import 'package:flutter/foundation.dart';
+
 import 'cart.dart';
 import 'enums.dart';
 import 'menu.dart';
@@ -359,6 +361,84 @@ class AnalysisResult {
     );
   }
 
+  /// 영상에 나온 것과 **같은 메뉴를 파는 후보만** 남긴다.
+  ///
+  /// 첫 화면은 "먹방 속 조합" 이다. 마라로제 떡볶이 영상에 마라로제찜닭이 뜨면
+  /// 안 된다 — 비슷한 집은 "다른 결과 보기" 의 몫이다.
+  ///
+  /// 서버는 반경 안에서 "가장 가까운 5개" 를 채워 주기만 한다. 떡볶이집이 없으면
+  /// 점수가 평평한 채로 아무거나 올라온다. 실제로 마라로제 떡볶이 요청에
+  /// 이렇게 왔다.
+  ///
+  ///     0.54 두찜 / 마라로제찜닭      0.46 홍수계찜닭 / 로제찜닭
+  ///     0.46 직구삼 / 비빔쫄면        0.46 본도시락 / 제육볶음 도시락
+  ///     0.44 가장맛있는족발 / 쟁반국수
+  ///
+  /// 전부 KOREAN 이라 [withCategoryFilter] 로는 하나도 걸러지지 않는다.
+  ///
+  /// **서버가 "충분히 가까운가" 를 판단해 주면 이 메서드는 사라진다.**
+  AnalysisResult withMenuFilter() {
+    // 대조할 요리 이름이 없으면 거를 근거도 없다. 카드를 이미 묶어서 받은 경우
+    // ([_combos]) 도 여기에 해당한다 — 더미 저장소와 테스트가 그렇게 준다.
+    if (dishResults.isEmpty) return this;
+
+    return AnalysisResult(
+      summary: summary,
+      emptyReason: emptyReason,
+      exactMatches: exactMatches,
+      dishResults: [
+        for (final dish in dishResults)
+          DishResult(
+            dishName: dish.dishName,
+            candidates: [
+              for (final c in dish.candidates)
+                if (isSameDish(dish.dishName, c.item.name)) c,
+            ],
+          ),
+      ],
+    );
+  }
+
+  /// 메뉴가 그 요리와 같은 음식인지.
+  ///
+  /// 한국어 음식 이름은 **핵심 음식명이 뒤에 온다** — "마라로제 떡볶이" 의 정체는
+  /// 떡볶이고, "마라로제찜닭" 의 정체는 찜닭이다. 그래서 요리 이름의 마지막 낱말이
+  /// 메뉴 이름 안에 있는지만 본다. 표를 두지 않아도 되고 새 음식에도 그대로 먹는다.
+  ///
+  ///     마라로제 떡볶이 → "떡볶이" ∈ 마라로제찜닭 ? 아니오
+  ///     오리지널 떡볶이 → "떡볶이" ∈ 엽기떡볶이 오리지널 ? 예
+  @visibleForTesting
+  static bool isSameDish(String dishName, String menuName) {
+    final head = dishHeadNoun(dishName);
+    if (head.isEmpty) return true; // 판단할 근거가 없으면 거르지 않는다.
+    return _squash(menuName).contains(head);
+  }
+
+  /// 요리 이름에서 핵심 음식명을 뽑는다. 없으면 빈 문자열.
+  @visibleForTesting
+  static String dishHeadNoun(String dishName) {
+    final words = dishName.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty);
+    if (words.isEmpty) return '';
+
+    // 뒤에서부터 보되 양·형태를 가리키는 말은 건너뛴다. "떡볶이 2인분" 의 정체는
+    // 2인분이 아니다.
+    for (final word in words.toList().reversed) {
+      final w = _squash(word);
+      if (w.isEmpty || _generic.contains(w)) continue;
+      return w;
+    }
+    return '';
+  }
+
+  /// 그 자체로는 음식을 가리키지 않는 말. 마지막 낱말이 이것이면 앞으로 더 간다.
+  static const _generic = {
+    '세트', '정식', '도시락', '메뉴', '구성', '단품', '곱빼기', '추가',
+    '대', '중', '소', '라지', '미디움', '스몰', '인분', '1인분', '2인분', '3인분',
+  };
+
+  /// 띄어쓰기·가운뎃점을 지운다. "마라 로제 떡볶이" 와 "마라로제떡볶이" 를 같게 본다.
+  static String _squash(String s) => s.replaceAll(RegExp(r'[\s·・,]'), '');
+
   /// **임시 표다.** 서버가 유사도로 걸러 주면 이 표와 [withCategoryFilter] 는
   /// 통째로 사라진다.
   ///
@@ -466,12 +546,18 @@ class AnalysisResult {
 /// 은/는. 마지막 글자에 받침이 있으면 '은' 이다.
 ///
 /// 요리 이름이 데이터에서 오므로 조사를 고정하면 "마라탕는" 같은 문장이 나온다.
-String _topicParticle(String word) {
-  if (word.isEmpty) return '는';
+String _topicParticle(String word) => _particle(word, '는', '은');
+
+/// 목적격 조사. "떡볶이를", "동파육을".
+String objectParticle(String word) => _particle(word, '를', '을');
+
+/// 받침이 없으면 [open], 있으면 [closed].
+String _particle(String word, String open, String closed) {
+  if (word.isEmpty) return open;
   final code = word.codeUnitAt(word.length - 1);
   // 한글 음절이 아니면(영문·숫자) 받침을 알 수 없다. 흔한 쪽으로 둔다.
-  if (code < 0xAC00 || code > 0xD7A3) return '는';
-  return (code - 0xAC00) % 28 == 0 ? '는' : '은';
+  if (code < 0xAC00 || code > 0xD7A3) return open;
+  return (code - 0xAC00) % 28 == 0 ? open : closed;
 }
 
 /// 비교 목록 상단 정렬 기준.
