@@ -87,7 +87,18 @@ class KeywordSelectScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         child: SafeArea(
           bottom: false,
-          child: Text('먹방 속 조합, 내 취향대로', style: AppText.screenTitle),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('조건을 선택해 주세요', style: AppText.screenTitle),
+              const SizedBox(height: 4),
+              Text(
+                '더 나은 조합을 위해 사전 조건을 선택해 주세요',
+                style: AppText.body1(color: AppColors.gray700)
+                    .copyWith(letterSpacing: -0.4),
+              ),
+            ],
+          ),
         ),
       );
 
