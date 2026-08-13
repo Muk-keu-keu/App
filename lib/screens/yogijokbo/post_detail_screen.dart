@@ -452,22 +452,12 @@ class _MenuSection extends StatelessWidget {
           children: [
             for (var s = 0; s < post.stores.length; s++) ...[
               if (s > 0) const SizedBox(height: 24),
-              GestureDetector(
-                onTap: () => context
-                    .read<AppFlow>()
-                    .openStoreMenu(post.stores[s].restaurantId),
-                behavior: HitTestBehavior.opaque,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(post.stores[s].restaurant.name,
-                          style: AppText.sub2()),
-                    ),
-                    const RotatedBox(quarterTurns: 2, child: DsChevron.left()),
-                  ],
-                ),
-              ),
+              // **눌리지 않는다.** 예전에는 매장 이름을 누르면 그 매장 메뉴판으로
+              // 넘어갔는데, 남의 글에 담긴 조합에 메뉴를 더해도 반영될 곳이 없고
+              // (그 글은 남의 결제 스냅샷이다) 뒤로가기도 이 글로 돌아오지 못했다.
+              // 시안(893:1944)대로 확인만 하는 자리로 되돌린다. 주문은 아래
+              // "나도 주문하기" 가 장바구니를 새로 만들어 가져간다.
+              Text(post.stores[s].restaurant.name, style: AppText.sub2()),
               const SizedBox(height: 16),
               const DsDivider(color: AppColors.gray300),
               for (final item in post.stores[s].lines) ...[
