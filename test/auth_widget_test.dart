@@ -58,6 +58,19 @@ class _StubAuth implements AuthRepository {
   @override
   Future<AuthUser> me() async =>
       const AuthUser(id: 1, email: 'a@b.com', role: 'USER');
+
+  @override
+  Future<AuthUser> updateNickName(String nickName) async {
+    sentNickName = nickName;
+    if (failWith != null) throw failWith!;
+    return AuthUser(id: 1, email: 'a@b.com', role: 'USER', nickName: nickName);
+  }
+
+  @override
+  Future<void> deleteAccount({required String email, required String password}) async {
+    sentEmail = email;
+    if (failWith != null) throw failWith!;
+  }
 }
 
 void main() {
