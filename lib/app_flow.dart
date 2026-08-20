@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -8,12 +10,14 @@ import 'api/user_api.dart';
 import 'models/analysis_source.dart';
 import 'models/auth.dart';
 import 'models/combo.dart';
+import 'models/credit.dart';
 import 'models/order.dart';
 import 'models/post.dart';
 import 'models/preference.dart';
 import 'models/user_location.dart';
 import 'repository/auth_repository.dart';
 import 'repository/combo_repository.dart';
+import 'repository/credit_repository.dart';
 import 'repository/order_repository.dart';
 import 'repository/post_repository.dart';
 import 'env.dart';
@@ -44,6 +48,7 @@ enum AppStage {
   jokboOrder, // 나도 주문하기
   jokboCompose, // 족보 작성 (조합 공유)
   jokboEdit, // 족보 수정 (제목·본문만)
+  myPage, // 마이요기요 (내 정보·포인트)
 }
 
 /// 화면 전환과 분석·주문 파이프라인.
@@ -67,6 +72,7 @@ class AppFlow extends ChangeNotifier {
     PostRepository? postRepository,
     OrderRepository? orderRepository,
     AuthRepository? authRepository,
+    CreditRepository? creditRepository,
     TokenStore? tokenStore,
     ApiClient? apiClient,
   }) {
@@ -86,6 +92,8 @@ class AppFlow extends ChangeNotifier {
       orderRepository ?? (api == null ? MockOrderRepository() : ApiOrderRepository(api)),
       authRepository ??
           (client == null ? MockAuthRepository() : ApiAuthRepository(UserApi(client))),
+      creditRepository ??
+          (api == null ? const EmptyCreditRepository() : ApiCreditRepository(api)),
       // 더미로 도는 동안에는 토큰을 기기에 남기지 않는다. 더미 토큰으로 자동 로그인이
       // 걸리면 시연에서 로그인 화면을 다시 보려면 앱을 지워야 한다.
       tokenStore ?? (client == null ? MemoryTokenStore() : const PreferencesTokenStore()),
@@ -104,6 +112,7 @@ class AppFlow extends ChangeNotifier {
     this._postRepository,
     this._orderRepository,
     this._authRepository,
+    this._creditRepository,
     this._tokenStore,
     this._client,
   );
@@ -113,6 +122,7 @@ class AppFlow extends ChangeNotifier {
   final PostRepository _postRepository;
   final OrderRepository _orderRepository;
   final AuthRepository _authRepository;
+  final CreditRepository _creditRepository;
   final TokenStore _tokenStore;
 
   /// 서버를 쓸 때의 HTTP 클라이언트. 더미로 돌 때는 null 이다.
@@ -573,6 +583,9 @@ class AppFlow extends ChangeNotifier {
 
     cart = restored;
     _setStage(AppStage.cart);
+    // "다시 주문" 도 포인트를 쓴다. 여기서 안 부르면 잔액이 0으로 보여
+    // 최소주문이 낮아지지 않고, 이미 낸 돈이 있는데도 더 담으라고 뜬다.
+    await refreshCredits();
   }
 
   /// 장바구니의 매장 정보를 온전한 값으로 채운다.
@@ -697,6 +710,7 @@ class AppFlow extends ChangeNotifier {
       cart = Cart(source: _cartSource(), stores: selected);
     }
     _setStage(AppStage.cart);
+    refreshCredits();
   }
 
   /// 카드 하나만 장바구니에 담는다. 비교 목록에서 고른 대안 매장이 여기로 온다.
@@ -731,12 +745,131 @@ class AppFlow extends ChangeNotifier {
     }
   }
 
+  /// 이 가게의 미달분을 포인트로 채우기로 한다(또는 되돌린다).
+  ///
+  /// 결제 금액이 늘어나는 선택이라 사용자가 가게 카드에서 직접 누른다. 되돌릴 수
+  /// 있어야 해서 토글이다 — 잘못 눌렀는데 취소할 방법이 없으면 장바구니를 비우는
+  /// 수밖에 없다.
+  void togglePrepaid(int restaurantId) {
+    final store = cart.storeOf(restaurantId);
+    if (store == null) return;
+    store.prepaidOptIn = !store.prepaidOptIn;
+    notifyListeners();
+  }
+
   void removeStoreFromCart(int restaurantId) {
     cart.stores = [for (final s in cart.stores) if (s.restaurantId != restaurantId) s];
     notifyListeners();
   }
 
-  void openCart() => _setStage(AppStage.cart);
+  void openCart() {
+    _setStage(AppStage.cart);
+    refreshCredits();
+  }
+
+  // ── 마이요기요 ────────────────────────────────────────────────────────────
+
+  /// 마이페이지를 연 자리. 닫을 때 여기로 되돌린다.
+  AppStage _myPageReturn = AppStage.yogiyoHome;
+
+  /// 하단 네비 "마이요기요".
+  ///
+  /// 화면을 먼저 띄우고 내 정보·포인트를 뒤이어 읽는다. 둘 다 기다렸다 띄우면
+  /// 탭을 눌러도 한동안 아무 일이 없어 보인다. 값이 늦게 채워져도 금액이 아니라
+  /// 이름과 잔액이라 튀어도 문제가 되지 않는다.
+  Future<void> openMyPage() async {
+    _myPageReturn = stage;
+    _setStage(AppStage.myPage);
+    await Future.wait([_refreshMe(), refreshCredits()]);
+  }
+
+  void closeMyPage() => _setStage(_myPageReturn);
+
+  Future<void> _refreshMe() async {
+    try {
+      currentUser = await _authRepository.me();
+    } on Object {
+      // 옛 값을 지우지 않는다. 화면이 비는 것보다 조금 오래된 이름이 낫다.
+    }
+    notifyListeners();
+  }
+
+  /// 닉네임 변경. 성공하면 갱신된 사용자 정보로 갈아끼운다.
+  ///
+  /// @return 실패 사유 문구. 성공이면 null.
+  Future<String?> updateNickName(String nickName) async {
+    final trimmed = nickName.trim();
+    if (trimmed.isEmpty) return '닉네임을 입력해 주세요.';
+    if (trimmed.length > 50) return '닉네임은 50자를 넘을 수 없어요.';
+
+    try {
+      currentUser = await _authRepository.updateNickName(trimmed);
+      notifyListeners();
+      return null;
+    } on ApiException {
+      return '닉네임을 바꾸지 못했어요.\n잠시 후 다시 시도해 주세요.';
+    } on NetworkException {
+      return '연결을 확인하고 다시 시도해 주세요.';
+    }
+  }
+
+  /// 회원 탈퇴. **비밀번호를 확인한다** — 되돌릴 수 없는 동작이라 토큰만으로 지우지 않는다.
+  ///
+  /// @return 실패 사유 문구. 성공이면 null(이때는 로그아웃까지 끝난 상태다).
+  Future<String?> deleteAccount(String password) async {
+    final email = currentUser?.email ?? '';
+    if (email.isEmpty) return '로그인 정보를 확인할 수 없어요.';
+    if (password.isEmpty) return '비밀번호를 입력해 주세요.';
+
+    try {
+      await _authRepository.deleteAccount(email: email, password: password);
+    } on ApiException catch (e) {
+      return e.statusCode == 401
+          ? '비밀번호가 올바르지 않아요.'
+          : '탈퇴하지 못했어요.\n잠시 후 다시 시도해 주세요.';
+    } on NetworkException {
+      return '연결을 확인하고 다시 시도해 주세요.';
+    }
+
+    await logout();
+    return null;
+  }
+
+  // ── 포인트 ────────────────────────────────────────────────────────────────
+
+  /// `restaurantId → 잔액`. 마이페이지와 장바구니가 같은 값을 본다.
+  List<StoreCredit> credits = const [];
+
+  int creditOf(int restaurantId) {
+    for (final c in credits) {
+      if (c.restaurantId == restaurantId) return c.balance;
+    }
+    return 0;
+  }
+
+  /// 잔액을 다시 읽어 장바구니에 꽂는다.
+  ///
+  /// 가게마다 묻지 않고 `GET v1/credits` 한 번으로 끝낸다 — 장바구니는 가게가 여러
+  /// 곳이라 가게 수만큼 부르면 그대로 N+1 이다. 분석 결과로 담은 조합은 메뉴판을
+  /// 거치지 않아 이 호출 말고는 잔액을 알 방법이 없기도 하다.
+  ///
+  /// **실패해도 던지지 않는다.** 잔액을 못 읽었다고 결제를 막을 이유가 없다.
+  /// 그 경우 잔액 0으로 도는데, 서버가 결제 때 다시 계산하므로 금액이 틀리지 않는다.
+  Future<void> refreshCredits() async {
+    try {
+      credits = await _creditRepository.credits();
+    } on Object {
+      credits = const [];
+    }
+    _applyCreditsToCart();
+    notifyListeners();
+  }
+
+  void _applyCreditsToCart() {
+    for (final store in cart.stores) {
+      store.creditBalance = creditOf(store.restaurantId);
+    }
+  }
 
   /// 장바구니 수량 변경. 마지막 메뉴를 빼면 그 가게도 함께 사라진다 —
   /// 이름만 남으면 배달비가 총액에 계속 붙어 금액이 틀린다.
@@ -875,7 +1008,7 @@ class AppFlow extends ChangeNotifier {
   /// **앱이 계산한 값이다.** `POST v1/orders` 의 201 응답에 금액이 없어 서버 확정액을
   /// 알 수 없다. 결제 직전 화면에서 사용자가 본 숫자와 같은 값을 그대로 보여준다 —
   /// 서버가 다시 계산해 달라진다면 주문내역에서 드러난다.
-  ({int itemsTotal, int deliveryFee, int total})? paidAmounts;
+  ({int itemsTotal, int deliveryFee, int pointDelta, int total})? paidAmounts;
 
   /// 장바구니를 통째로 보낸다. 가게가 여러 곳이어도 요청은 한 번이다.
   ///
@@ -890,13 +1023,23 @@ class AppFlow extends ChangeNotifier {
     try {
       receipt = await _orderRepository.create(cart);
       // 장바구니를 비우기 전에 금액을 붙잡아 둔다.
+      // 금액은 **서버가 확정한 값**을 쓴다. 포인트는 서버가 잔액을 잠그고 다시
+      // 계산하므로, 앱이 결제 직전에 그린 숫자와 어긋날 수 있다(그 사이 다른
+      // 기기에서 썼다든지). 주문 금액·배달비만 앱 값이다 — 그건 요청에 실어 보낸
+      // 값 그대로라 서버도 같은 값을 저장한다.
+      //
+      // 서버가 paidCash 를 안 주면(포인트를 모르는 서버다) 앱이 결제 직전에 그린
+      // 금액을 그대로 쓴다. 0 으로 두면 완료 화면이 "결제 금액 0원" 이 된다.
       paidAmounts = (
         itemsTotal: cart.itemsTotal,
         deliveryFee: cart.deliveryFeeTotal,
-        total: cart.totalPrice,
+        pointDelta: receipt!.pointDelta,
+        total: receipt!.paidCash ?? cart.payAmountTotal,
       );
       cart = Cart();
       _setStage(AppStage.orderDone);
+      // 결제로 잔액이 바뀌었다. 다음 화면들이 옛 값을 그리지 않게 다시 읽는다.
+      unawaited(refreshCredits());
     } on ApiException catch (e) {
       // 실패한 요청을 그대로 남긴다. 서버가 500 에 사유를 주지 않는 경우가 있어
       // (source.title 이 길어 컬럼을 넘긴 건이 그랬다) 본문 없이는 어느 필드가
@@ -953,6 +1096,10 @@ class AppFlow extends ChangeNotifier {
   Restaurant? storeMenuRestaurant;
   List<Menu> storeMenuItems = [];
 
+  /// 지금 열린 가게의 포인트 잔액. 비로그인이면 null.
+  /// GET menus 응답에 함께 오므로 따로 부르지 않는다.
+  int? storeMenuCredit;
+
   /// 매장 메뉴를 닫았을 때 돌아갈 화면.
   AppStage _storeMenuOrigin = AppStage.cart;
 
@@ -960,6 +1107,7 @@ class AppFlow extends ChangeNotifier {
     storeMenuRestaurantId = restaurantId;
     storeMenuRestaurant = null;
     storeMenuItems = [];
+    storeMenuCredit = null;
     _storeMenuOrigin = _stage;
     _setStage(AppStage.storeMenu);
 
@@ -971,10 +1119,21 @@ class AppFlow extends ChangeNotifier {
     }
     storeMenuRestaurant = menus.restaurant;
     storeMenuItems = menus.menus;
+    storeMenuCredit = menus.creditBalance;
     notifyListeners();
   }
 
-  void closeStoreMenu() => _setStage(_storeMenuOrigin);
+  void closeStoreMenu() {
+    // 메뉴판 응답으로 이 가게의 잔액을 방금 읽었다. 장바구니로 돌아가기 전에
+    // 옮겨 둔다 — 안 그러면 카드가 잔액 0인 상태로 그려지고, 최소주문이
+    // 낮아지지 않아 "포인트가 있는데 왜 결제가 안 되지" 가 된다.
+    final id = storeMenuRestaurantId;
+    final balance = storeMenuCredit;
+    if (id != null && balance != null) {
+      cart.storeOf(id)?.creditBalance = balance;
+    }
+    _setStage(_storeMenuOrigin);
+  }
 
   /// "메뉴 추가하기" 화면에 띄울 메뉴 (시안 925:4037).
   Menu? menuDetail;
@@ -1712,6 +1871,9 @@ class AppFlow extends ChangeNotifier {
 extension on StoreCart {
   void hydrate(RestaurantMenus menus) {
     restaurant = menus.restaurant;
+    // GET menus 를 이미 부르고 있으므로 잔액도 여기서 함께 받는다 — 추가 호출이 없다.
+    // 비로그인이면 null 이 오는데 그때는 0 으로 둔다.
+    creditBalance = menus.creditBalance ?? 0;
     final byId = {for (final m in menus.menus) m.menuId: m};
     lines = [
       for (final line in lines)
