@@ -30,6 +30,12 @@ abstract class AuthRepository {
 
   /// 지금 토큰이 살아 있는지 확인하고 그 사람을 준다. 죽었으면 예외를 던진다.
   Future<AuthUser> me();
+
+  /// 닉네임 변경 후 갱신된 사용자 정보.
+  Future<AuthUser> updateNickName(String nickName);
+
+  /// 회원 탈퇴. 성공하면 호출한 쪽이 토큰을 지운다.
+  Future<void> deleteAccount({required String email, required String password});
 }
 
 class ApiAuthRepository implements AuthRepository {
@@ -81,6 +87,17 @@ class ApiAuthRepository implements AuthRepository {
 
   @override
   Future<AuthUser> me() => _api.me();
+
+  @override
+  Future<AuthUser> updateNickName(String nickName) async {
+    await _api.updateNickName(nickName);
+    // PATCH 응답에 본문이 없다. 바뀐 값을 화면에 반영하려면 다시 읽어야 한다.
+    return _api.me();
+  }
+
+  @override
+  Future<void> deleteAccount({required String email, required String password}) =>
+      _api.deleteUser(email: email, password: password);
 }
 
 /// 백엔드 없이 시연할 때 쓰는 더미.
@@ -140,6 +157,17 @@ class MockAuthRepository implements AuthRepository {
 
   @override
   Future<void> logout() async => _wait;
+
+  @override
+  Future<AuthUser> updateNickName(String nickName) async => AuthUser(
+        id: 0,
+        email: 'demo@mukbang.local',
+        role: 'USER',
+        nickName: nickName,
+      );
+
+  @override
+  Future<void> deleteAccount({required String email, required String password}) async {}
 
   @override
   Future<AuthUser> me() async {
