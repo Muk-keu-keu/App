@@ -18,6 +18,7 @@ import 'screens/home/yogiyo_home_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/keyword_select_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/my_page_screen.dart';
 import 'screens/menu_detail_screen.dart';
 import 'screens/order_done_screen.dart';
 import 'screens/signup_screen.dart';
@@ -176,6 +177,7 @@ class _RootScreenState extends State<RootScreen> {
         AppStage.jokboOrder => const _JokboOrderStage(),
         AppStage.jokboCompose => const PostComposeScreen(),
         AppStage.jokboEdit => const PostEditScreen(),
+        AppStage.myPage => const MyPageScreen(),
       };
 }
 
