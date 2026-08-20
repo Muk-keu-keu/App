@@ -7,6 +7,7 @@ library;
 import '../models/analysis_source.dart';
 import '../models/combo.dart';
 import '../models/order.dart';
+import '../models/credit.dart';
 import '../models/post.dart';
 import '../models/preference.dart';
 import '../services/gemini_extractor.dart';
@@ -14,15 +15,24 @@ import 'api_client.dart';
 
 /// 메뉴 조회 응답. 매장과 메뉴가 함께 온다.
 class RestaurantMenus {
-  const RestaurantMenus({required this.restaurant, required this.menus});
+  const RestaurantMenus({
+    required this.restaurant,
+    required this.menus,
+    this.creditBalance,
+  });
 
   final Restaurant restaurant;
+
+  /// 이 가게에 남은 포인트. **비로그인이면 null**, 거래가 없었으면 0 이다.
+  /// 0 이하면 화면이 배지를 그리지 않는다.
+  final int? creditBalance;
 
   /// `MAIN → SIDE → DRINK`, 같은 타입 안에서는 `menuId` 순으로 정렬돼 온다.
   /// 프론트는 이 순서대로 섹션을 나눠 그리면 된다.
   final List<Menu> menus;
 
   factory RestaurantMenus.fromJson(Map<String, dynamic> json) => RestaurantMenus(
+        creditBalance: (json['creditBalance'] as num?)?.toInt(),
         restaurant: Restaurant.fromJson(
           (json['restaurant'] ?? const <String, dynamic>{}) as Map<String, dynamic>,
         ),
@@ -69,6 +79,18 @@ class MukbangApi {
   }
 
   /// `GET v1/orders` — 내 결제 목록. 카드 하나 = 결제 하나 = 영상 하나.
+  /// `GET v1/credits` — 내 포인트. **잔액이 남은 가게만** 잔액 많은 순으로 온다.
+  ///
+  /// 가게마다 따로 묻지 않고 한 번에 받는다. 장바구니는 가게가 여러 곳이라
+  /// 가게 수만큼 호출하면 그대로 N+1 이다.
+  Future<List<StoreCredit>> credits() async {
+    final json = await client.get('v1/credits');
+    return [
+      for (final e in (json['credits'] ?? const []) as List)
+        if (e is Map<String, dynamic>) StoreCredit.fromJson(e),
+    ];
+  }
+
   Future<OrderPage> orders({String? cursor, int size = 20}) async {
     final json = await client.get('v1/orders', query: {'cursor': cursor, 'size': size});
     return OrderPage.fromJson(json);
