@@ -9,6 +9,7 @@
 library;
 
 import 'dart:convert';
+import 'credit.dart';
 
 import 'cart.dart';
 import 'menu.dart';
@@ -273,9 +274,33 @@ class OrderStore {
 /// `orderId` 를 주지 않는다 — 주문이 2건이면 특정 상세로 바로 갈 수도 없어서다.
 /// 그래서 완료 화면은 목록으로만 갈 수 있다 (`docs/api-spec.md` 확인 필요 항목).
 class OrderReceipt {
-  const OrderReceipt({required this.restaurantNames});
+  /// 포인트 필드는 **전부 기본값이 있다.** 이 생성자를 쓰는 더미 저장소를 고치지
+  /// 않고도 필드를 늘리기 위해서다.
+  const OrderReceipt({
+    required this.restaurantNames,
+    this.pointDelta = 0,
+    this.paidCash,
+    this.points = const [],
+  });
 
   final List<String> restaurantNames;
+
+  /// 이 결제로 포인트 잔액이 변한 양. 음수면 포인트를 쓴 것이다.
+  /// **완료 화면은 이 값 하나만 쓴다** — "포인트 5,000원 사용" / "7,000P 남았어요".
+  final int pointDelta;
+
+  /// 실제로 결제된 현금. 잔액이 넉넉했으면 0 일 수 있다.
+  ///
+  /// **서버가 이 값을 안 주면 null 이다.** 0 과 구분해야 한다 — 포인트가 다 덮어
+  /// 0원인 결제와, 포인트를 모르는 서버의 응답은 화면에 쓸 값이 정반대다. null 이면
+  /// 앱이 결제 직전에 그린 금액을 그대로 쓴다.
+  final int? paidCash;
+
+  /// 가게별 결과. 잔액을 화면에 바로 반영하는 데 쓴다.
+  final List<StorePointResult> points;
+
+  /// 포인트가 움직였는지. 안 움직였으면 완료 화면에 포인트 줄을 그리지 않는다.
+  bool get touchedPoint => pointDelta != 0;
 
   /// 건수를 따로 주지 않는다. 이름 개수가 곳 건수다.
   int get storeCount => restaurantNames.length;
@@ -286,6 +311,12 @@ class OrderReceipt {
   factory OrderReceipt.fromJson(Map<String, dynamic> json) => OrderReceipt(
         restaurantNames: [
           for (final e in (json['restaurantNames'] ?? const []) as List) '$e',
+        ],
+        pointDelta: ((json['pointDelta'] ?? 0) as num).toInt(),
+        paidCash: (json['paidCash'] as num?)?.toInt(),
+        points: [
+          for (final e in (json['points'] ?? const []) as List)
+            if (e is Map<String, dynamic>) StorePointResult.fromJson(e),
         ],
       );
 }
