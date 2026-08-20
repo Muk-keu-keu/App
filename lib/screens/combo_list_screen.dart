@@ -35,7 +35,7 @@ class _ComboListScreenState extends State<ComboListScreen> {
     if (!_minimumOnly) return sorted;
     return [
       for (final c in sorted)
-        if (c.meetsMinimum) c,
+        if (c.meetsMinimumWith(flow.creditOf(c.id))) c,
     ];
   }
 
@@ -292,9 +292,9 @@ class _ComboCard extends StatelessWidget {
           const DsDivider(color: AppColors.gray300),
           const SizedBox(height: 16),
           // 최소 주문 금액을 못 넘긴 매장은 결제가 막히므로 미리 알려 준다.
-          if (!combo.meetsMinimum) ...[
+          if (!combo.meetsMinimumWith(flow.creditOf(combo.id))) ...[
             Text(
-              '${wonFormat(store.shortfallFrom(combo.itemsTotal))}원 더 담아주세요',
+              '${wonFormat(combo.shortfallWith(flow.creditOf(combo.id)))}원 더 담아주세요',
               style: AppText.caption(color: AppColors.primary500),
             ),
             const SizedBox(height: 12),
