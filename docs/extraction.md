@@ -76,7 +76,7 @@ LLM 에 넘기는 텍스트는 `siteName + title + description` 을 줄바꿈으
 
 ## ③ LLM 추출
 
-모델: `gpt-4.1-mini` (기본) 또는 `gemini-2.5-flash`.
+모델: `gpt-4.1-mini` (기본) 또는 `gemini-3.6-flash`.
 `.env` 에 `OPENAI_API_KEY` 가 있으면 OpenAI 를, 없으면 Gemini 를 쓴다. Gemini 무료
 등급이 모델·프로젝트당 하루 20건이라 시연 중에 닫혀 기본을 OpenAI 로 두었다.
 
