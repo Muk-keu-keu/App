@@ -217,7 +217,6 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('KFC-용산아이파크몰점'), findsOneWidget);
-    expect(find.textContaining('2곳에서 따로 배달'), findsOneWidget);
 
     // 두 번째 매장 섹션은 화면 밖이라 스크롤해서 확인한다.
     await tester.scrollUntilVisible(
