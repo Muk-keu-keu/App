@@ -6,6 +6,7 @@ import '../app_flow.dart';
 import '../models/combo.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/credit_widgets.dart';
 import '../widgets/ds.dart';
 
 /// Figma "메뉴 수정하기" (node 681:6132).
@@ -64,7 +65,12 @@ class _StoreMenuScreenState extends State<StoreMenuScreen> {
               onBack: () => context.read<AppFlow>().closeStoreMenu(),
             ),
           ),
-          SliverToBoxAdapter(child: _StoreInfo(store: restaurant)),
+          SliverToBoxAdapter(
+            child: _StoreInfo(
+              store: restaurant,
+              creditBalance: flow.storeMenuCredit,
+            ),
+          ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(0, 20, 0, 20),
@@ -180,9 +186,12 @@ class _Hero extends StatelessWidget {
 }
 
 class _StoreInfo extends StatelessWidget {
-  const _StoreInfo({required this.store});
+  const _StoreInfo({required this.store, this.creditBalance});
 
   final Restaurant store;
+
+  /// 이 가게에 남은 포인트. null·0 이면 배지를 그리지 않는다.
+  final int? creditBalance;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -233,6 +242,15 @@ class _StoreInfo extends StatelessWidget {
                     style: AppText.btn2(color: AppColors.gray800))),
               ],
             ),
+            // 위 칩 줄에 "최소주문 15,000원" 이 떠 있는데, 포인트가 있으면 그 조건이
+            // 사실상 없는 것과 같다. 조건과 그 조건을 뒤집는 문장을 붙여 둔다.
+            if ((creditBalance ?? 0) > 0) ...[
+              const SizedBox(height: 14),
+              CreditBadge(balance: creditBalance, size: CreditBadgeSize.l),
+              const SizedBox(height: 8),
+              Text('최소주문 없이 원하는 만큼만 담을 수 있어요',
+                  style: AppText.caption(color: AppColors.gray600)),
+            ],
             const SizedBox(height: 20),
             // 배달/포장 탭. 지금은 배달만 쓰므로 포장은 눌리지 않는 상태로 둔다.
             Row(
