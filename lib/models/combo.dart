@@ -117,7 +117,27 @@ class ComboSuggestion {
   /// 결제 예상액. 배달비는 가게마다 한 번 붙는다.
   int get payableTotal => itemsTotal + restaurant.deliveryFee;
 
-  bool get meetsMinimum => itemsTotal >= restaurant.minOrderPrice;
+  /// 포인트를 모르는 자리에서 쓰는 판정. 잔액 0인 경우와 같다.
+  bool get meetsMinimum => meetsMinimumWith(0);
+
+  // ── 포인트를 감안한 판정 ────────────────────────────────────────────
+  //
+  // 잔액은 **이미 그 가게에 낸 돈**이라 최소주문을 그만큼 낮춘다. 조합 카드가
+  // 이걸 모르면 포인트가 있는데도 "N원 더 담아주세요" 가 떠서, 장바구니에
+  // 가면 그냥 결제되는 것과 말이 어긋난다. 식은 [StoreCart] 와 같다.
+
+  int effectiveMinOrderWith(int creditBalance) {
+    final min = restaurant.minOrderPrice - creditBalance;
+    return min < 0 ? 0 : min;
+  }
+
+  bool meetsMinimumWith(int creditBalance) =>
+      itemsTotal >= effectiveMinOrderWith(creditBalance);
+
+  int shortfallWith(int creditBalance) {
+    final min = effectiveMinOrderWith(creditBalance);
+    return itemsTotal >= min ? 0 : min - itemsTotal;
+  }
 
   CartLine? lineOf(int menuId) {
     for (final line in items) {
