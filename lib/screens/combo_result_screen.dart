@@ -63,7 +63,6 @@ class _ComboResultScreenState extends State<ComboResultScreen> {
       child: Column(
         children: [
           _TitleArea(
-            storeCount: flow.analysis.exactMatches.length,
             onHome: () => context.read<AppFlow>().backToYogiyoHome(),
           ),
           // 시안 925:4305 — 카드 위에 "N개 중 M개 선택". 카드를 넘기며 고르는
@@ -122,10 +121,9 @@ class _ComboResultScreenState extends State<ComboResultScreen> {
 }
 
 class _TitleArea extends StatelessWidget {
-  const _TitleArea({required this.storeCount, required this.onHome});
+  const _TitleArea({required this.onHome});
 
   /// 영상에 나온 매장 수. 여러 곳이면 안내 문구가 달라진다.
-  final int storeCount;
 
   final VoidCallback onHome;
 
@@ -150,10 +148,11 @@ class _TitleArea extends StatelessWidget {
               const SizedBox(height: 3),
               Text('먹방 속 조합을 담았어요',
                   style: AppText.h1().copyWith(letterSpacing: -0.7)),
+              // 가게 수를 말하지 않는다. "N곳에서 시켜야 하는 조합" 은 사용자가 아직
+              // 겪지도 않은 부담(최소주문·배달비 N번)을 먼저 떠올리게 해서, 담기도 전에
+              // 조합을 포기하게 만든다. 비용은 장바구니에서 실제 금액으로 보여주면 된다.
               Text(
-                storeCount > 1
-                    ? '$storeCount곳에서 시켜야 하는 조합이에요. 한 번에 결제돼요.'
-                    : '먹방 속 메뉴와 가장 유사한 조합이에요.',
+                '먹방 속 메뉴와 가장 유사한 조합이에요.',
                 style: AppText.body1(color: AppColors.gray700)
                     .copyWith(letterSpacing: -0.4),
               ),
@@ -161,6 +160,18 @@ class _TitleArea extends StatelessWidget {
             ],
           ),
         ),
+      );
+}
+
+/// 가게 정보 사이의 2px 구분점. 흰 글씨 위에 세 번 반복돼 따로 뺐다.
+class _Dot extends StatelessWidget {
+  const _Dot();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 2,
+        height: 2,
+        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
       );
 }
 
@@ -360,14 +371,27 @@ class _StoreArea extends StatelessWidget {
                             Text(store.distanceText,
                                 style: AppText.caption(color: Colors.white)),
                             const SizedBox(width: 4),
-                            Container(
-                              width: 2,
-                              height: 2,
-                              decoration: const BoxDecoration(
-                                  color: Colors.white, shape: BoxShape.circle),
-                            ),
+                            const _Dot(),
                             const SizedBox(width: 4),
                             Text('배달 완료까지 ${store.etaText}',
+                                style: AppText.caption(color: Colors.white)),
+                          ],
+                        ),
+                        // 최소주문과 배달비는 담은 뒤가 아니라 **고르는 자리**에서
+                        // 보여야 한다. 장바구니에서 처음 알면 담은 것을 도로 빼야 한다.
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Text(
+                              store.deliveryFee == 0
+                                  ? '배달비 무료'
+                                  : '배달비 ${wonFormat(store.deliveryFee)}원',
+                              style: AppText.caption(color: Colors.white),
+                            ),
+                            const SizedBox(width: 4),
+                            const _Dot(),
+                            const SizedBox(width: 4),
+                            Text('최소주문 ${wonFormat(store.minOrderPrice)}원',
                                 style: AppText.caption(color: Colors.white)),
                           ],
                         ),
