@@ -35,7 +35,13 @@ class AuthTokens {
 /// 서버는 `id`(정수)·`email`·`role` 만 준다. 없는 값을 지어내지 않고 오는 것만 담는다 —
 /// 닉네임이 필요한 화면이 생기면 그때 서버에 요청해야 한다.
 class AuthUser {
-  const AuthUser({required this.id, required this.email, required this.role});
+  const AuthUser({
+    required this.id,
+    required this.email,
+    required this.role,
+    this.nickName = '',
+    this.address = '',
+  });
 
   /// 정수 id. 명세의 UUID 가 아니다.
   final int id;
@@ -45,6 +51,16 @@ class AuthUser {
   /// `USER` 등. 지금 앱은 쓰지 않지만 응답에 있어 버리지 않는다.
   final String role;
 
+  /// 표시 이름. 마이페이지와 요기족보 작성자명이 쓴다.
+  final String nickName;
+
+  /// 배달 주소. 반경 5km 검색의 기준점이라 마이페이지에서 읽기 전용으로 보여준다.
+  final String address;
+
+  /// 닉네임이 비면 이메일 앞부분으로 대신한다. 화면에 빈 줄을 남기지 않는다.
+  String get displayName =>
+      nickName.trim().isNotEmpty ? nickName : email.split('@').first;
+
   factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
         id: switch (json['id']) {
           final int v => v,
@@ -52,6 +68,8 @@ class AuthUser {
         },
         email: '${json['email'] ?? ''}',
         role: '${json['role'] ?? ''}',
+        nickName: '${json['nickName'] ?? ''}',
+        address: '${json['address'] ?? ''}',
       );
 }
 
