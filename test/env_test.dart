@@ -40,6 +40,20 @@ void main() {
     });
   });
 
+  group('Env.isEnabled — 발표 모드 플래그', () {
+    test('true·1·yes 만 켜진 값으로 읽는다', () {
+      expect(Env.isEnabled('true'), isTrue);
+      expect(Env.isEnabled(' 1 '), isTrue);
+      expect(Env.isEnabled('YES'), isTrue);
+    });
+
+    test('비어 있거나 다른 값이면 실서버 모드다', () {
+      expect(Env.isEnabled(''), isFalse);
+      expect(Env.isEnabled('false'), isFalse);
+      expect(Env.isEnabled('on'), isFalse);
+    });
+  });
+
   group('GeminiAuthException', () {
     test('상태코드를 들고 있고 원인이 메시지에 드러난다', () {
       const e = GeminiAuthException(400);

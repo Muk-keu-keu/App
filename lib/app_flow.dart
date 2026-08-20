@@ -79,7 +79,10 @@ class AppFlow extends ChangeNotifier {
     final flow = AppFlow._(
       repository ?? (api == null ? const MockComboRepository() : ApiComboRepository(api)),
       locationService ?? const GeolocatorLocationService(),
-      postRepository ?? (api == null ? MockPostRepository() : ApiPostRepository(api)),
+      postRepository ??
+          (api == null || Env.usesDemoJokbo
+              ? MockPostRepository()
+              : ApiPostRepository(api)),
       orderRepository ?? (api == null ? MockOrderRepository() : ApiOrderRepository(api)),
       authRepository ??
           (client == null ? MockAuthRepository() : ApiAuthRepository(UserApi(client))),
@@ -459,8 +462,9 @@ class AppFlow extends ChangeNotifier {
   /// 잡을 사람이 없으므로 여기서 삼키고, 홈의 그 줄만 비워 둔다.
   Future<void> loadPopularPosts() async {
     try {
-      final page = await _postRepository.list(sort: PostSort.popular);
-      popularPosts = page.items;
+      final page = await _postRepository.list(sort: PostSort.popular, size: 5);
+      // 서버나 더미 저장소가 size를 무시하더라도 홈의 "Best 5"는 다섯 장만 그린다.
+      popularPosts = page.items.take(5).toList();
     } on Object {
       popularPosts = [];
     }

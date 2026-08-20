@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../../app_flow.dart';
 import '../../models/post.dart';
 import '../../theme.dart';
+import '../../widgets/common.dart';
 import '../../widgets/ds.dart';
 import '../address_input_sheet.dart';
 import '../my_menu.dart';
@@ -441,7 +442,7 @@ class _JokboChart extends StatelessWidget {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: posts.length,
+              itemCount: posts.length > 5 ? 5 : posts.length,
               separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (context, i) => _card(context, posts[i]),
             ),
@@ -475,7 +476,15 @@ class _JokboChart extends StatelessWidget {
                     child: SizedBox(
                       width: 180,
                       height: 109,
-                      child: Image.asset(post.thumbnailPath, fit: BoxFit.cover),
+                      // 목록 API가 고른 게시글 대표 이미지를 그대로 쓴다. 에셋만
+                      // 그리면 실제 글은 imagePaths가 비어 있어 두찜 대체 이미지로
+                      // 전부 같아진다. 바깥 ClipRRect가 카드 윗모서리를 담당한다.
+                      child: RemoteOrAssetImage(
+                        imageUrl: post.thumbnailUrl,
+                        assetPath: post.thumbnailPath,
+                        size: 180,
+                        radius: 0,
+                      ),
                     ),
                   ),
                   Positioned(

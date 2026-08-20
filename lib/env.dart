@@ -47,6 +47,18 @@ class Env {
   /// 실제 서버를 쓸 수 있는 상태인지.
   static bool get hasApiBaseUrl => apiBaseUrl.isNotEmpty;
 
+  /// 발표 촬영 중 요기족보만 번들 데이터를 쓰는지.
+  ///
+  /// 실서버의 이미지 저장소가 잠시 멈춰도 홈·목록·상세의 발표 흐름은 이어져야 한다.
+  /// `true` 일 때도 로그인·주문·분석은 실서버를 그대로 쓰고, 게시글 저장소만
+  /// `MockPostRepository`로 바뀐다. 환경값을 끄면 코드 변경 없이 실서버로 돌아간다.
+  static bool get usesDemoJokbo => isEnabled(_read('DEMO_JOKBO'));
+
+  static bool isEnabled(String value) {
+    final normalized = value.trim().toLowerCase();
+    return normalized == 'true' || normalized == '1' || normalized == 'yes';
+  }
+
   /// 쓸 수 있는 키가 들어왔는지.
   ///
   /// **비어 있는지만 보면 안 된다.** `.env.example` 을 그대로 복사하면
