@@ -30,6 +30,14 @@ class TastePreference {
   static const minMinutes = 20.0;
   static const maxMinutes = 60.0;
 
+  /// 필터 시트 "초기화" 의 기준 (시안 1114:5604 — 맵기: 보통 / 예상 도착 시간: 최대값).
+  ///
+  /// 분석 전 취향 설정의 기본값(생성자 기본 인자)과 다르다. 필터의 초기화는
+  /// "조건을 안 건 상태" 로 되돌리는 것이라, 시간 상한을 슬라이더 끝까지 열어
+  /// 시간 때문에 걸러지는 매장이 없게 한다.
+  static const resetSpice = SpiceLevel.medium;
+  static const resetMinutes = 60;
+
   String get deliveryLabel => '$maxDeliveryMinutes분 이하';
 
   TastePreference copy() => TastePreference(

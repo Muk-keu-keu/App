@@ -126,8 +126,7 @@ void main() {
         ExtractedDish(name: '핫도그', brandName: '명랑핫도그'),
       ],
     );
-    flow.openFilter();
-    await flow.applyPreferenceAndAnalyze();
+    await flow.applyFilter(flow.preference);
     return flow;
   }
 

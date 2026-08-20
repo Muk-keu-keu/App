@@ -314,7 +314,10 @@ class AnalysisResult {
       for (final entry in byStore.entries)
         ComboSuggestion(
           restaurant: entry.value.first.restaurant,
-          items: [for (final c in entry.value) c.item],
+          // [combos] 는 첫 화면과 "다른 결과 보기" 용으로 각각 만들어질 수 있다.
+          // 후보의 CartLine 을 그대로 공유하면 한쪽 수량을 올릴 때 다른 카드까지
+          // 같은 객체를 가리켜 한 번의 조작이 두 번 반영된다. 카드마다 사본을 둔다.
+          items: [for (final c in entry.value) c.item.copy()],
           comboScore: entry.value.map((c) => c.score).reduce((a, b) => a + b) /
               entry.value.length,
           // 근거는 후보마다 따로 붙어 온다. 한 가게로 묶었으니 근거도 모은다.
@@ -511,6 +514,47 @@ class AnalysisResult {
         if (allowed.contains(c.restaurant.foodCategory)) c,
     ];
     return DishResult(dishName: dish.dishName, candidates: matched);
+  }
+
+  /// 요리마다 카드 하나만 남긴다. **첫 화면("먹방 속 조합")의 몫이다.**
+  ///
+  /// [combos] 는 후보를 가게 단위로 묶기만 하므로, 마라샹궈 하나짜리 영상이라도
+  /// 그 요리를 파는 집이 열 곳이면 카드가 열 장 나온다 — 탕화쿵푸 마라샹궈,
+  /// 소림마라 마라샹궈… 로 같은 음식이 줄줄이 뜬다 (피드백 2026-08-14).
+  /// 브랜드를 찾은 경우([exactMatches])는 브랜드마다 한 장이라 이미 이 모양이고,
+  /// 못 찾은 경우만 어긋나 있었다.
+  ///
+  /// [combos] 의 정렬을 그대로 따라가며 **아직 안 채운 요리를 하나라도 덮는 카드만**
+  /// 집는다. 한 집에서 두 요리가 되면 그 집 한 장으로 둘 다 덮으므로 배달비 한 번의
+  /// 이점은 그대로다. 밀려난 후보는 "다른 결과 보기"([all])의 몫이라 사라지지 않는다.
+  List<ComboSuggestion> get onePerDish {
+    final cards = combos;
+    // 요리 이름이 없으면 무엇을 덮었는지 알 수 없다. 카드를 이미 묶어서 받은
+    // 경우([_combos])도 여기다 — 근거 없이 버리지 않는다.
+    if (dishResults.isEmpty) return cards;
+
+    // 카드가 어떤 요리를 덮는지. 후보 목록을 가게 단위로 되짚는다.
+    final dishesOf = <int, Set<String>>{};
+    for (final dish in dishResults) {
+      for (final c in dish.candidates) {
+        dishesOf.putIfAbsent(c.restaurant.restaurantId, () => <String>{}).add(dish.dishName);
+      }
+    }
+
+    final covered = <String>{};
+    final picked = <ComboSuggestion>[];
+    for (final card in cards) {
+      final dishes = dishesOf[card.id] ?? const <String>{};
+      // 어느 요리에서 온 카드인지 모르면 거를 근거가 없다.
+      if (dishes.isEmpty) {
+        picked.add(card);
+        continue;
+      }
+      if (dishes.every(covered.contains)) continue;
+      covered.addAll(dishes);
+      picked.add(card);
+    }
+    return picked;
   }
 
   /// 영상에 나온 것을 앞에, 비슷한 곳을 뒤에. 카드를 한 줄로 넘겨 볼 때 쓴다.

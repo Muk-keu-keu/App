@@ -609,6 +609,66 @@ class DsCheckbox extends StatelessWidget {
   }
 }
 
+// ── Option item ──────────────────────────────────────────────────────────────
+
+/// Figma `sort/option item` (1114:4794) — state=selected / default.
+///
+/// 높이 56 한 줄. 고른 항목만 gray700 SemiBold 로 진해지고 오른쪽에 primary500
+/// 체크가 붙는다. 안 고른 항목은 gray500 Regular 다 — 라디오나 체크박스 없이
+/// 글자 굵기와 체크 하나로만 구분하는 게 시안이다.
+class DsOptionItem extends StatelessWidget {
+  const DsOptionItem({
+    super.key,
+    required this.label,
+    required this.isSelected,
+    this.onTap,
+  });
+
+  final String label;
+  final bool isSelected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = SizedBox(
+      height: 56,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: isSelected
+                  ? AppText.sub2(color: AppColors.gray700)
+                  : AppText.body1(color: AppColors.gray500),
+            ),
+          ),
+          // 체크는 24 프레임 안에 18×10 이다 (시안 icon/check).
+          SizedBox(
+            width: 24,
+            height: 24,
+            child: isSelected
+                ? Center(
+                    child: SvgPicture.asset(
+                      DsIcons.check,
+                      width: 18,
+                      height: 10,
+                      fit: BoxFit.fill,
+                      colorFilter: _tint(AppColors.primary500),
+                    ),
+                  )
+                : null,
+          ),
+        ],
+      ),
+    );
+
+    // 체크는 글자 없는 아이콘이라, 고른 상태가 스크린 리더에 읽히지 않는다.
+    final semantic = Semantics(button: onTap != null, selected: isSelected, child: row);
+    if (onTap == null) return semantic;
+    return GestureDetector(onTap: onTap, behavior: HitTestBehavior.opaque, child: semantic);
+  }
+}
+
 // ── Chip ─────────────────────────────────────────────────────────────────────
 
 /// Figma `chip/filter` — 높이 36, 라운딩 20. 글자 뒤에 chevron 이 붙는다.

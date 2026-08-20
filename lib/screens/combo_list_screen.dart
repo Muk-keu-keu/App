@@ -9,6 +9,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/ds.dart';
 import '../widgets/overlays.dart';
+import 'combo_filter_sheet.dart';
 import 'menu_option_sheet.dart';
 
 /// Figma "다른 결과보기" (node 681:6245).
@@ -80,13 +81,15 @@ class _ComboListScreenState extends State<ComboListScreen> {
 }
 
 /// 필터 칩 줄. 시안에는 "맛 · 예상 시간" 이라는 기본 라벨로 그려져 있지만,
-/// 앱에서는 필터 화면에서 이미 값이 정해져 있어 고른 값을 그대로 보여준다.
+/// 앱에서는 이미 값이 정해져 있어 고른 값을 그대로 보여준다.
 ///
-/// 누르면 시안의 "필터"(681:6194) 화면이 열린다.
+/// **누르면 화면이 바뀌지 않고 시트가 올라온다** (시안 1114:5603). 칩마다 여는
+/// 시트가 다르다 — 아이콘 칩은 전체 필터, 나머지는 그 칩 하나의 섹션만.
+/// 자세한 배경은 [ComboFilterSheet] 주석에 있다.
 ///
-/// **모드 칩은 없다.** 개정 시안(1052:7310)의 칩 줄에는 아직 남아 있지만 필터
-/// 화면에서 모드를 고를 자리가 없어졌다 — 못 바꾸는 값을 열리지 않는 칩으로
-/// 두면 눌러 보고 아무 일도 안 일어난다.
+/// **모드 칩은 없다.** 개정 시안(1052:7310)의 칩 줄에는 아직 남아 있지만 필터에서
+/// 모드를 고를 자리가 없어졌다 — 못 바꾸는 값을 열리지 않는 칩으로 두면 눌러 보고
+/// 아무 일도 안 일어난다.
 class _ChipRow extends StatelessWidget {
   const _ChipRow({required this.preference});
 
@@ -101,16 +104,18 @@ class _ChipRow extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              DsChipFilter.icon(onTap: () => context.read<AppFlow>().openFilter()),
+              DsChipFilter.icon(
+                onTap: () => ComboFilterSheet.show(context, mode: FilterSheetMode.all),
+              ),
               const SizedBox(width: 8),
               DsChipFilter(
                 label: preference.spice.title,
-                onTap: () => context.read<AppFlow>().openFilter(),
+                onTap: () => ComboFilterSheet.show(context, mode: FilterSheetMode.spice),
               ),
               const SizedBox(width: 8),
               DsChipFilter(
                 label: preference.deliveryLabel,
-                onTap: () => context.read<AppFlow>().openFilter(),
+                onTap: () => ComboFilterSheet.show(context, mode: FilterSheetMode.delivery),
               ),
             ],
           ),

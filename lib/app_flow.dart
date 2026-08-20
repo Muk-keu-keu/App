@@ -139,7 +139,34 @@ class AppFlow extends ChangeNotifier {
   ComboSort sort = ComboSort.similarity;
 
   /// 마지막 분석 결과. `exactMatches` + `combos` 를 그대로 들고 있는다.
-  AnalysisResult analysis = const AnalysisResult.empty();
+  ///
+  /// 대입될 때마다 카드를 다시 만든다 — 이유는 [_rebuildCards] 에 있다.
+  AnalysisResult get analysis => _analysis;
+
+  set analysis(AnalysisResult next) {
+    _analysis = next;
+    _rebuildCards();
+  }
+
+  AnalysisResult _analysis = const AnalysisResult.empty();
+
+  List<ComboSuggestion> _suggestions = const [];
+  List<ComboSuggestion> _allSuggestions = const [];
+
+  /// 카드 객체를 **한 번만** 만들어 들고 있는다.
+  ///
+  /// `AnalysisResult.combos` 는 게터라서 부를 때마다 `ComboSuggestion` 을 새로
+  /// 만든다. 그대로 쓰면 화면이 그린 객체와 [_addToSuggestion]·수량 조절이 고치는
+  /// 객체가 서로 달라, 고친 값이 다음 rebuild 에서 통째로 사라졌다 — 메뉴를
+  /// 추가해도 조합 카드가 그대로였던 게 이것이다 (피드백 2026-08-14).
+  ///
+  /// 브랜드를 찾은 경우에는 `exactMatches` 가 저장된 리스트라 객체가 유지돼
+  /// 멀쩡히 동작했다. 그래서 브랜드가 안 잡힌 영상에서만 증상이 났다.
+  void _rebuildCards() {
+    final exact = _analysis.exactMatches;
+    _suggestions = exact.isNotEmpty ? exact : _analysis.withMenuFilter().onePerDish;
+    _allSuggestions = _analysis.all;
+  }
 
   /// **첫 화면에 그릴 카드.**
   ///
@@ -154,14 +181,13 @@ class AppFlow extends ChangeNotifier {
   /// 못 찾았을 때는 같은 메뉴를 파는 곳까지 내려서 보여준다. 그마저 없으면 빈
   /// 화면이 되고 [hasOnlySimilar] 가 안내를 세운다 — 비슷한 집으로 자리를 채우지
   /// 않는다. 마라로제 떡볶이 영상에 마라로제찜닭이 뜨던 것을 여기서 막는다.
-  List<ComboSuggestion> get suggestions {
-    final exact = analysis.exactMatches;
-    if (exact.isNotEmpty) return exact;
-    return analysis.withMenuFilter().all;
-  }
+  ///
+  /// **요리마다 한 장이다.** 같은 음식을 파는 집이 여러 곳이어도 첫 화면에는 한 장만
+  /// 세운다 (`AnalysisResult.onePerDish`). 나머지는 "다른 결과 보기" 에 있다.
+  List<ComboSuggestion> get suggestions => _suggestions;
 
   /// 비슷한 곳까지 전부. 카드 조작(담기·수량)은 두 화면이 함께 쓰므로 이쪽을 본다.
-  List<ComboSuggestion> get allSuggestions => analysis.all;
+  List<ComboSuggestion> get allSuggestions => _allSuggestions;
 
   /// 첫 화면은 비었는데 비슷한 곳은 있는 상태.
   /// 그냥 빈 화면을 두면 분석이 실패한 것처럼 보인다.
@@ -741,23 +767,31 @@ class AppFlow extends ChangeNotifier {
       cart.pruneEmptyStores();
     }
 
-    final line = combo.lineOf(menuId);
-    if (line == null) {
-      notifyListeners();
-      return;
-    }
-    final next = line.quantity + delta;
-
-    // 수량 1에서 한 번 더 내리면 휴지통 아이콘이 되고, 그때는 그 메뉴를 뺀다
-    // (피드백 2026-08-09). 예전에는 카드가 비는 것을 막으려고 아무 일도 하지
-    // 않았는데, 아이콘이 휴지통인데 안 지워지니 눌리지 않는 것으로 보였다.
-    if (next <= 0) {
-      combo.items = [for (final l in combo.items) if (l.menuId != menuId) l];
+    // 첫 화면과 "다른 결과 보기"는 같은 매장의 서로 다른 카드 사본을 가질 수 있다.
+    // 사용자가 보고 있는 카드만 고치면 화면을 옮겼을 때 예전 수량이 되살아난다.
+    // exactMatches처럼 같은 객체가 양쪽 목록에 든 경우는 Set이 한 번만 남긴다.
+    final cards = <ComboSuggestion>{..._suggestions, ..._allSuggestions}
+        .where((card) => card.id == combo.id)
+        .toList();
+    if (cards.every((card) => card.lineOf(menuId) == null)) {
       notifyListeners();
       return;
     }
 
-    line.quantity = next;
+    for (final card in cards) {
+      final line = card.lineOf(menuId);
+      if (line == null) continue;
+      final next = line.quantity + delta;
+
+      // 수량 1에서 한 번 더 내리면 휴지통 아이콘이 되고, 그때는 그 메뉴를 뺀다
+      // (피드백 2026-08-09). 예전에는 카드가 비는 것을 막으려고 아무 일도 하지
+      // 않았는데, 아이콘이 휴지통인데 안 지워지니 눌리지 않는 것으로 보였다.
+      if (next <= 0) {
+        card.items = [for (final item in card.items) if (item.menuId != menuId) item];
+      } else {
+        line.quantity = next;
+      }
+    }
     notifyListeners();
   }
 
@@ -787,8 +821,11 @@ class AppFlow extends ChangeNotifier {
     required List<MenuOption> chosen,
     SpiceLevel? spice,
   }) {
-    for (final line in suggestion.items) {
-      if (line.menuId != menuId) continue;
+    final cards = <ComboSuggestion>{..._suggestions, ..._allSuggestions}
+        .where((card) => card.id == suggestion.id);
+    for (final card in cards) {
+      final line = card.lineOf(menuId);
+      if (line == null) continue;
       line.applySelection(chosen);
       if (spice != null) line.selectedSpice = spice;
     }
@@ -1001,8 +1038,12 @@ class AppFlow extends ChangeNotifier {
     List<MenuOption>? chosen,
     SpiceLevel? spice,
   }) {
-    // 첫 화면에 안 뜬 가게라도 "다른 결과 보기" 에서 열었을 수 있다. 전체를 본다.
-    for (final combo in allSuggestions) {
+    // **두 목록을 다 본다.** 첫 화면([suggestions])은 메뉴 필터를 거친 카드를 그리고
+    // "다른 결과 보기"([allSuggestions])는 걸러지지 않은 카드를 그려서, 같은 가게라도
+    // 서로 다른 객체다. 한쪽만 고치면 다른 쪽에서 추가한 메뉴가 보이지 않는다.
+    // 같은 가게가 양쪽에 한 객체로 들어 있는 경우(exactMatches)는 Set 이 걸러 준다.
+    final cards = <ComboSuggestion>{..._suggestions, ..._allSuggestions};
+    for (final combo in cards) {
       if (combo.id != restaurantId) continue;
 
       final line = combo.lineOf(menu.menuId);
@@ -1015,7 +1056,6 @@ class AppFlow extends ChangeNotifier {
         if (spice != null) added.selectedSpice = spice;
         combo.items = [...combo.items, added];
       }
-      return;
     }
   }
 
@@ -1052,29 +1092,24 @@ class AppFlow extends ChangeNotifier {
   /// 정렬을 적용한 비교 목록.
   List<ComboSuggestion> get sortedSuggestions => sort.apply(allSuggestions);
 
-  /// 취향 설정 화면을 필터로 다시 열었는지.
-  ///
-  /// 시안의 "필터"(681:6194)는 키워드 선택 화면과 구조가 같다 — 디자이너가 같은
-  /// 화면을 재사용했다. 그래서 화면을 새로 만들지 않고 이 깃발로 갈라 쓴다.
-  bool _keywordIsFilter = false;
-
   /// 마지막 분석의 썸네일. 필터를 다시 걸 때 같은 이미지를 써야 카드가 바뀌지 않는다.
   String? _lastThumbnailUrl;
 
-  /// 비교 목록의 필터 칩. 취향 설정 화면을 필터로 다시 연다.
-  void openFilter() {
-    _keywordIsFilter = true;
-    _setStage(AppStage.keyword);
+  /// 비교 목록의 필터 시트에서 "적용하기".
+  ///
+  /// **화면을 옮기지 않는다.** 예전에는 필터 칩이 분석 전 취향 설정 화면
+  /// (`AppStage.keyword`)을 다시 열었다 — 목록을 보다가 화면이 통째로 바뀌었다
+  /// (피드백 2026-08-13). 이제 목록 위에 시트만 올라오고 이 메서드가 곧 "적용" 이다.
+  ///
+  /// AI 는 다시 부르지 않는다. 영상에서 뽑은 내용은 그대로이고 취향만 바뀌었다.
+  Future<void> applyFilter(TastePreference next) {
+    preference = next;
+    notifyListeners();
+    return _reapplyPreference();
   }
 
-  /// 취향 설정에서 "적용하기"를 누르면 실제 분석을 시작한다.
-  /// 필터로 열렸을 때는 AI 를 다시 부르지 않고 분석만 다시 요청한다 —
-  /// 영상에서 뽑은 내용은 그대로이고 취향만 바뀌었다.
+  /// 분석 전 취향 설정에서 "적용하기"를 누르면 실제 분석을 시작한다.
   Future<void> applyPreferenceAndAnalyze() async {
-    if (_keywordIsFilter) {
-      _keywordIsFilter = false;
-      return _reapplyPreference();
-    }
     // 공유가 여기까지 왔다. 깃발을 내려 두지 않으면 다음 로그인이 엉뚱하게
     // 조건 화면으로 떨어진다.
     _sharePending = false;
