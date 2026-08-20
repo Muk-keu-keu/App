@@ -126,8 +126,7 @@ void main() {
         ExtractedDish(name: '핫도그', brandName: '명랑핫도그'),
       ],
     );
-    flow.openFilter();
-    await flow.applyPreferenceAndAnalyze();
+    await flow.applyFilter(flow.preference);
     return flow;
   }
 
@@ -253,10 +252,12 @@ void main() {
     await pumpScreen(tester, const ComboResultScreen(), flow);
 
     expect(tester.takeException(), isNull);
-    // 분석 결과는 영상 브랜드 2곳 + 비슷한 곳 1곳이다.
-    expect(flow.suggestions, hasLength(3));
+    // 분석 결과는 영상 브랜드 2곳 + 비슷한 곳 1곳인데, 첫 화면은 영상에 나온
+    // 브랜드만 세운다. 비슷한 곳은 "다른 결과 보기" 의 몫이다.
+    expect(flow.suggestions, hasLength(2));
+    expect(flow.sortedSuggestions, hasLength(3));
     // 개수만 색·크기가 달라 Text.rich 다. 이어붙인 문자열로 찾는다.
-    expect(find.text('3개 중 0개 선택', findRichText: true), findsOneWidget);
+    expect(find.text('2개 중 0개 선택', findRichText: true), findsOneWidget);
   });
 
   testWidgets('체크로 담고 다시 눌러 뺀다', (tester) async {
@@ -269,13 +270,13 @@ void main() {
     await tester.tap(find.byType(DsCheckbox).first);
     await tester.pump();
     expect(flow.isInCart(first.id), isTrue);
-    expect(find.text('3개 중 1개 선택', findRichText: true), findsOneWidget);
+    expect(find.text('2개 중 1개 선택', findRichText: true), findsOneWidget);
 
     // 해제가 되어야 한다 — 피드백 17번이 지적한 지점이다.
     await tester.tap(find.byType(DsCheckbox).first);
     await tester.pump();
     expect(flow.isInCart(first.id), isFalse);
-    expect(find.text('3개 중 0개 선택', findRichText: true), findsOneWidget);
+    expect(find.text('2개 중 0개 선택', findRichText: true), findsOneWidget);
   });
 
   testWidgets('체크한 조합만 장바구니로 넘어간다', (tester) async {
@@ -324,6 +325,43 @@ void main() {
     expect(find.text('홈으로 이동하기'), findsOneWidget);
     // 시안에는 버튼이 하나다. 주문내역은 홈의 탭에서 간다.
     expect(find.text('주문 내역 보기'), findsNothing);
+  });
+
+  // 시안 1059:5972 / 1059:5978 — 결과가 왜 이 순서인지 묻는 자리.
+  testWidgets('AI 추천 이유를 누르면 무엇을 찾았는지 알려준다', (tester) async {
+    final flow = await analyzedFlow();
+    await pumpScreen(tester, const ComboResultScreen(), flow);
+
+    await tester.tap(find.text('AI 추천 이유'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('영상과 가장 비슷한 결과예요'), findsOneWidget);
+    // 영상에 나온 두 브랜드를 그대로 시킬 수 있다는 사실이 본문에 실린다.
+    expect(
+      find.textContaining('엽기떡볶이, 명랑핫도그는 근처 지점에서'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('다른 결과 보기'), findsWidgets);
+
+    // 읽고 나가는 창이라 결과를 건드리지 않는다.
+    await tester.tap(find.text('확인'));
+    await tester.pumpAndSettle();
+    expect(find.text('영상과 가장 비슷한 결과예요'), findsNothing);
+    expect(flow.suggestions, hasLength(2));
+  });
+
+  // 시안 1052:8091 — 목록에서 카드끼리 비교하는 중에 뜨는 짧은 창.
+  testWidgets('매장 이름 옆 물음표는 그 매장을 고른 이유를 알려준다', (tester) async {
+    final flow = await analyzedFlow();
+    flow.showComboList();
+    await pumpScreen(tester, const ComboListScreen(), flow);
+
+    await tester.tap(find.byKey(const ValueKey('store-reason-101')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('이 매장을 추천한 이유'), findsOneWidget);
+    // 이 저장소는 tags·reason 을 안 주므로 카드가 가진 사실로 만든 문구가 나온다.
+    expect(find.text('영상에 나온 그 지점이에요'), findsOneWidget);
   });
 
   testWidgets('완료 화면의 금액은 장바구니를 비운 뒤에도 남는다', (tester) async {

@@ -215,11 +215,6 @@ class ComboBuilder {
       seed: seed,
     );
 
-    // 1인 모드면 메뉴를 핵심 하나로 줄인다.
-    if (preference.mode == ServingMode.solo && items.length > 1) {
-      items = items.take(1).toList();
-    }
-
     final side = _sideMenu[category];
     final sideMenu = side == null
         ? null

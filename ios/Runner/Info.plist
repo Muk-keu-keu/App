@@ -85,6 +85,11 @@
 	     WhenInUse 만 선언한다(Always 를 넣으면 심사에서 사유를 요구받는다). -->
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>지금 위치로 배달 가능한 매장과 조합을 찾아드려요. 허용하지 않으면 주소를 직접 입력할 수 있어요.</string>
+	<!-- 족보 작성·수정의 사진 첨부. 고른 사진만 읽고 앨범 전체를 훑지 않으므로
+	     PHPicker(image_picker 의 기본 경로)를 쓴다. 이 문구가 없으면 사진첩을 여는
+	     순간 iOS 가 앱을 즉시 종료시킨다 — 크래시로만 보여 원인을 찾기 어렵다. -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>족보에 올릴 사진을 고를 때만 사진첩을 열어요. 고른 사진만 글에 첨부돼요.</string>
 	<!-- 개발 백엔드가 평문 http 라서 ATS 를 열어 둔다. ATS 는 기본적으로 http 를 막고,
 	     막히면 앱은 연결 거부와 구분되지 않는 NetworkException 만 보므로 원인을 찾기 어렵다.
 	     서버 주소는 .env 에 있고 커밋되지 않으므로 여기에 IP 를 적는 예외 목록

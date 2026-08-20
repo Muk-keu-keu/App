@@ -3,12 +3,13 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../../app_flow.dart';
-import '../../models/combo.dart';
 import '../../models/post.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../../widgets/ds.dart';
+import '../../widgets/order_card.dart';
 import '../../widgets/overlays.dart';
+import 'jokbo_widgets.dart';
 
 /// Figma "조합 상세" (node 681:8105).
 ///
@@ -68,7 +69,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               padding: EdgeInsets.zero,
               children: [
                 _PostSection(post: post),
-                const SizedBox(height: 16),
+                // 본문과 "주문한 메뉴" 사이에는 회색 띠를 두지 않는다. 같은 글에
+                // 딸린 정보라 붙어 있어야 하고, 띠를 넣으면 아래 댓글과 같은
+                // 무게의 별개 블록으로 읽힌다 (디자이너 피드백 2026-08-13).
+                const DsDivider(color: AppColors.gray300),
                 // 시안 909:2578 은 아코디언이 아니다. 누르면 바텀시트가 뜬다.
                 _OrderedMenuRow(
                   onTap: () => _OrderedMenuSheet.show(context, post: post),
@@ -112,7 +116,9 @@ class _PostSection extends StatelessWidget {
             ],
             const SizedBox(height: 20),
             if (post.source != null) ...[
-              _SourceLink(source: post.source!),
+              // 목록 카드와 같은 배지를 쓴다. 탭하면 그 영상이 열린다 —
+              // 상세에만 따로 만든 줄은 제목만 보여주고 눌러도 아무 일이 없었다.
+              YoutubeSourceBadge(source: post.source!),
               const SizedBox(height: 20),
             ],
             _ActionRow(post: post),
@@ -253,42 +259,6 @@ class _ImageRow extends StatelessWidget {
       ],
     );
   }
-}
-
-/// 출처 영상 한 줄. 회색 판 위에 아이콘과 제목을 얹는다.
-class _SourceLink extends StatelessWidget {
-  const _SourceLink({required this.source});
-
-  final PostSource source;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppColors.gray100,
-          borderRadius: BorderRadius.circular(AppRadius.chip),
-        ),
-        child: Row(
-          children: [
-            // 시안은 유튜브 로고 이미지다. 아직 받지 않아 같은 치수의 아이콘으로 둔다.
-            const SizedBox(
-              width: 20,
-              height: 14,
-              child: Icon(Icons.play_arrow, size: 14, color: AppColors.primary500),
-            ),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Text(
-                source.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppText.caption(color: AppColors.gray700),
-              ),
-            ),
-          ],
-        ),
-      );
 }
 
 class _ActionRow extends StatelessWidget {
@@ -433,14 +403,40 @@ class _OrderedMenuSheet extends StatelessWidget {
                 borderRadius: BorderRadius.circular(100),
               ),
             ),
-            // header 56 (893:1996). 시트라 뒤로가기가 없고 제목만 있다.
+            // header 56 (893:1996). 시트라 뒤로가기가 없고, 오른쪽은 닫기다.
             SizedBox(
               height: 56,
-              child: Center(child: Text('주문한 메뉴', style: AppText.h3())),
+              child: Row(
+                children: [
+                  const SizedBox(width: 64),
+                  Expanded(
+                    child: Center(child: Text('주문한 메뉴', style: AppText.h3())),
+                  ),
+                  SizedBox(
+                    width: 64,
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 20),
+                        child: Semantics(
+                          button: true,
+                          label: '닫기',
+                          child: GestureDetector(
+                            onTap: () => Navigator.of(context).pop(),
+                            behavior: HitTestBehavior.opaque,
+                            child: const DsCloseIcon(size: 18.19, box: 24),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
+            const SizedBox(height: 16),
             Expanded(
               child: SingleChildScrollView(
-                child: _MenuSection(post: post, showPrice: true),
+                child: _MenuSection(post: post),
               ),
             ),
             // Bottom CTA 104 — Button 350x52 at (20, 20) (900:1256).
@@ -467,79 +463,30 @@ class _OrderedMenuSheet extends StatelessWidget {
 ///
 /// 회의(2026-08-04) 이후 글 하나에 매장이 여러 곳일 수 있다. 매장마다 섹션을
 /// 나눠 그린다 — 한 목록에 섞어 놓으면 어느 가게에서 시키는 메뉴인지 알 수 없다.
+/// 시트에 그릴 조합. **매장마다 카드 한 장**이다 (시안 893:1944 cart item).
+///
+/// 배달이 매장 단위로 따로 가므로 목록을 한 줄로 이어 붙이면 어디까지가 한
+/// 가게인지 읽히지 않는다. 카드 안은 상호 → 구분선 → 메뉴들이고, 금액과 수량은
+/// 오른쪽 아래에 붙는다.
 class _MenuSection extends StatelessWidget {
-  const _MenuSection({required this.post, this.showPrice = false});
-
-  /// 시트에서는 금액·수량까지 보여준다 (시안 893:1944 의 cart item).
-  final bool showPrice;
+  const _MenuSection({required this.post});
 
   final YogijokboPost post;
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        color: Colors.white,
-        padding: const EdgeInsets.all(20),
+  Widget build(BuildContext context) => Padding(
+        // 시안은 좌우 10 이다. 카드 자체가 20 을 물고 있어 더 주면 좁아 보인다.
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             for (var s = 0; s < post.stores.length; s++) ...[
-              if (s > 0) const SizedBox(height: 24),
-              GestureDetector(
-                onTap: () => context
-                    .read<AppFlow>()
-                    .openStoreMenu(post.stores[s].restaurantId),
-                behavior: HitTestBehavior.opaque,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(post.stores[s].restaurant.name,
-                          style: AppText.sub2()),
-                    ),
-                    const RotatedBox(quarterTurns: 2, child: DsChevron.left()),
-                  ],
-                ),
+              if (s > 0) const SizedBox(height: 16),
+              OrderedStoreCard(
+                storeName: post.stores[s].restaurant.name,
+                logoUrl: post.stores[s].restaurant.imageUrl,
+                logoAsset: post.stores[s].restaurant.imagePath,
+                lines: post.stores[s].lines,
               ),
-              const SizedBox(height: 16),
-              const DsDivider(color: AppColors.gray300),
-              for (final item in post.stores[s].lines) ...[
-                const SizedBox(height: 16),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    RemoteOrAssetImage(
-                      imageUrl: item.imageUrl,
-                      assetPath: item.imagePath,
-                      size: 48,
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(item.name,
-                              style: AppText.sub2().copyWith(letterSpacing: -0.4)),
-                          const SizedBox(height: 4),
-                          Text(item.optionsText,
-                              style: AppText.caption(color: AppColors.gray600)),
-                          if (showPrice) ...[
-                            const SizedBox(height: 8),
-                            // 시트에서는 금액과 수량을 오른쪽에 붙여 준다.
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: Text(
-                                '${wonFormat(item.lineTotal)}원 ${item.quantity}개',
-                                style: AppText.sub2(color: AppColors.gray800),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
             ],
           ],
         ),
@@ -585,7 +532,7 @@ class _CommentItem extends StatefulWidget {
 
 class _CommentItemState extends State<_CommentItem> {
   /// 메뉴를 점 아이콘 바로 아래에 띄우기 위한 기준점.
-  final _anchorKey = GlobalKey();
+  final _menuLink = LayerLink();
 
   PostComment get comment => widget.comment;
 
@@ -594,7 +541,7 @@ class _CommentItemState extends State<_CommentItem> {
     final flow = context.read<AppFlow>();
     final picked = await AppOverflowMenu.show(
       context,
-      anchorKey: _anchorKey,
+      link: _menuLink,
       items: const [
         AppActionSheetItem(label: '삭제하기', value: 'delete', destructive: true),
       ],
@@ -641,16 +588,18 @@ class _CommentItemState extends State<_CommentItem> {
               ),
               // 내 댓글만 지울 수 있다. 남의 댓글은 서버가 403 을 준다.
               if (comment.mine)
-                GestureDetector(
-                  key: _anchorKey,
-                  onTap: _openMenu,
-                  behavior: HitTestBehavior.opaque,
-                  child: const Padding(
-                    padding: EdgeInsets.only(left: 8),
-                    child: Icon(
-                      Icons.more_horiz,
-                      size: 20,
-                      color: AppColors.gray500,
+                CompositedTransformTarget(
+                  link: _menuLink,
+                  child: GestureDetector(
+                    onTap: _openMenu,
+                    behavior: HitTestBehavior.opaque,
+                    child: const Padding(
+                      padding: EdgeInsets.only(left: 8),
+                      child: Icon(
+                        Icons.more_horiz,
+                        size: 20,
+                        color: AppColors.gray500,
+                      ),
                     ),
                   ),
                 ),

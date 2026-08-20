@@ -150,8 +150,7 @@ void main() {
         ExtractedDish(name: '레드콤보', brandName: '교촌치킨'),
       ],
     );
-    flow.openFilter();
-    await flow.applyPreferenceAndAnalyze();
+    await flow.applyFilter(flow.preference);
     return flow;
   }
 
@@ -401,8 +400,7 @@ void main() {
       flow.extraction = const ExtractionResult(
         dishes: [ExtractedDish(name: '떡볶이', brandName: '엽기떡볶이')],
       );
-      flow.openFilter();
-      await flow.applyPreferenceAndAnalyze();
+      await flow.applyFilter(flow.preference);
       flow.openCartFromAnalysis();
       await flow.checkout();
 

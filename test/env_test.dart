@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:mukbang_ttaradamgi/env.dart';
 import 'package:mukbang_ttaradamgi/services/gemini_extractor.dart';
 
@@ -38,11 +40,61 @@ void main() {
     });
   });
 
+  group('Env.isEnabled — 발표 모드 플래그', () {
+    test('true·1·yes 만 켜진 값으로 읽는다', () {
+      expect(Env.isEnabled('true'), isTrue);
+      expect(Env.isEnabled(' 1 '), isTrue);
+      expect(Env.isEnabled('YES'), isTrue);
+    });
+
+    test('비어 있거나 다른 값이면 실서버 모드다', () {
+      expect(Env.isEnabled(''), isFalse);
+      expect(Env.isEnabled('false'), isFalse);
+      expect(Env.isEnabled('on'), isFalse);
+    });
+  });
+
   group('GeminiAuthException', () {
     test('상태코드를 들고 있고 원인이 메시지에 드러난다', () {
       const e = GeminiAuthException(400);
       expect(e.statusCode, 400);
       expect(e.toString(), contains('API 키'));
+    });
+  });
+
+  group('Gemini 할당량(429)', () {
+    // 실제로 기기에서 이것 때문에 "AI 분석에 실패했어요" 만 떴다. 429 를 네트워크
+    // 오류로 보고 재시도하면 하루 20건짜리 한도를 실패 한 번에 두 개씩 태운다.
+    test('429 는 전용 예외로 나가고 호출은 한 번뿐이다', () async {
+      var calls = 0;
+      final client = MockClient((_) async {
+        calls++;
+        return http.Response(
+          '{"error":{"code":429,"status":"RESOURCE_EXHAUSTED",'
+          '"message":"You exceeded your current quota"}}',
+          429,
+        );
+      });
+
+      await expectLater(
+        GeminiExtractor(apiKey: 'k', client: client).extract('떡볶이 먹방'),
+        throwsA(isA<GeminiQuotaException>()
+            .having((e) => e.statusCode, 'statusCode', 429)
+            .having((e) => e.message, 'message', contains('quota'))),
+      );
+      expect(calls, 1);
+    });
+
+    test('키 문제(400 API key)는 여전히 인증 예외다', () async {
+      final client = MockClient((_) async => http.Response(
+            '{"error":{"message":"API key not valid"}}',
+            400,
+          ));
+
+      await expectLater(
+        GeminiExtractor(apiKey: 'bad', client: client).extract('떡볶이 먹방'),
+        throwsA(isA<GeminiAuthException>()),
+      );
     });
   });
 }

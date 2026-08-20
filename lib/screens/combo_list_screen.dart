@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../app_flow.dart';
@@ -7,6 +8,8 @@ import '../models/preference.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/ds.dart';
+import '../widgets/overlays.dart';
+import 'combo_filter_sheet.dart';
 import 'menu_option_sheet.dart';
 
 /// Figma "다른 결과보기" (node 681:6245).
@@ -77,11 +80,16 @@ class _ComboListScreenState extends State<ComboListScreen> {
   }
 }
 
-/// 필터 칩 줄. 시안에는 "모드 · 맛 · 예상 시간" 이라는 기본 라벨로 그려져 있지만,
-/// 앱에서는 키워드 선택 화면에서 이미 값이 정해져 있어 고른 값을 그대로 보여준다.
+/// 필터 칩 줄. 시안에는 "맛 · 예상 시간" 이라는 기본 라벨로 그려져 있지만,
+/// 앱에서는 이미 값이 정해져 있어 고른 값을 그대로 보여준다.
 ///
-/// 누르면 시안의 "필터"(681:6194) 화면이 열린다. 그 시안이 키워드 선택 화면과
-/// 구조가 같아 같은 화면을 필터 모드로 다시 쓴다.
+/// **누르면 화면이 바뀌지 않고 시트가 올라온다** (시안 1114:5603). 칩마다 여는
+/// 시트가 다르다 — 아이콘 칩은 전체 필터, 나머지는 그 칩 하나의 섹션만.
+/// 자세한 배경은 [ComboFilterSheet] 주석에 있다.
+///
+/// **모드 칩은 없다.** 개정 시안(1052:7310)의 칩 줄에는 아직 남아 있지만 필터에서
+/// 모드를 고를 자리가 없어졌다 — 못 바꾸는 값을 열리지 않는 칩으로 두면 눌러 보고
+/// 아무 일도 안 일어난다.
 class _ChipRow extends StatelessWidget {
   const _ChipRow({required this.preference});
 
@@ -96,21 +104,18 @@ class _ChipRow extends StatelessWidget {
           scrollDirection: Axis.horizontal,
           child: Row(
             children: [
-              DsChipFilter.icon(onTap: () => context.read<AppFlow>().openFilter()),
-              const SizedBox(width: 8),
-              DsChipFilter(
-                label: preference.mode.title,
-                onTap: () => context.read<AppFlow>().openFilter(),
+              DsChipFilter.icon(
+                onTap: () => ComboFilterSheet.show(context, mode: FilterSheetMode.all),
               ),
               const SizedBox(width: 8),
               DsChipFilter(
                 label: preference.spice.title,
-                onTap: () => context.read<AppFlow>().openFilter(),
+                onTap: () => ComboFilterSheet.show(context, mode: FilterSheetMode.spice),
               ),
               const SizedBox(width: 8),
               DsChipFilter(
                 label: preference.deliveryLabel,
-                onTap: () => context.read<AppFlow>().openFilter(),
+                onTap: () => ComboFilterSheet.show(context, mode: FilterSheetMode.delivery),
               ),
             ],
           ),
@@ -216,6 +221,29 @@ class _ComboCard extends StatelessWidget {
               size: 44,
             ),
             name: store.name,
+            // 시안 1052:7319 — 상호 뒤의 (?). 목록에서 카드끼리 비교하는 중에
+            // "왜 이 집이?" 가 바로 안 풀리면 아래로 계속 내리게 된다.
+            // **근거가 있는 카드에만 붙인다.** 서버는 내세울 것이 있는 카드에만
+            // 태그를 달아 준다(2026-08-13 서버 확인) — 빈 카드까지 (?) 를 그리면
+            // 눌렀을 때 아무것도 없는 창이 열린다.
+            //
+            // 글자 없는 20짜리 아이콘이라 라벨이 없으면 스크린 리더에 아무것도
+            // 읽히지 않는다.
+            nameTrailing: combo.reasonBullets.isEmpty
+                ? null
+                : Semantics(
+                    button: true,
+                    label: '${store.name} 추천 이유',
+                    child: GestureDetector(
+                      key: ValueKey('store-reason-${combo.id}'),
+                      onTap: () => StoreReasonPopover.show(
+                        context,
+                        reasons: combo.reasonBullets,
+                      ),
+                      behavior: HitTestBehavior.opaque,
+                      child: SvgPicture.asset(DsIcons.help, width: 20, height: 20),
+                    ),
+                  ),
             ratingText: store.ratingText,
             distanceText: store.distanceText,
             deliveryText: store.etaText,

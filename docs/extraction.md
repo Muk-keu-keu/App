@@ -76,8 +76,19 @@ LLM 에 넘기는 텍스트는 `siteName + title + description` 을 줄바꿈으
 
 ## ③ LLM 추출
 
-모델: `gemini-2.5-flash`
-`responseMimeType: application/json` + `responseSchema` 로 **응답이 항상 스키마를 지키도록 강제**한다.
+모델: `gpt-4.1-mini` (기본) 또는 `gemini-2.5-flash`.
+`.env` 에 `OPENAI_API_KEY` 가 있으면 OpenAI 를, 없으면 Gemini 를 쓴다. Gemini 무료
+등급이 모델·프로젝트당 하루 20건이라 시연 중에 닫혀 기본을 OpenAI 로 두었다.
+
+어느 쪽이든 **응답이 항상 스키마를 지키도록 강제**한다. 지시문과 계약
+(`ExtractionResult`)은 공유하고 아래 세 가지만 제공자별로 다르다.
+
+| | OpenAI | Gemini |
+|---|---|---|
+| 인증 | `Authorization: Bearer` | `x-goog-api-key` |
+| 강제 방식 | `response_format: json_schema` (`strict: true`) | `responseMimeType` + `responseSchema` |
+| 스키마 방언 | 표준 JSON Schema — 타입 소문자, `additionalProperties: false`, 전 필드 `required` | OpenAPI 서브셋 — 타입 대문자, `propertyOrdering` |
+
 `temperature: 0` 으로 같은 입력이면 같은 결과가 나오게 했다.
 
 ### 프롬프트 전문
@@ -309,10 +320,10 @@ Instagram
 
 | 항목 | 내용 |
 |---|---|
-| **API 키** | 현재 Gemini 키가 앱 번들에 포함된다. 서버로 옮기면 노출 문제가 해소된다 |
-| **모델 교체** | 프롬프트와 응답 스키마를 유지하면 모델은 교체 가능하다. 클라이언트는 스키마만 의존한다 |
-| **재시도** | 현재 클라이언트는 실패 시 1회 재시도한다. 키 오류(400/401/403)는 재시도하지 않는다 |
-| **응답 시간** | Gemini 호출 2~5초. 타임아웃 30초 |
+| **API 키** | 현재 AI 키가 앱 번들에 포함된다. 서버로 옮기면 노출 문제가 해소된다 |
+| **모델 교체** | 프롬프트와 응답 스키마를 유지하면 모델은 교체 가능하다. 클라이언트는 스키마만 의존한다. `DishExtractor` 구현이 그 자리이고 OpenAI·Gemini 두 벌이 있다 |
+| **재시도** | 현재 클라이언트는 실패 시 1회 재시도한다. 키 오류(400/401/403)와 할당량(429)은 재시도하지 않는다 |
+| **응답 시간** | 모델 호출 2~5초. 타임아웃 30초 |
 | **결정성** | `temperature: 0` 이라 동일 입력에 동일 결과. 링크 단위 캐싱으로 재분석 비용을 줄일 수 있다 |
 | **이미지 저장소** | 썸네일은 `og:image` 원격 URL 을 그대로 쓰고 있다. 서버 저장으로 바꾸면 OCI Object Storage 로 통일 |
 

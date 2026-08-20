@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 import 'api/api_client.dart';
@@ -18,6 +20,7 @@ import 'env.dart';
 import 'services/gemini_extractor.dart';
 import 'services/location_service.dart';
 import 'services/metadata_fetcher.dart';
+import 'services/openai_extractor.dart';
 import 'services/token_store.dart';
 
 enum AppStage {
@@ -76,7 +79,10 @@ class AppFlow extends ChangeNotifier {
     final flow = AppFlow._(
       repository ?? (api == null ? const MockComboRepository() : ApiComboRepository(api)),
       locationService ?? const GeolocatorLocationService(),
-      postRepository ?? (api == null ? MockPostRepository() : ApiPostRepository(api)),
+      postRepository ??
+          (api == null || Env.usesDemoJokbo
+              ? MockPostRepository()
+              : ApiPostRepository(api)),
       orderRepository ?? (api == null ? MockOrderRepository() : ApiOrderRepository(api)),
       authRepository ??
           (client == null ? MockAuthRepository() : ApiAuthRepository(UserApi(client))),
@@ -117,6 +123,18 @@ class AppFlow extends ChangeNotifier {
   AppStage get stage => _stage;
 
   String _pendingLink = '';
+
+  /// 공유로 함께 들어온 원문. 링크 말고 남은 부분이다.
+  ///
+  /// **인스타는 로그인 없이 캡션을 주지 않는다.** URL 로 다시 붙어 봐야 og 태그가
+  /// `Instagram / null` 뿐이라 추출이 0건이 되고, 그러면 카테고리 필터까지 무력화돼
+  /// (`AnalysisResult.withCategoryFilter` 는 기준이 없으면 통과시킨다) 서버가 추측한
+  /// 결과가 "영상에서 읽은 것" 처럼 화면에 뜬다. 동파육 릴스에 탕수육이 뜬 게 그거다.
+  ///
+  /// 공유 시점에 넘어온 텍스트는 그 로그인 벽 너머의 것이라 다시 구할 수 없다.
+  /// 버리지 않고 들고 있다가 메타데이터가 빈약하면 이걸로 채운다.
+  String _pendingSharedText = '';
+
   String _failureMessage = '';
   String get failureMessage => _failureMessage;
 
@@ -124,10 +142,59 @@ class AppFlow extends ChangeNotifier {
   ComboSort sort = ComboSort.similarity;
 
   /// 마지막 분석 결과. `exactMatches` + `combos` 를 그대로 들고 있는다.
-  AnalysisResult analysis = const AnalysisResult.empty();
+  ///
+  /// 대입될 때마다 카드를 다시 만든다 — 이유는 [_rebuildCards] 에 있다.
+  AnalysisResult get analysis => _analysis;
 
-  /// 카드를 넘겨 볼 순서. 영상에 나온 브랜드가 앞, 비슷한 곳이 뒤다.
-  List<ComboSuggestion> get suggestions => analysis.all;
+  set analysis(AnalysisResult next) {
+    _analysis = next;
+    _rebuildCards();
+  }
+
+  AnalysisResult _analysis = const AnalysisResult.empty();
+
+  List<ComboSuggestion> _suggestions = const [];
+  List<ComboSuggestion> _allSuggestions = const [];
+
+  /// 카드 객체를 **한 번만** 만들어 들고 있는다.
+  ///
+  /// `AnalysisResult.combos` 는 게터라서 부를 때마다 `ComboSuggestion` 을 새로
+  /// 만든다. 그대로 쓰면 화면이 그린 객체와 [_addToSuggestion]·수량 조절이 고치는
+  /// 객체가 서로 달라, 고친 값이 다음 rebuild 에서 통째로 사라졌다 — 메뉴를
+  /// 추가해도 조합 카드가 그대로였던 게 이것이다 (피드백 2026-08-14).
+  ///
+  /// 브랜드를 찾은 경우에는 `exactMatches` 가 저장된 리스트라 객체가 유지돼
+  /// 멀쩡히 동작했다. 그래서 브랜드가 안 잡힌 영상에서만 증상이 났다.
+  void _rebuildCards() {
+    final exact = _analysis.exactMatches;
+    _suggestions = exact.isNotEmpty ? exact : _analysis.withMenuFilter().onePerDish;
+    _allSuggestions = _analysis.all;
+  }
+
+  /// **첫 화면에 그릴 카드.**
+  ///
+  /// 서버가 결과를 두 블록으로 나눠 주는 것을 화면 단계로 그대로 옮긴다.
+  ///
+  ///   exactMatches  — 영상에 나온 **그 브랜드**의 지점 → 첫 화면
+  ///   dishResults   — 그 요리와 비슷한 다른 가게      → "다른 결과 보기"
+  ///
+  /// 영상 속 그 가게를 찾았으면 그것만 보여준다. "먹방 속 조합" 이라고 써 놓고
+  /// 옆에 비슷한 집을 같이 세우면 어느 것이 영상에 나온 것인지 알 수 없다.
+  ///
+  /// 못 찾았을 때는 같은 메뉴를 파는 곳까지 내려서 보여준다. 그마저 없으면 빈
+  /// 화면이 되고 [hasOnlySimilar] 가 안내를 세운다 — 비슷한 집으로 자리를 채우지
+  /// 않는다. 마라로제 떡볶이 영상에 마라로제찜닭이 뜨던 것을 여기서 막는다.
+  ///
+  /// **요리마다 한 장이다.** 같은 음식을 파는 집이 여러 곳이어도 첫 화면에는 한 장만
+  /// 세운다 (`AnalysisResult.onePerDish`). 나머지는 "다른 결과 보기" 에 있다.
+  List<ComboSuggestion> get suggestions => _suggestions;
+
+  /// 비슷한 곳까지 전부. 카드 조작(담기·수량)은 두 화면이 함께 쓰므로 이쪽을 본다.
+  List<ComboSuggestion> get allSuggestions => _allSuggestions;
+
+  /// 첫 화면은 비었는데 비슷한 곳은 있는 상태.
+  /// 그냥 빈 화면을 두면 분석이 실패한 것처럼 보인다.
+  bool get hasOnlySimilar => suggestions.isEmpty && allSuggestions.isNotEmpty;
 
   int selectedComboIndex = 0;
 
@@ -148,10 +215,32 @@ class AppFlow extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 공유로 들어온 링크가 아직 조건 선택 화면까지 못 간 상태.
+  ///
+  /// 앱이 꺼져 있을 때 공유로 열면 세션 복원과 링크 처리가 같이 달린다. 링크가
+  /// 먼저 도착해 조건 화면으로 보내 놔도, 복원이 끝나면서 [completeLogin] 이
+  /// 홈으로 덮어써 공유가 통째로 사라진다. 그 경합을 이 깃발이 막는다.
+  ///
+  /// 로그인이 안 돼 있던 경우도 같은 깃발로 잇는다 — 로그인 화면을 거친 뒤
+  /// 홈이 아니라 조건 화면으로 이어져야 공유한 링크가 살아 있다.
+  bool _sharePending = false;
+
   /// 링크를 받으면 바로 분석하지 않고 취향 설정 화면을 먼저 보여준다.
-  void start(String link) {
+  ///
+  /// **앱이 어느 화면에 있든, 꺼져 있었든 여기로 온다.** 화면 전환은 스테이지
+  /// 하나로만 이뤄져서(main.dart 의 `_screenFor`) 덮을 라우트가 없다. 남는
+  /// 문제는 로그인·세션 복원과의 순서뿐이고 그건 [_sharePending] 이 잇는다.
+  ///
+  /// [sharedText] 는 공유로 들어온 원문 전체다. 링크만 남기고 버리면 인스타
+  /// 게시물에서 쓸 수 있는 유일한 캡션을 잃는다 — [_pendingSharedText] 참고.
+  void start(String link, {String sharedText = ''}) {
     _pendingLink = link;
-    _setStage(AppStage.keyword);
+    _pendingSharedText = sharedText;
+    _sharePending = true;
+
+    // 아직 로그인 전이면 분석을 시작할 수 없다(서버가 401 을 준다). 로그인
+    // 화면에 세워 두고, 끝나면 completeLogin 이 조건 화면으로 데려온다.
+    _setStage(_hasSession ? AppStage.keyword : AppStage.login);
   }
 
   // ── 인증 ──────────────────────────────────────────────────────────────────
@@ -198,6 +287,10 @@ class AppFlow extends ChangeNotifier {
     } on Object {
       // 만료·위조된 토큰이다. 지우고 로그인 화면에 남는다.
       await _clearSession();
+      // 공유로 열린 참이라면 이미 조건 화면에 서 있다. 그대로 두면 로그인 없이
+      // 분석을 시작해 401 을 맞는다. 로그인부터 시키고, 끝나면 completeLogin 이
+      // 다시 조건 화면으로 데려온다 (_sharePending 은 그대로 둔다).
+      if (_sharePending) _setStage(AppStage.login);
     } finally {
       isRestoringSession = false;
       notifyListeners();
@@ -260,6 +353,12 @@ class AppFlow extends ChangeNotifier {
   Future<void> logout() async {
     await _authRepository.logout();
     await _clearSession();
+
+    // 기다리던 공유도 이 사람 것이다. 다음에 로그인한 사람을 남의 링크 분석
+    // 화면으로 떨어뜨리면 안 된다.
+    _sharePending = false;
+    _pendingLink = '';
+    _pendingSharedText = '';
 
     cart = Cart();
     orders = [];
@@ -348,7 +447,10 @@ class AppFlow extends ChangeNotifier {
   /// 곧바로 위치를 1회 수집한다. 배달 주소가 필요한 화면에 도달했을 때 이미
   /// 준비돼 있어야 흐름이 끊기지 않는다.
   void completeLogin() {
-    _setStage(AppStage.yogiyoHome);
+    // 공유로 들어온 링크가 기다리고 있으면 홈을 거치지 않는다. 여기서 홈으로
+    // 보내면 앱이 꺼져 있을 때 공유한 링크가 매번 사라진다 — 세션 복원이
+    // 링크 처리보다 늦게 끝나기 때문이다.
+    _setStage(_sharePending ? AppStage.keyword : AppStage.yogiyoHome);
     refreshLocation();
     loadPopularPosts();
   }
@@ -360,8 +462,9 @@ class AppFlow extends ChangeNotifier {
   /// 잡을 사람이 없으므로 여기서 삼키고, 홈의 그 줄만 비워 둔다.
   Future<void> loadPopularPosts() async {
     try {
-      final page = await _postRepository.list(sort: PostSort.popular);
-      popularPosts = page.items;
+      final page = await _postRepository.list(sort: PostSort.popular, size: 5);
+      // 서버나 더미 저장소가 size를 무시하더라도 홈의 "Best 5"는 다섯 장만 그린다.
+      popularPosts = page.items.take(5).toList();
     } on Object {
       popularPosts = [];
     }
@@ -373,12 +476,16 @@ class AppFlow extends ChangeNotifier {
 
   /// 홈으로 돌아간다.
   ///
-  /// 인기 조합이 비어 있으면 다시 받아온다. 이 목록은 로그인 직후 한 번만 채우는데,
-  /// 그때 실패했거나 로그인을 거치지 않고 홈에 온 경우 시안(681:6436)의 카드 자리가
-  /// 빈 분홍 영역으로 남는다.
+  /// 인기 조합을 **매번** 다시 받아온다. 비어 있을 때만 받으면 두 가지가 깨진다.
+  /// 하나는 로그인 때 실패했거나 로그인을 거치지 않고 홈에 온 경우 시안(681:6436)의
+  /// 카드 자리가 빈 분홍 영역으로 남는 것이고, 다른 하나는 이미 채워진 목록이
+  /// 세션 내내 갱신되지 않아 지워진 글이 계속 떠 있는 것이다.
   void backToYogiyoHome() {
+    // 공유를 분석하지 않고 나왔다. 깃발을 들고 있으면 다음 로그인이 엉뚱하게
+    // 조건 화면으로 떨어진다.
+    _sharePending = false;
     _setStage(AppStage.yogiyoHome);
-    if (popularPosts.isEmpty) loadPopularPosts();
+    loadPopularPosts();
   }
 
   // ── 결제 내역 ──────────────────────────────────────────────────────────────
@@ -654,28 +761,41 @@ class AppFlow extends ChangeNotifier {
     required int menuId,
     required int delta,
   }) {
+    // 장바구니에 담긴 카드면 그쪽도 함께 고친다. **카드를 그리는 건 언제나
+    // `combo.items` 다** — 예전에는 담긴 카드일 때 장바구니만 고치고 돌아가서,
+    // 체크된 카드에서는 수량도 휴지통도 눌러도 아무 일이 없어 보였다
+    // (디자이너 피드백 2026-08-13).
     final store = cart.storeOf(combo.id);
     if (store != null) {
       store.changeQuantity(menuId: menuId, delta: delta);
       cart.pruneEmptyStores();
+    }
+
+    // 첫 화면과 "다른 결과 보기"는 같은 매장의 서로 다른 카드 사본을 가질 수 있다.
+    // 사용자가 보고 있는 카드만 고치면 화면을 옮겼을 때 예전 수량이 되살아난다.
+    // exactMatches처럼 같은 객체가 양쪽 목록에 든 경우는 Set이 한 번만 남긴다.
+    final cards = <ComboSuggestion>{..._suggestions, ..._allSuggestions}
+        .where((card) => card.id == combo.id)
+        .toList();
+    if (cards.every((card) => card.lineOf(menuId) == null)) {
       notifyListeners();
       return;
     }
 
-    final line = combo.lineOf(menuId);
-    if (line == null) return;
-    final next = line.quantity + delta;
+    for (final card in cards) {
+      final line = card.lineOf(menuId);
+      if (line == null) continue;
+      final next = line.quantity + delta;
 
-    // 수량 1에서 한 번 더 내리면 휴지통 아이콘이 되고, 그때는 그 메뉴를 뺀다
-    // (피드백 2026-08-09). 예전에는 카드가 비는 것을 막으려고 아무 일도 하지
-    // 않았는데, 아이콘이 휴지통인데 안 지워지니 눌리지 않는 것으로 보였다.
-    if (next <= 0) {
-      combo.items = [for (final l in combo.items) if (l.menuId != menuId) l];
-      notifyListeners();
-      return;
+      // 수량 1에서 한 번 더 내리면 휴지통 아이콘이 되고, 그때는 그 메뉴를 뺀다
+      // (피드백 2026-08-09). 예전에는 카드가 비는 것을 막으려고 아무 일도 하지
+      // 않았는데, 아이콘이 휴지통인데 안 지워지니 눌리지 않는 것으로 보였다.
+      if (next <= 0) {
+        card.items = [for (final item in card.items) if (item.menuId != menuId) item];
+      } else {
+        line.quantity = next;
+      }
     }
-
-    line.quantity = next;
     notifyListeners();
   }
 
@@ -705,8 +825,11 @@ class AppFlow extends ChangeNotifier {
     required List<MenuOption> chosen,
     SpiceLevel? spice,
   }) {
-    for (final line in suggestion.items) {
-      if (line.menuId != menuId) continue;
+    final cards = <ComboSuggestion>{..._suggestions, ..._allSuggestions}
+        .where((card) => card.id == suggestion.id);
+    for (final card in cards) {
+      final line = card.lineOf(menuId);
+      if (line == null) continue;
       line.applySelection(chosen);
       if (spice != null) line.selectedSpice = spice;
     }
@@ -720,16 +843,22 @@ class AppFlow extends ChangeNotifier {
   }
 
   /// 출처 영상을 주문 요청에 실을 형태로. 분석에 쓴 링크를 그대로 재사용한다.
+  ///
+  /// `title` 은 **영상 제목**이다. 예전에는 가게 이름(`primaryRestaurantName`)이
+  /// 들어갔는데, 주문내역 카드와 족보의 출처 줄이 이 값을 "어느 영상에서 담았는지"
+  /// 로 보여주기 때문에 가게 이름이 오면 카드마다 같은 글자가 반복된다.
+  /// 제목을 못 건진 링크에서만 예전처럼 가게 이름으로 채운다.
   OrderSource? _cartSource() {
     final s = source;
     if (s == null) return null;
+    final title = s.title.trim();
     return OrderSource(
       platform: s.platform == SourcePlatform.instagram
           ? SourceKind.instagram
           : SourceKind.youtube,
       url: s.url,
       thumbnailUrl: _lastThumbnailUrl,
-      title: extraction?.primaryRestaurantName ?? '',
+      title: title.isNotEmpty ? title : (extraction?.primaryRestaurantName ?? ''),
     );
   }
 
@@ -769,6 +898,14 @@ class AppFlow extends ChangeNotifier {
       cart = Cart();
       _setStage(AppStage.orderDone);
     } on ApiException catch (e) {
+      // 실패한 요청을 그대로 남긴다. 서버가 500 에 사유를 주지 않는 경우가 있어
+      // (source.title 이 길어 컬럼을 넘긴 건이 그랬다) 본문 없이는 어느 필드가
+      // 문제인지 기기에서 알 방법이 없다.
+      if (kDebugMode) {
+        debugPrint('[주문실패] HTTP ${e.statusCode} code=${e.code} '
+            'message=${e.message} path=${e.path}');
+        debugPrint('[주문요청] ${jsonEncode(cart.toOrderJson())}');
+      }
       _fail(_checkoutFailureMessage(e));
     } on NetworkException {
       _fail('주문을 보내지 못했어요.\n연결을 확인하고 다시 시도해 주세요.');
@@ -780,11 +917,20 @@ class AppFlow extends ChangeNotifier {
 
   /// 주문 실패 안내. 400 은 대개 프론트가 계산한 값이 서버와 어긋난 경우다 —
   /// 서버가 menuId 로 다시 계산하므로 사용자가 할 수 있는 건 다시 담는 것뿐이다.
-  static String _checkoutFailureMessage(ApiException e) => switch (e.statusCode) {
-        400 => '주문 내용을 다시 확인해 주세요.\n메뉴나 가격이 바뀌었을 수 있어요.',
-        404 => '지금은 주문할 수 없는 메뉴가 있어요.',
-        _ => '주문에 실패했어요.\n잠시 후 다시 시도해 주세요.',
-      };
+  ///
+  /// 디버그 빌드에서는 서버가 준 사유를 그대로 붙인다. 이게 없으면 어떤 필드가
+  /// 검증에 걸렸는지 기기에서는 알 방법이 없고, 실제로 그것 때문에 "메뉴나 가격이
+  /// 바뀌었을 수 있어요" 를 보며 엉뚱한 곳을 뒤졌다.
+  static String _checkoutFailureMessage(ApiException e) {
+    final base = switch (e.statusCode) {
+      400 => '주문 내용을 다시 확인해 주세요.\n메뉴나 가격이 바뀌었을 수 있어요.',
+      404 => '지금은 주문할 수 없는 메뉴가 있어요.',
+      _ => '주문에 실패했어요.\n잠시 후 다시 시도해 주세요.',
+    };
+    final detail = (e.message ?? '').trim();
+    if (!kDebugMode || detail.isEmpty) return base;
+    return '$base\n\n[HTTP ${e.statusCode}] $detail';
+  }
 
   /// 완료 화면의 "홈으로 이동하기" (시안 949:4470 의 유일한 버튼).
   void backToYogiyoHomeFromReceipt() {
@@ -874,11 +1020,47 @@ class AppFlow extends ChangeNotifier {
       );
     }
 
+    // 먹방 조합·다른 결과보기의 카드에도 같이 넣는다. 그 화면들은 장바구니가
+    // 아니라 `ComboSuggestion.items` 를 그리므로, 장바구니에만 담으면 돌아갔을 때
+    // 추가된 것이 보이지 않는다 (디자이너 피드백 2026-08-13).
+    _addToSuggestion(restaurant.restaurantId, menu, chosen: chosen, spice: spice);
+
     if (thenClose) {
       closeMenuDetail();
       return;
     }
     notifyListeners();
+  }
+
+  /// 매장 메뉴에서 담은 것을 그 매장의 조합 카드에도 넣는다.
+  ///
+  /// 조합 카드는 분석 결과의 스냅샷이라 장바구니와 별개의 목록을 들고 있다.
+  /// 해당 매장의 카드가 없으면(장바구니에서 연 경우) 아무 일도 하지 않는다.
+  void _addToSuggestion(
+    int restaurantId,
+    Menu menu, {
+    List<MenuOption>? chosen,
+    SpiceLevel? spice,
+  }) {
+    // **두 목록을 다 본다.** 첫 화면([suggestions])은 메뉴 필터를 거친 카드를 그리고
+    // "다른 결과 보기"([allSuggestions])는 걸러지지 않은 카드를 그려서, 같은 가게라도
+    // 서로 다른 객체다. 한쪽만 고치면 다른 쪽에서 추가한 메뉴가 보이지 않는다.
+    // 같은 가게가 양쪽에 한 객체로 들어 있는 경우(exactMatches)는 Set 이 걸러 준다.
+    final cards = <ComboSuggestion>{..._suggestions, ..._allSuggestions};
+    for (final combo in cards) {
+      if (combo.id != restaurantId) continue;
+
+      final line = combo.lineOf(menu.menuId);
+      if (line != null) {
+        // 이미 있는 메뉴면 수량만 올린다. 장바구니와 같은 규칙이다.
+        line.quantity += 1;
+      } else {
+        final added = menu.toCartLine();
+        if (chosen != null) added.applySelection(chosen);
+        if (spice != null) added.selectedSpice = spice;
+        combo.items = [...combo.items, added];
+      }
+    }
   }
 
   /// 그 메뉴가 장바구니에 몇 개 담겼는지. 매장 메뉴 화면이 수량을 보여준다.
@@ -912,31 +1094,29 @@ class AppFlow extends ChangeNotifier {
   }
 
   /// 정렬을 적용한 비교 목록.
-  List<ComboSuggestion> get sortedSuggestions => sort.apply(suggestions);
-
-  /// 취향 설정 화면을 필터로 다시 열었는지.
-  ///
-  /// 시안의 "필터"(681:6194)는 키워드 선택 화면과 구조가 같다 — 디자이너가 같은
-  /// 화면을 재사용했다. 그래서 화면을 새로 만들지 않고 이 깃발로 갈라 쓴다.
-  bool _keywordIsFilter = false;
+  List<ComboSuggestion> get sortedSuggestions => sort.apply(allSuggestions);
 
   /// 마지막 분석의 썸네일. 필터를 다시 걸 때 같은 이미지를 써야 카드가 바뀌지 않는다.
   String? _lastThumbnailUrl;
 
-  /// 비교 목록의 필터 칩. 취향 설정 화면을 필터로 다시 연다.
-  void openFilter() {
-    _keywordIsFilter = true;
-    _setStage(AppStage.keyword);
+  /// 비교 목록의 필터 시트에서 "적용하기".
+  ///
+  /// **화면을 옮기지 않는다.** 예전에는 필터 칩이 분석 전 취향 설정 화면
+  /// (`AppStage.keyword`)을 다시 열었다 — 목록을 보다가 화면이 통째로 바뀌었다
+  /// (피드백 2026-08-13). 이제 목록 위에 시트만 올라오고 이 메서드가 곧 "적용" 이다.
+  ///
+  /// AI 는 다시 부르지 않는다. 영상에서 뽑은 내용은 그대로이고 취향만 바뀌었다.
+  Future<void> applyFilter(TastePreference next) {
+    preference = next;
+    notifyListeners();
+    return _reapplyPreference();
   }
 
-  /// 취향 설정에서 "적용하기"를 누르면 실제 분석을 시작한다.
-  /// 필터로 열렸을 때는 AI 를 다시 부르지 않고 분석만 다시 요청한다 —
-  /// 영상에서 뽑은 내용은 그대로이고 취향만 바뀌었다.
+  /// 분석 전 취향 설정에서 "적용하기"를 누르면 실제 분석을 시작한다.
   Future<void> applyPreferenceAndAnalyze() async {
-    if (_keywordIsFilter) {
-      _keywordIsFilter = false;
-      return _reapplyPreference();
-    }
+    // 공유가 여기까지 왔다. 깃발을 내려 두지 않으면 다음 로그인이 엉뚱하게
+    // 조건 화면으로 떨어진다.
+    _sharePending = false;
     return _analyze();
   }
 
@@ -955,6 +1135,59 @@ class AppFlow extends ChangeNotifier {
     analysis = analyzed;
     selectedComboIndex = 0;
     _setStage(AppStage.comboList);
+  }
+
+  /// 공유 원문에서 링크를 걷어낸 나머지.
+  ///
+  /// 공유 텍스트는 보통 "캡션 …\nhttps://instagram.com/reel/…" 모양이다. 링크는
+  /// [_pendingLink] 로 따로 들고 있어 중복이고, 모델에 URL 을 넣어 봐야 토큰만 먹는다.
+  @visibleForTesting
+  String get sharedCaption {
+    final raw = _pendingSharedText.replaceAll(RegExp(r'https?://\S+'), ' ');
+    final cleaned = raw.replaceAll(RegExp(r'[ \t]+'), ' ').trim();
+    // 링크만 공유된 경우 남는 건 빈 문자열이거나 부스러기뿐이다. 그걸 캡션이라고
+    // 넘기면 rawText 가 그럴듯해져 서버의 재수집 신호(isThin)까지 가려 버린다.
+    return cleaned.length < 4 ? '' : cleaned;
+  }
+
+  /// 제공자를 앞에서부터 써 보고 첫 성공을 돌려준다.
+  ///
+  /// 앞쪽이 한도로 닫히면 남은 제공자로 넘어간다. 시연 도중 하루 한도가 닫혀
+  /// 아무것도 못 하게 되는 걸 막는 자리다 — 키가 하나뿐이면 목록도 하나다.
+  ///
+  /// 두 번째 값은 마지막으로 제공자를 접게 만든 이유다. 전부 실패했을 때 화면에
+  /// 무슨 말을 할지가 여기서 갈린다.
+  @visibleForTesting
+  Future<(ExtractionResult?, Object?)> extractWithFallback(String text) async {
+    Object? lastFatal;
+
+    for (final extractor in _extractors()) {
+      var giveUp = false;
+      for (var attempt = 0; attempt < 2 && !giveUp; attempt++) {
+        try {
+          return (await extractor.extract(text), null);
+        } on ExtractorAuthException catch (e) {
+          // 키가 거부됐다. 재시도해도 같은 결과라 이 제공자는 즉시 접는다.
+          lastFatal = e;
+          giveUp = true;
+        } on ExtractorQuotaException catch (e) {
+          // 재시도하지 않는다. 한도가 닫힌 상태라 한 번 더 부르면 남은 몫만 준다.
+          debugPrint('${extractor.runtimeType} 한도: ${e.message}');
+          lastFatal = e;
+          giveUp = true;
+        } on ExtractorRequestException catch (e) {
+          // 우리가 보낸 요청이 잘못됐다. 제공자를 바꿔도 같은 요청을 보낼 것이라
+          // 다음으로 넘기지 않는다 — 고칠 곳은 우리 코드다.
+          return (null, e);
+        } catch (e) {
+          // 그 밖의 실패(네트워크·타임아웃)는 1회 자동 재시도.
+          // 삼키면 기기에서 무엇이 터졌는지 알 방법이 없어 로그로는 남긴다.
+          debugPrint('AI 추출 실패 (재시도 ${attempt + 1}/2): $e');
+        }
+      }
+    }
+
+    return (null, lastFatal);
   }
 
   Future<void> _analyze() async {
@@ -979,50 +1212,57 @@ class AppFlow extends ChangeNotifier {
       return;
     }
 
-    String text;
+    final shared = sharedCaption;
+
+    String text = '';
     String? thumbnailUrl;
+    String videoTitle = '';
     try {
       final metadata = await const MetadataFetcher().fetch(uri);
       text = metadata.combinedText;
       thumbnailUrl = metadata.imageUrl;
+      // 주문내역 카드와 족보의 출처 줄이 쓸 값이다. `combinedText` 안에도 있지만
+      // 계정명·설명과 붙어 있어 거기서는 제목만 떼어낼 수 없다.
+      videoTitle = metadata.title ?? '';
       _lastThumbnailUrl = thumbnailUrl;
     } catch (_) {
-      _fail('게시물 내용을 가져오지 못했어요.\n잠시 후 다시 시도해 주세요.');
-      return;
+      // 공유 원문이 있으면 그것만으로 분석할 수 있다. 메타데이터는 보조다 —
+      // 인스타에서 얻을 수 있는 건 어차피 계정명 정도뿐이다.
+      if (shared.isEmpty) {
+        _fail('게시물 내용을 가져오지 못했어요.\n잠시 후 다시 시도해 주세요.');
+        return;
+      }
     }
 
-    // Gemini 에 넣은 텍스트를 그대로 보관한다. 서버로 분석을 넘길 때
+    // 공유 원문을 뒤에 붙인다. 메타데이터가 비어 있을 때 이게 유일한 캡션이고,
+    // 둘 다 있으면 서로를 보강한다.
+    if (shared.isNotEmpty) {
+      text = text.trim().isEmpty ? shared : '${text.trim()}\n$shared';
+    }
+
+    // 모델에 넣은 텍스트를 그대로 보관한다. 서버로 분석을 넘길 때
     // 추출 결과만으로는 부족하고 원문이 함께 필요하다.
-    final input = AnalysisSource.fromUrl(url: uri, rawText: text);
+    final input = AnalysisSource.fromUrl(url: uri, rawText: text, title: videoTitle);
     source = input;
 
     // 호출 전에 키를 확인한다. 없거나 템플릿 값이면 네트워크를 태울 필요가 없고,
     // "잠시 후 다시 시도"는 거짓말이 된다 — 키 문제는 재시도로 낫지 않는다.
-    if (!Env.hasGeminiKey) {
+    if (!Env.hasAiKey) {
       _fail(_keyProblemMessage);
       return;
     }
 
-    ExtractionResult? result;
-    for (var attempt = 0; attempt < 2; attempt++) {
-      try {
-        result = await GeminiExtractor(apiKey: Env.geminiApiKey).extract(text);
-        break;
-      } on GeminiAuthException {
-        // 키가 거부됐다. 재시도해도 같은 결과라 즉시 포기한다.
-        _fail(_keyProblemMessage);
-        return;
-      } on GeminiRequestException catch (e) {
-        // 우리가 보낸 요청이 잘못됐다. 재시도가 소용없는 건 키 문제와 같지만
-        // 사용자가 할 수 있는 일이 없고, 키를 의심하게 두면 원인을 놓친다.
-        _fail(_requestProblemMessage(e));
-        return;
-      } catch (_) {
-        // 그 밖의 실패(네트워크·타임아웃)는 1회 자동 재시도
-      }
-    }
+    final (result, fatal) = await extractWithFallback(text);
+
     if (result == null) {
-      _fail('AI 분석에 실패했어요.\n잠시 후 다시 시도해 주세요.');
+      // 마지막 이유를 그대로 전한다 — "잠시 후 다시 시도" 로 뭉개면 키 문제도
+      // 한도 문제도 네트워크 탓으로 보여 원인을 못 찾는다.
+      _fail(switch (fatal) {
+        ExtractorAuthException() => _keyProblemMessage,
+        ExtractorQuotaException() => _quotaProblemMessage(fatal),
+        ExtractorRequestException() => _requestProblemMessage(fatal),
+        _ => 'AI 분석에 실패했어요.\n잠시 후 다시 시도해 주세요.',
+      });
       return;
     }
     extraction = result;
@@ -1062,11 +1302,35 @@ class AppFlow extends ChangeNotifier {
       return null;
     }
 
-    if (analyzed.isEmpty) {
-      _fail('조건에 맞는 조합을 찾지 못했어요.');
+    // 후보가 왜 그렇게 뽑혔는지는 점수를 봐야 안다. 화면만 보면 "비슷한 집" 인지
+    // "아무거나 채운 것" 인지 구분할 수 없다.
+    if (kDebugMode) {
+      for (final d in analyzed.dishResults) {
+        debugPrint('[분석] 요리="${d.dishName}"');
+        for (final c in d.candidates) {
+          debugPrint('  score=${c.score.toStringAsFixed(4)} '
+              '${c.restaurant.name} / ${c.item.name} '
+              '(${c.restaurant.foodCategory.wire})');
+        }
+      }
+      debugPrint('[분석] exactMatches=${analyzed.exactMatches.length}');
+    }
+
+    // 요리와 카테고리가 다른 후보를 걷어낸다. 서버가 "가장 가까운 N개" 를 주기
+    // 때문에, 그 카테고리 가게가 반경 안에 없으면 전혀 다른 음식이 올라온다
+    // (포테이토피자 릴스에 한솥도시락이 추천된 건이 그랬다).
+    final filtered = analyzed.withCategoryFilter({
+      for (final dish in result.dishes)
+        if (dish.foodCategory != null) dish.name: dish.foodCategory!,
+    });
+
+    if (filtered.isEmpty) {
+      // 서버가 왜 0개인지 말해 준다(emptyReason). 앱이 카테고리로 더 걸러서 0이
+      // 된 경우에는 그 값이 없으므로 일반 문구로 떨어진다.
+      _fail(analyzed.emptyMessage);
       return null;
     }
-    return analyzed;
+    return filtered;
   }
 
   // ── 요기족보 ───────────────────────────────────────────────────────────────
@@ -1087,9 +1351,11 @@ class AppFlow extends ChangeNotifier {
 
   /// 반환된 Future 는 목록 로딩이 끝날 때 완료된다. 화면은 기다리지 않아도 되지만
   /// 테스트가 로딩 완료를 기다릴 수 있어야 한다.
-  Future<void> openJokbo() {
+  Future<void> openJokbo() async {
     _setStage(AppStage.jokboHome);
-    return loadPosts();
+    // 이 화면은 목록과 인기 배너를 함께 보여준다. 목록만 새로 받으면 배너는
+    // 로그인 시점 스냅샷으로 남아, 지워진 글이 위에만 계속 떠 있게 된다.
+    await Future.wait([loadPosts(), loadPopularPosts()]);
   }
 
   /// 다음 페이지 커서. null 이면 더 없다 (api-yogijokbo.md 1번).
@@ -1231,24 +1497,38 @@ class AppFlow extends ChangeNotifier {
   ///
   /// 저장했는지를 돌려준다. 사진을 다시 올릴 수 없어 멈춘 경우 false 이고, 화면은
   /// 수정 화면에 남아 사용자에게 알린다.
+  /// [images] 가 저장 후 남을 사진 **전부**다. 서버가 받은 것으로 통째로 갈아
+  /// 끼우므로, 뺀 사진은 목록에서 빠지는 것만으로 지워진다.
+  /// 넘기지 않으면 지금 붙어 있는 사진을 그대로 유지한다.
   Future<bool> savePostEdit({
     required String title,
     required String body,
+    List<PostImage>? images,
   }) async {
     final post = selectedPost;
     final trimmed = title.trim();
     if (post == null || trimmed.isEmpty) return false;
+
+    final next =
+        images ?? [for (final url in post.imageUrls) PostImage.kept(url)];
 
     try {
       await _postRepository.updatePost(
         post.id,
         title: trimmed,
         body: body.trim(),
-        images: [for (final url in post.imageUrls) PostImage.kept(url)],
+        images: next,
       );
     } on PostImagesUnavailableException {
       return false;
     }
+
+    // 화면에 떠 있는 글도 새 사진 목록으로 맞춘다. 서버에 올린 사진의 URL 은
+    // 응답이 주지 않으므로, 새로 고른 사진은 상세를 다시 열 때 채워진다.
+    post.imageUrls = [
+      for (final image in next)
+        if (image is KeptPostImage) image.url,
+    ];
 
     // 목록에도 같은 글이 떠 있다. 다시 받지 않고 그 자리에서 맞춘다 —
     // 수정 후 목록으로 돌아갔을 때 옛 제목이 남아 있으면 저장이 안 된 것처럼 보인다.
@@ -1277,6 +1557,10 @@ class AppFlow extends ChangeNotifier {
     selectedPost = null;
     postComments = [];
     _setStage(AppStage.jokboHome);
+
+    // 로컬에서 빼는 것만으로는 부족하다. 자리가 하나 비었으니 순위에 밀려 있던
+    // 다음 글이 배너로 올라와야 한다. 서버 기준으로 다시 받는다.
+    await loadPopularPosts();
   }
 
   /// 댓글 삭제. 카운트는 남은 댓글 수로 다시 센다.
@@ -1344,6 +1628,7 @@ class AppFlow extends ChangeNotifier {
   Future<String?> submitPost({
     required String title,
     required String body,
+    List<String> imagePaths = const [],
   }) async {
     final checkoutId = composeCheckoutId;
     if (checkoutId == null || title.trim().isEmpty) return null;
@@ -1352,7 +1637,8 @@ class AppFlow extends ChangeNotifier {
       checkoutId: checkoutId,
       title: title.trim(),
       body: body.trim(),
-      // 사진 첨부(갤러리·카메라)는 이번 범위가 아니다. 명세상 0장도 허용된다.
+      // 명세상 0장도 허용된다. 고른 사진이 없으면 파트를 아예 안 보낸다.
+      imagePaths: imagePaths,
     );
 
     await _orderRepository.markPosted(checkoutId);
@@ -1373,13 +1659,43 @@ class AppFlow extends ChangeNotifier {
   /// 디버그 빌드에서는 Gemini 가 준 설명을 그대로 보여준다. 이게 없으면 스키마
   /// 오류가 "AI 분석에 실패했어요" 로만 보여서, 네트워크 문제인지 우리 버그인지
   /// 화면만 보고는 구분할 수 없다.
-  static String _requestProblemMessage(GeminiRequestException e) => kDebugMode
+  /// 할당량이 닫혔을 때. **사용자가 다시 눌러도 열리지 않는다** — 무료 등급은
+  /// 하루 단위라 "잠시 후 다시 시도" 라고 하면 계속 누르게 만든다.
+  /// 테스트가 제공자 목록을 대신 주는 자리. 실제 키·네트워크 없이 폴백을 본다.
+  @visibleForTesting
+  List<DishExtractor>? extractorsOverride;
+
+  /// 쓸 모델을 키로 고른다. 앞엣것부터 쓰고, 한도로 닫히면 다음으로 넘어간다.
+  ///
+  /// OpenAI 를 앞에 두는 이유는 Gemini 무료 등급이 모델·프로젝트당 하루 20건이라
+  /// 시연 준비 중에 닫히기 때문이다. 키가 하나뿐이면 목록도 하나다.
+  List<DishExtractor> _extractors() =>
+      extractorsOverride ??
+      [
+        if (Env.hasOpenAiKey)
+          OpenAiExtractor(
+            apiKey: Env.openAiApiKey,
+            model: Env.openAiModel.isEmpty
+                ? OpenAiExtractor.defaultModel
+                : Env.openAiModel,
+          ),
+        if (Env.hasGeminiKey) GeminiExtractor(apiKey: Env.geminiApiKey),
+      ];
+
+  static String _quotaProblemMessage(ExtractorQuotaException e) => kDebugMode
+      ? 'AI 사용량 한도를 넘었어요.\n${e.message}'
+      : e.isDaily
+          ? '오늘 AI 분석 사용량을 다 썼어요.\n내일 다시 시도해 주세요.'
+          : '지금 요청이 몰렸어요.\n잠시 후 다시 시도해 주세요.';
+
+  static String _requestProblemMessage(ExtractorRequestException e) => kDebugMode
       ? 'AI 요청이 거부됐어요 (HTTP ${e.statusCode}).\n${e.message}'
       : 'AI 분석에 실패했어요.\n담당자에게 문의해 주세요.';
 
   static String get _keyProblemMessage => kDebugMode
-      ? 'Gemini API 키가 설정되지 않았어요.\n'
-          '.env 의 GEMINI_API_KEY 를 실제 키로 채우고 다시 빌드해 주세요.'
+      ? 'AI API 키가 설정되지 않았어요.\n'
+          '.env 의 OPENAI_API_KEY 또는 GEMINI_API_KEY 를 실제 키로 채우고\n'
+          '다시 빌드해 주세요.'
       : '지금 AI 분석을 쓸 수 없어요.\n담당자에게 문의해 주세요.';
 
   void _fail(String message) {

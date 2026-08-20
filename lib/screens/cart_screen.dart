@@ -99,7 +99,6 @@ class _VideoSection extends StatelessWidget {
             radius: 0,
           ),
           videoTitle: cart.source!.title,
-          creatorName: '',
         ),
       );
 }
@@ -148,7 +147,11 @@ class _StoreList extends StatelessWidget {
         child: Column(
           children: [
             for (var i = 0; i < cart.stores.length; i++) ...[
-              if (i > 0) const DsDivider(color: AppColors.gray300),
+              // 매장 사이는 선이 아니라 **16 회색 띠**로 끊는다. 배달이 따로 가는
+              // 별개의 주문이라 한 줄짜리 구분선으로는 같은 가게의 메뉴 구분과
+              // 구별되지 않았다 (디자이너 피드백 2026-08-13).
+              if (i > 0)
+                Container(height: 16, width: double.infinity, color: AppColors.bg),
               _StoreSection(store: cart.stores[i]),
             ],
           ],

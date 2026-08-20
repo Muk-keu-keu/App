@@ -70,7 +70,13 @@ void main() {
     await flow.openJokbo();
     await pumpScreen(tester, const YogijokboHomeScreen(), flow);
 
-    await tester.tap(find.text('떵개 추천 두찜 로제 닭발').last);
+    // 같은 제목이 인기 배너와 목록 양쪽에 나온다. 목록 쪽은 배너 높이만큼
+    // 아래로 밀려 화면 밖에 있을 수 있으므로 먼저 끌어올린다.
+    final item = find.text('떵개 추천 두찜 로제 닭발').last;
+    await tester.ensureVisible(item);
+    await tester.pump();
+
+    await tester.tap(item);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -119,9 +125,43 @@ void main() {
     expect(find.text('두찜-잠실새내점'), findsOneWidget);
     expect(find.text('[사이드] 치즈볼'), findsOneWidget);
     // 시트는 금액·수량까지 보여준다. 치즈볼 2,000 × 2 개.
-    expect(find.text('4,000원 2개'), findsOneWidget);
+    // 시안(893:1944)에서 금액과 수량은 크기·색이 달라 서로 다른 텍스트다.
+    expect(find.text('4,000원'), findsOneWidget);
+    expect(find.text('2개'), findsOneWidget);
     // 시트 하단 CTA. 상세의 알약 버튼과 같은 문구라 둘이 보인다.
     expect(find.text('나도 주문하기'), findsWidgets);
+  });
+
+  // 디자이너 피드백 2026-08-13 — 댓글 삭제 메뉴가 목록 아래에 뜬다는 지적.
+  // 점 아이콘 바로 아래에 붙는지 좌표로 재 본다.
+  testWidgets('댓글 삭제 메뉴는 그 댓글의 점 아이콘 바로 아래에 뜬다', (tester) async {
+    final flow = newFlow();
+    await flow.openPost('post_01H8X');
+    await pumpScreen(tester, const PostDetailScreen(), flow);
+
+    await tester.scrollUntilVisible(
+      find.text('댓글 4'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+
+    // 첫 댓글의 점 아이콘. 앵커용 GlobalKey 를 이미 달고 있어 ValueKey 를
+    // 더 붙일 수 없으므로 아이콘으로 찾는다.
+    final dots = find.byIcon(Icons.more_horiz).first;
+    await tester.ensureVisible(dots);
+    await tester.pump();
+    final dotsRect = tester.getRect(dots);
+
+    await tester.tap(dots);
+    await tester.pumpAndSettle();
+
+    expect(find.text('삭제하기'), findsOneWidget);
+    final menuRect = tester.getRect(find.text('삭제하기'));
+
+    // 아이콘 아래 60 안쪽에 붙어야 한다. 목록 맨 아래로 떨어지면 이 값을 넘는다.
+    expect(menuRect.top - dotsRect.bottom, lessThan(60));
+    expect(menuRect.top, greaterThanOrEqualTo(dotsRect.bottom));
   });
 
   // 피드백 7번 — 점 3개는 작성자 줄이 아니라 뒤로가기와 같은 줄에 있다.

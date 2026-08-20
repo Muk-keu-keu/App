@@ -55,6 +55,32 @@ void main() {
   });
 
   group('요기족보 목록', () {
+    test('발표용 글 4개가 서로 다른 음식 사진과 함께 들어 있다', () async {
+      final page = await MockPostRepository().list(sort: PostSort.latest);
+      final demos = page.items.where((post) => post.id.startsWith('demo_')).toList();
+
+      expect(demos, hasLength(4));
+      expect(demos.map((post) => post.title), {
+        '로제엽떡과 허니콤보 치팅 조합',
+        '우삼겹 우동전골과 바삭 돈카츠',
+        '참치야채죽으로 속 편한 한 끼',
+        '꾸덕한 로제떡볶이 치즈 필수',
+      });
+      expect(
+        demos.map((post) => post.thumbnailPath).toSet(),
+        hasLength(4),
+      );
+      expect(
+        demos.every(
+          (post) =>
+              post.imagePaths.isNotEmpty &&
+              post.allLines.isNotEmpty &&
+              post.thumbnailPath != 'assets/images/store_dujjim.png',
+        ),
+        isTrue,
+      );
+    });
+
     test('인기순은 좋아요가 많은 글이 먼저다', () async {
       final page = await MockPostRepository().list(sort: PostSort.popular);
       expect(page.items.first.likeCount,

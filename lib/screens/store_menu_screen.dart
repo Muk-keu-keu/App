@@ -103,7 +103,11 @@ class _StoreMenuScreenState extends State<StoreMenuScreen> {
               // 담긴 수량을 보여준다. 같은 메뉴를 다시 누르면 수량만 올라가는데,
               // 표시가 없으면 눌린 건지 알 수 없다.
               inCart: flow.cartQuantityOf(visible[i].menuId),
-              onAdd: () => context.read<AppFlow>().addMenuToCart(visible[i]),
+              // + 도 카드와 같이 옵션 화면을 연다. 프로토타입 기준이고, 바로
+              // 담으면 옵션을 고르러 메뉴를 다시 눌러야 했다. 게다가 담긴 것을
+              // 확인하려면 화면을 두 번 나가야 해서 추가됐는지 알 수 없었다
+              // (디자이너 피드백 2026-08-13).
+              onAdd: () => context.read<AppFlow>().openMenuDetail(visible[i]),
               onOpen: () => context.read<AppFlow>().openMenuDetail(visible[i]),
             ),
           ),
@@ -137,9 +141,12 @@ class _Hero extends StatelessWidget {
                 radius: 0,
               ),
             ),
+            // 상태바 바로 아래에 붙인다. `top: 55` 는 SafeArea 가 더하는 상태바
+            // 높이만큼 한 번 더 밀려 사진 한가운데까지 내려와 있었다
+            // (디자이너 피드백 2026-08-13).
             Positioned(
               left: 20,
-              top: 55,
+              top: 8,
               child: SafeArea(
                 bottom: false,
                 child: GestureDetector(
@@ -203,11 +210,17 @@ class _StoreInfo extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      Text('리뷰 ${store.rating.toStringAsFixed(1)}',
-                          style: AppText.btn2(color: AppColors.gray800)),
-                      // 메뉴 조회는 리뷰 수를 준다. 분석 응답에서 온 매장은 아직
-                      // 없어서, (0) 으로 "리뷰 0개" 처럼 보이지 않게 있을 때만 붙인다.
-                      if (store.reviewCount != null) ...[
+                      // 평점이 없는 가게는 리뷰가 하나도 없다는 뜻이다. 0.0 으로
+                      // 그리면 최악의 평점으로 읽힌다.
+                      Text(
+                        store.rating == null
+                            ? '평가 없음'
+                            : '리뷰 ${store.rating!.toStringAsFixed(1)}',
+                        style: AppText.btn2(color: AppColors.gray800),
+                      ),
+                      // 리뷰 수도 없을 수 있다. (0) 으로 "리뷰 0개" 처럼 보이지
+                      // 않게 있을 때만 붙인다.
+                      if (store.rating != null && store.reviewCount != null) ...[
                         const SizedBox(width: 4),
                         Text('(${store.reviewCount})',
                             style: AppText.btn3(color: AppColors.gray600)),

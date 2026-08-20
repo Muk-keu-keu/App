@@ -3,11 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../../app_flow.dart';
 import '../../models/cart.dart' show wonFormat;
-import '../../models/menu.dart';
 import '../../models/order.dart';
 import '../../theme.dart';
-import '../../widgets/common.dart';
 import '../../widgets/ds.dart';
+import '../../widgets/order_card.dart';
 
 /// Figma "주문내역 상세" (node 857:4509).
 ///
@@ -47,8 +46,11 @@ class OrderDetailScreen extends StatelessWidget {
                     child: Column(
                       children: [
                         for (var i = 0; i < detail.stores.length; i++) ...[
-                          if (i > 0) const SizedBox(height: 24),
-                          _StoreBlock(store: detail.stores[i]),
+                          if (i > 0) const SizedBox(height: 16),
+                          OrderedStoreCard(
+                            storeName: detail.stores[i].restaurantName,
+                            lines: detail.stores[i].items,
+                          ),
                         ],
                       ],
                     ),
@@ -89,74 +91,6 @@ class _Section extends StatelessWidget {
       );
 }
 
-class _StoreBlock extends StatelessWidget {
-  const _StoreBlock({required this.store});
-
-  final OrderStore store;
-
-  @override
-  Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(store.restaurantName, style: AppText.sub2()),
-          const SizedBox(height: 12),
-          for (var i = 0; i < store.items.length; i++) ...[
-            if (i > 0) const SizedBox(height: 16),
-            _ItemRow(line: store.items[i]),
-          ],
-        ],
-      );
-}
-
-/// 메뉴 한 줄. 주문이 끝난 내역이라 수량 조절도 옵션 변경도 없다.
-class _ItemRow extends StatelessWidget {
-  const _ItemRow({required this.line});
-
-  final CartLine line;
-
-  @override
-  Widget build(BuildContext context) => Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          RemoteOrAssetImage(
-            imageUrl: line.imageUrl,
-            assetPath: line.imagePath,
-            size: 72,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(line.name, style: AppText.btn2()),
-                if (line.optionsText.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    line.optionsText,
-                    style: AppText.caption(color: AppColors.gray600),
-                  ),
-                ],
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Text(
-                      '${wonFormat(line.lineTotal)}원',
-                      style: AppText.btn2(),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${line.quantity}개',
-                      style: AppText.caption(color: AppColors.gray600),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      );
-}
-
 class _Payment extends StatelessWidget {
   const _Payment({required this.detail});
 
@@ -168,28 +102,39 @@ class _Payment extends StatelessWidget {
   int get _deliveryTotal =>
       detail.stores.fold(0, (sum, s) => sum + s.deliveryFee);
 
+  /// 시안 857:5238 — 주문 정보의 매장 카드와 같은 테두리 카드다.
   @override
-  Widget build(BuildContext context) => Column(
-        children: [
-          _row('주문 금액', _itemsTotal),
-          const SizedBox(height: 8),
-          _row(
-            detail.stores.length > 1
-                ? '배달비 (${detail.stores.length}곳)'
-                : '배달비',
-            _deliveryTotal,
-          ),
-          const SizedBox(height: 12),
-          const DsDivider(color: AppColors.gray300),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('결제 금액', style: AppText.btn1()),
-              Text('${wonFormat(detail.totalPrice)}원', style: AppText.btn1()),
-            ],
-          ),
-        ],
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.gray300),
+        ),
+        child: Column(
+          children: [
+            _row('주문 금액', _itemsTotal),
+            const SizedBox(height: 8),
+            _row(
+              detail.stores.length > 1
+                  ? '배달비 (${detail.stores.length}곳)'
+                  : '배달비',
+              _deliveryTotal,
+            ),
+            const SizedBox(height: 12),
+            const DsDivider(color: AppColors.gray300),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // 시안은 "총 결제 금액" 이다.
+                Text('총 결제 금액', style: AppText.btn1()),
+                Text('${wonFormat(detail.totalPrice)}원', style: AppText.btn1()),
+              ],
+            ),
+          ],
+        ),
       );
 
   Widget _row(String label, int amount) => Row(

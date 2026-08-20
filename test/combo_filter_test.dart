@@ -92,23 +92,27 @@ void main() {
       flow.source = _source;
     });
 
-    test('필터로 열면 취향 설정 화면으로 간다', () {
-      flow.openFilter();
-      expect(flow.stage, AppStage.keyword);
+    test('필터를 적용해도 취향 설정 화면을 거치지 않는다', () async {
+      // 피드백 2026-08-13 — 칩을 누르면 목록을 떠나 조건 화면으로 넘어갔다.
+      // 이제 시트만 올라오므로 keyword 단계는 한 번도 나오지 않아야 한다.
+      final stages = <AppStage>[];
+      flow.addListener(() => stages.add(flow.stage));
+
+      await flow.applyFilter(flow.preference);
+
+      expect(stages, isNot(contains(AppStage.keyword)));
+      expect(flow.stage, AppStage.comboList);
     });
 
     test('필터에서 적용하면 AI 를 다시 부르지 않고 분석만 다시 요청한다', () async {
-      flow.openFilter();
-      flow.updatePreference(
-        TastePreference(mode: ServingMode.solo, spice: SpiceLevel.hot),
+      await flow.applyFilter(
+        TastePreference(spice: SpiceLevel.hot, maxDeliveryMinutes: 25),
       );
-
-      await flow.applyPreferenceAndAnalyze();
 
       // 분석은 한 번 다시 불렸고, 바뀐 취향이 그대로 넘어갔다.
       expect(repo.calls, 1);
-      expect(repo.lastPreference?.mode, ServingMode.solo);
       expect(repo.lastPreference?.spice, SpiceLevel.hot);
+      expect(repo.lastPreference?.maxDeliveryMinutes, 25);
 
       // 필터를 걸었으니 비교 목록으로 돌아온다.
       expect(flow.stage, AppStage.comboList);
@@ -116,41 +120,40 @@ void main() {
     });
 
     test('취향은 명세의 preferences 세 필드로 나간다', () async {
-      flow.openFilter();
-      flow.updatePreference(
-        TastePreference(
-          mode: ServingMode.healthy,
-          spice: SpiceLevel.medium,
-          maxDeliveryMinutes: 35,
-        ),
+      await flow.applyFilter(
+        TastePreference(spice: SpiceLevel.medium, maxDeliveryMinutes: 35),
       );
-      await flow.applyPreferenceAndAnalyze();
 
       expect(repo.lastPreference?.toJson(), {
         'maxSpiceLevel': 'MEDIUM',
         'maxDeliveryMin': 35,
-        // 비건모드가 excludeMeat 로 나가는 유일한 화면 값이다.
-        'excludeMeat': true,
+        // 모드 섹션이 빠져 고기 제외를 켤 자리가 없다. 명세에 남아 있는 필드라
+        // 계속 보내되 항상 false 다.
+        'excludeMeat': false,
       });
     });
 
-    test('한 번 적용하면 필터 모드가 풀린다', () async {
-      flow.openFilter();
-      await flow.applyPreferenceAndAnalyze();
-      expect(flow.stage, AppStage.comboList);
+    test('여러 번 걸어도 계속 목록에 머문다', () async {
+      // 필터는 분석 경로와 섞이지 않는다. 몇 번 걸든 실패로 떨어지지 않는다.
+      await flow.applyFilter(TastePreference(spice: SpiceLevel.hot));
+      await flow.applyFilter(TastePreference(spice: SpiceLevel.none));
 
-      // 두 번째는 필터가 아니라 실제 분석 경로다. 링크가 없어 실패로 끝난다.
-      await flow.applyPreferenceAndAnalyze();
-      expect(flow.stage, AppStage.failed);
+      expect(repo.calls, 2);
+      expect(flow.stage, AppStage.comboList);
     });
 
     test('추출 결과가 없으면 목록으로만 돌아간다', () async {
       flow.extraction = null;
-      flow.openFilter();
-      await flow.applyPreferenceAndAnalyze();
+      await flow.applyFilter(flow.preference);
 
       expect(repo.calls, 0);
       expect(flow.stage, AppStage.comboList);
+    });
+
+    test('초기화 기준은 맵기 보통 · 도착 시간 최대값이다', () {
+      // 시안 1114:5604 에 적힌 기준. 분석 전 기본값과 다르다.
+      expect(TastePreference.resetSpice, SpiceLevel.medium);
+      expect(TastePreference.resetMinutes, TastePreference.maxMinutes);
     });
   });
 
@@ -164,8 +167,7 @@ void main() {
       flow = AppFlow(repository: _RecordingRepository(), locationService: const _NoLocation());
       flow.extraction = _extraction;
       flow.source = _source;
-      flow.openFilter();
-      await flow.applyPreferenceAndAnalyze();
+      await flow.applyFilter(flow.preference);
       combo = flow.suggestions.first;
     });
 

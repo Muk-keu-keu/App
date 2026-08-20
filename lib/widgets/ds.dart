@@ -223,7 +223,7 @@ class DsCloseIcon extends StatelessWidget {
 /// 선택된 탭 뒤에 회색 알약이 깔린다.
 enum DsTab {
   home('홈', 'assets/icons/nav_home.svg', 'assets/icons/nav_home_fill.svg'),
-  orders('주문내역', 'assets/icons/nav_order.svg', null),
+  orders('주문내역', 'assets/icons/nav_order.svg', 'assets/icons/nav_order_fill.svg'),
   jokbo('요기족보', 'assets/icons/nav_jokbo.svg', 'assets/icons/nav_jokbo_fill.svg'),
   my('마이요기요', 'assets/icons/nav_my.svg', null);
 
@@ -233,7 +233,8 @@ enum DsTab {
   final String icon;
 
   /// 선택됐을 때 쓰는 채운 아이콘. 시안에 fill 변형이 있는 탭만 가진다
-  /// (홈·요기족보). 없는 탭은 선택돼도 같은 선 아이콘을 쓴다.
+  /// (홈·주문내역·요기족보). 마이요기요는 시안의 `icon/my` 에 fill 변형이 없어
+  /// 선택돼도 같은 선 아이콘을 쓴다 (2026-08-13 피그마 확인).
   final String? _selectedIcon;
 
   String iconFor({required bool selected}) =>
@@ -387,7 +388,9 @@ class DsPostItem extends StatelessWidget {
               Row(
                 children: [
                   _count(
-                    asset: DsIcons.heart,
+                    // 누르면 채워진다. 색만 바꾸면 외곽선만 분홍이 되어 눌렀는지
+                    // 알기 어렵다 — 상세 화면과 같은 규칙이다.
+                    asset: liked ? DsIcons.heartFill : DsIcons.heart,
                     width: 15.5,
                     height: 14.5,
                     color: liked ? AppColors.primary500 : null,
@@ -495,6 +498,12 @@ class DsIcons {
   static const bubble = 'assets/icons/bubble.svg';
   static const camera = 'assets/icons/camera.svg';
 
+  /// 시안 `help button` (1052:6494). 원 안에 물음표. 추천 이유를 여는 자리에 쓴다.
+  static const help = 'assets/icons/help.svg';
+
+  /// 시안 `info button` (1052:7086). 같은 원에 글리프만 `i` 다.
+  static const info = 'assets/icons/info.svg';
+
   /// 시안 `icon/home` (type=line). 하단 내비의 홈과 같은 글리프라 같은 파일을 쓴다.
   static const home = 'assets/icons/nav_home.svg';
 
@@ -510,18 +519,27 @@ ColorFilter _tint(Color color) => ColorFilter.mode(color, BlendMode.srcIn);
 /// (시안 컴포넌트도 같은 벡터를 회전해 쓴다).
 class DsChevron extends StatelessWidget {
   const DsChevron.left({super.key, this.color = Colors.black})
-      : _dir = _ChevronDir.left;
+      : _dir = _ChevronDir.left,
+        large = false;
   const DsChevron.down({super.key, this.color = AppColors.gray800})
-      : _dir = _ChevronDir.down;
+      : _dir = _ChevronDir.down,
+        large = false;
 
   /// "상세보기 >" · 토스트의 "보러가기 >" 가 쓰는 오른쪽 꺾쇠 (시안 icon/chevron).
-  const DsChevron.right({super.key, this.color = AppColors.gray800})
+  ///
+  /// [large] 는 섹션 전체로 넘어가는 자리에 쓴다(홈의 요기족보 배너). 그 자리는
+  /// 목록 한 줄이 아니라 화면 하나를 여는 버튼이라 같은 치수면 눌러야 할 것으로
+  /// 안 보인다 (디자이너 피드백 2026-08-13).
+  const DsChevron.right({super.key, this.color = AppColors.gray800, this.large = false})
       : _dir = _ChevronDir.right;
 
   final Color color;
   final _ChevronDir _dir;
 
-  bool get _small => _dir != _ChevronDir.left;
+  /// 오른쪽 꺾쇠만 쓰는 확대 플래그. left 는 원래 큰 치수다.
+  final bool large;
+
+  bool get _small => _dir != _ChevronDir.left && !large;
 
   @override
   Widget build(BuildContext context) {
@@ -588,6 +606,66 @@ class DsCheckbox extends StatelessWidget {
     );
     if (onTap == null) return box;
     return GestureDetector(onTap: onTap, behavior: HitTestBehavior.opaque, child: box);
+  }
+}
+
+// ── Option item ──────────────────────────────────────────────────────────────
+
+/// Figma `sort/option item` (1114:4794) — state=selected / default.
+///
+/// 높이 56 한 줄. 고른 항목만 gray700 SemiBold 로 진해지고 오른쪽에 primary500
+/// 체크가 붙는다. 안 고른 항목은 gray500 Regular 다 — 라디오나 체크박스 없이
+/// 글자 굵기와 체크 하나로만 구분하는 게 시안이다.
+class DsOptionItem extends StatelessWidget {
+  const DsOptionItem({
+    super.key,
+    required this.label,
+    required this.isSelected,
+    this.onTap,
+  });
+
+  final String label;
+  final bool isSelected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final row = SizedBox(
+      height: 56,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: isSelected
+                  ? AppText.sub2(color: AppColors.gray700)
+                  : AppText.body1(color: AppColors.gray500),
+            ),
+          ),
+          // 체크는 24 프레임 안에 18×10 이다 (시안 icon/check).
+          SizedBox(
+            width: 24,
+            height: 24,
+            child: isSelected
+                ? Center(
+                    child: SvgPicture.asset(
+                      DsIcons.check,
+                      width: 18,
+                      height: 10,
+                      fit: BoxFit.fill,
+                      colorFilter: _tint(AppColors.primary500),
+                    ),
+                  )
+                : null,
+          ),
+        ],
+      ),
+    );
+
+    // 체크는 글자 없는 아이콘이라, 고른 상태가 스크린 리더에 읽히지 않는다.
+    final semantic = Semantics(button: onTap != null, selected: isSelected, child: row);
+    if (onTap == null) return semantic;
+    return GestureDetector(onTap: onTap, behavior: HitTestBehavior.opaque, child: semantic);
   }
 }
 
@@ -792,6 +870,7 @@ class DsStoreRow extends StatelessWidget {
     required this.distanceText,
     required this.deliveryText,
     this.trailing,
+    this.nameTrailing,
   });
 
   final Widget logo;
@@ -800,6 +879,10 @@ class DsStoreRow extends StatelessWidget {
   final String distanceText;
   final String deliveryText;
   final Widget? trailing;
+
+  /// 상호 바로 뒤에 붙는 것 (시안 1052:7319 의 `help button`).
+  /// 행 끝의 [trailing] 과 자리가 다르다 — 이쪽은 이름에 딸린 표시다.
+  final Widget? nameTrailing;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -811,7 +894,21 @@ class DsStoreRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: AppText.sub2().copyWith(letterSpacing: -0.4)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        name,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.sub2().copyWith(letterSpacing: -0.4),
+                      ),
+                    ),
+                    if (nameTrailing != null) ...[
+                      const SizedBox(width: 4),
+                      nameTrailing!,
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
@@ -951,19 +1048,17 @@ class DsMenuItem extends StatelessWidget {
 ///
 /// 족보 작성과 주문하기 화면이 같은 컴포넌트를 쓴다. 썸네일과 글이 화면을
 /// 반씩 나눠 갖고, 제목은 세 줄까지 보인다.
+/// 크리에이터 줄은 두지 않는다. 서버가 크리에이터를 주지 않아 회색 원과 빈
+/// 이름만 남았고, 그 자리가 제목을 세 줄로 눌러 뒤를 잘라 먹었다.
 class DsVideoSummary extends StatelessWidget {
   const DsVideoSummary({
     super.key,
     required this.thumbnail,
     required this.videoTitle,
-    required this.creatorName,
-    this.creatorAvatar,
   });
 
   final Widget thumbnail;
   final String videoTitle;
-  final String creatorName;
-  final Widget? creatorAvatar;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -981,41 +1076,13 @@ class DsVideoSummary extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    height: 66,
-                    child: Text(
-                      videoTitle,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppText.sub2(color: AppColors.gray800)
-                          .copyWith(letterSpacing: 0),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: creatorAvatar ??
-                            Container(
-                              decoration: const BoxDecoration(
-                                color: AppColors.gray300,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          creatorName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppText.body2(color: AppColors.gray700)
-                              .copyWith(letterSpacing: 0),
-                        ),
-                      ),
-                    ],
+                  // 크리에이터 줄이 없어진 만큼 제목이 그 자리를 쓴다.
+                  Text(
+                    videoTitle,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.sub2(color: AppColors.gray800)
+                        .copyWith(letterSpacing: 0),
                   ),
                 ],
               ),

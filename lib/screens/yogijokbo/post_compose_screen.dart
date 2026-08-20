@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../app_flow.dart';
 import '../../models/combo.dart';
 import '../../models/post.dart';
+import '../../services/photo_picker.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
 import '../../widgets/ds.dart';
@@ -32,6 +33,18 @@ class _PostComposeScreenState extends State<PostComposeScreen> {
   bool _menuExpanded = false;
 
   bool _submitting = false;
+
+  /// 첨부한 사진의 기기 안 경로. 공유할 때 그대로 멀티파트로 올라간다.
+  final List<String> _photoPaths = [];
+
+  static const _photoMax = 5;
+
+  Future<void> _addPhotos() async {
+    final picked = await const PhotoPicker()
+        .pick(remaining: _photoMax - _photoPaths.length);
+    if (picked.isEmpty || !mounted) return;
+    setState(() => _photoPaths.addAll(picked));
+  }
 
   @override
   void initState() {
@@ -67,6 +80,7 @@ class _PostComposeScreenState extends State<PostComposeScreen> {
     final postId = await flow.submitPost(
       title: _titleController.text,
       body: _bodyController.text,
+      imagePaths: _photoPaths,
     );
 
     // 화면이 남아 있을 때만 버튼 상태를 되돌린다. 사라졌으면 되돌릴 대상이 없다.
@@ -112,6 +126,10 @@ class _PostComposeScreenState extends State<PostComposeScreen> {
                   bodyController: _bodyController,
                   titleMax: _titleMax,
                   bodyMax: _bodyMax,
+                  photoPaths: _photoPaths,
+                  photoMax: _photoMax,
+                  onAddPhoto: _addPhotos,
+                  onRemovePhoto: (i) => setState(() => _photoPaths.removeAt(i)),
                 ),
               ],
             ),
@@ -144,12 +162,6 @@ class _VideoSection extends StatelessWidget {
           radius: 0,
         ),
         videoTitle: source.title,
-        // 가게가 여러 곳이면 "외 N곳" 으로 줄인다.
-        creatorName: switch (cart.restaurantNames.length) {
-          0 => '',
-          1 => cart.restaurantNames.first,
-          final n => '${cart.restaurantNames.first} 외 ${n - 1}곳',
-        },
       ),
     );
   }
@@ -240,12 +252,20 @@ class _FormSection extends StatelessWidget {
     required this.bodyController,
     required this.titleMax,
     required this.bodyMax,
+    required this.photoPaths,
+    required this.photoMax,
+    required this.onAddPhoto,
+    required this.onRemovePhoto,
   });
 
   final TextEditingController titleController;
   final TextEditingController bodyController;
   final int titleMax;
   final int bodyMax;
+  final List<String> photoPaths;
+  final int photoMax;
+  final VoidCallback onAddPhoto;
+  final ValueChanged<int> onRemovePhoto;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -274,7 +294,12 @@ class _FormSection extends StatelessWidget {
             Text('사진 첨부',
                 style: AppText.sub2().copyWith(letterSpacing: 0)),
             const SizedBox(height: 12),
-            const JokboPhotoRow(),
+            JokboPhotoRow(
+              photos: photoPaths,
+              maxCount: photoMax,
+              onAdd: onAddPhoto,
+              onRemove: onRemovePhoto,
+            ),
           ],
         ),
       );

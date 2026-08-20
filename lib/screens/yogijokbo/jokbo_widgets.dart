@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -287,24 +289,122 @@ class SourceVideoCard extends StatelessWidget {
 ///
 /// 작성(681:7992)과 수정(925:3676) 두 화면에 같은 모양으로 들어간다.
 class JokboPhotoRow extends StatelessWidget {
-  const JokboPhotoRow({super.key});
+  const JokboPhotoRow({
+    super.key,
+    this.photos = const [],
+    this.onAdd,
+    this.onRemove,
+    this.maxCount = 5,
+  });
+
+  /// 지금 붙어 있는 사진들. `http` 로 시작하면 서버에 이미 있는 사진이고,
+  /// 아니면 기기에서 방금 고른 파일 경로다. 한 줄에 섞여 나올 수 있다 —
+  /// 수정 화면에서 기존 사진과 새로 고른 사진이 함께 놓인다.
+  final List<String> photos;
+
+  /// null 이면 추가 버튼을 그리지 않는다.
+  final VoidCallback? onAdd;
+
+  final ValueChanged<int>? onRemove;
+
+  /// 이 수를 채우면 추가 버튼이 사라진다. 멀티파트로 한 번에 올라가므로
+  /// 무제한으로 두면 요청이 커져 업로드가 타임아웃난다.
+  final int maxCount;
 
   @override
   Widget build(BuildContext context) => SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            Container(
-              width: 80,
-              height: 80,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppColors.gray200,
-                border: Border.all(color: AppColors.gray400),
-                borderRadius: BorderRadius.circular(AppRadius.chip),
+            // 추가 버튼이 왼쪽에 고정되고 담은 사진이 오른쪽으로 쌓인다. 버튼을
+            // 뒤에 두면 사진을 담을수록 버튼이 화면 밖으로 밀려 나가, 다음 장을
+            // 넣으려면 매번 옆으로 밀어야 했다.
+            if (onAdd != null && photos.length < maxCount) ...[
+              GestureDetector(
+                onTap: onAdd,
+                behavior: HitTestBehavior.opaque,
+                child: Semantics(
+                  button: true,
+                  label: '사진 추가',
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.gray200,
+                      border: Border.all(color: AppColors.gray400),
+                      borderRadius: BorderRadius.circular(AppRadius.chip),
+                    ),
+                    child: SvgPicture.asset(DsIcons.camera, width: 24, height: 24),
+                  ),
+                ),
               ),
-              child: SvgPicture.asset(DsIcons.camera, width: 24, height: 24),
+              const SizedBox(width: 8),
+            ],
+            for (var i = 0; i < photos.length; i++) ...[
+              _Thumbnail(
+                source: photos[i],
+                onRemove: onRemove == null ? null : () => onRemove!(i),
+              ),
+              if (i != photos.length - 1) const SizedBox(width: 8),
+            ],
+          ],
+        ),
+      );
+}
+
+/// 사진 한 장. 오른쪽 위 ✕ 로 뺀다.
+class _Thumbnail extends StatelessWidget {
+  const _Thumbnail({required this.source, this.onRemove});
+
+  final String source;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        // ✕ 가 사진 밖으로 반쯤 나가므로 그만큼 자리를 더 준다. 안 그러면
+        // 잘려서 누를 수 없다.
+        width: 88,
+        height: 88,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              left: 0,
+              top: 8,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.chip),
+                child: source.startsWith('http')
+                    ? Image.network(source, width: 80, height: 80, fit: BoxFit.cover)
+                    : Image.file(File(source), width: 80, height: 80, fit: BoxFit.cover),
+              ),
             ),
+            if (onRemove != null)
+              Positioned(
+                right: 0,
+                top: 0,
+                child: GestureDetector(
+                  onTap: onRemove,
+                  behavior: HitTestBehavior.opaque,
+                  child: Semantics(
+                    button: true,
+                    label: '사진 빼기',
+                    // ✕ 에셋이 gray800 단색이라 어두운 원 위에 얹으면 안 보인다.
+                    // 흰 원에 테두리를 둘러 사진 위에서도 경계가 남게 한다.
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.gray400),
+                      ),
+                      child: const DsCloseIcon(size: 10, box: 22),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       );

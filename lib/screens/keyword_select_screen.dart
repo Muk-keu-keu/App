@@ -6,8 +6,10 @@ import '../models/preference.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
-/// Figma "키워드 선택" (node 223:448).
-/// 조합을 담기 전에 모드·맵기·도착시간을 고른다.
+/// Figma "필터" (node 681:6194).
+///
+/// 조합을 담기 전에 맵기·도착시간을 고른다. 개정 시안에서 "모드"(1인/비건)
+/// 섹션이 빠졌다 — 자세한 배경은 [TastePreference] 주석에 있다.
 class KeywordSelectScreen extends StatelessWidget {
   const KeywordSelectScreen({super.key});
 
@@ -25,19 +27,6 @@ class KeywordSelectScreen extends StatelessWidget {
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  const SizedBox(height: 8),
-                  _section(
-                    title: '모드',
-                    body: '먹방 속 조합을 내 상황에 맞게 조정해요.',
-                    child: Row(
-                      children: [
-                        for (final mode in ServingMode.values) ...[
-                          if (mode != ServingMode.values.first) const SizedBox(width: 16),
-                          Expanded(child: _modeCard(context, mode, pref)),
-                        ],
-                      ],
-                    ),
-                  ),
                   const SizedBox(height: 8),
                   _section(
                     title: '맵기',
@@ -98,7 +87,18 @@ class KeywordSelectScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         child: SafeArea(
           bottom: false,
-          child: Text('먹방 속 조합, 내 취향대로', style: AppText.screenTitle),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('조건을 선택해 주세요', style: AppText.screenTitle),
+              const SizedBox(height: 4),
+              Text(
+                '더 나은 조합을 위해 사전 조건을 선택해 주세요',
+                style: AppText.body1(color: AppColors.gray700)
+                    .copyWith(letterSpacing: -0.4),
+              ),
+            ],
+          ),
         ),
       );
 
@@ -116,41 +116,6 @@ class KeywordSelectScreen extends StatelessWidget {
           ],
         ),
       );
-
-  Widget _modeCard(BuildContext context, ServingMode mode, TastePreference pref) {
-    final selected = pref.mode == mode;
-    return GestureDetector(
-      onTap: () {
-        pref.mode = mode;
-        context.read<AppFlow>().updatePreference(pref);
-      },
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.selectedFill : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? AppColors.selectedBorder : AppColors.gray300,
-            width: selected ? 2 : 1,
-          ),
-          boxShadow: figmaCardShadow,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Image.asset(mode.imagePath, width: 80, height: 80, fit: BoxFit.cover),
-            const SizedBox(height: 12),
-            Text(mode.title, style: AppText.semiBold(14, spacing: -0.35)),
-            const SizedBox(height: 4),
-            Text(
-              mode.subtitle,
-              style: AppText.regular(12, spacing: -0.3, color: AppColors.gray700),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _spiceCard(BuildContext context, SpiceLevel level, TastePreference pref) {
     final selected = pref.spice == level;

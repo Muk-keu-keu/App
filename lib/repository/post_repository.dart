@@ -388,17 +388,230 @@ class MockPostRepository implements PostRepository {
   }
 
   // ── 시안 데이터 ────────────────────────────────────────────────────────────
-  // Figma "요기족보" 섹션의 홈 목록·조합 상세·주문하기 화면에 나오는 값 그대로다.
-  // 첫 글은 매장 하나, 두 번째 글은 **매장 두 곳**이다 — 회의(2026-08-04)에서 족보를
-  // 묶음 조합 단위로 바꿨으므로, 목록·상세·주문 화면이 둘 다 그려지는지 봐야 한다.
+  // 발표용 네 글을 앞에 두고, Figma 검증용 두 글을 뒤에 남긴다. 발표용 글은 카드,
+  // 상세 사진, "주문한 메뉴"가 같은 음식을 가리키도록 각각 별도 이미지와 조합을 갖는다.
+  // Figma 글의 첫 글은 매장 하나, 두 번째 글은 **매장 두 곳**이다 — 회의(2026-08-04)
+  // 에서 족보를 묶음 조합 단위로 바꿨으므로 목록·상세·주문 화면 검증에 계속 쓴다.
   //
   // 글과 댓글을 모두 `mine: true` 로 둔다. 시연에서 수정·삭제 화면(922:2734)까지
   // 보여줘야 하기 때문이다. 서버가 붙으면 실제 소유 여부가 내려온다.
 
   static const _author1 = PostAuthor(id: 'user_01', nickname: '배고픈 요기요');
   static const _author2 = PostAuthor(id: 'user_02', nickname: '문복희팬');
+  static const _demoAuthor = PostAuthor(id: 'demo_yunsu', nickname: '먹잘알 윤수');
+
+  static StoreCart _demoStore({
+    required int id,
+    required String name,
+    required FoodCategory category,
+    required String area,
+    required int deliveryFee,
+    required String imagePath,
+    required List<CartLine> lines,
+  }) =>
+      StoreCart(
+        restaurant: Restaurant(
+          restaurantId: id,
+          name: name,
+          foodCategory: category,
+          area: area,
+          rating: 4.8,
+          reviewCount: 842,
+          etaMin: 35,
+          deliveryFee: deliveryFee,
+          minOrderPrice: 12000,
+          distanceKm: 1.2,
+          imagePath: imagePath,
+        ),
+        lines: lines,
+      );
+
+  static CartLine _demoLine({
+    required int id,
+    required String name,
+    required int price,
+    required String imagePath,
+    MenuType type = MenuType.main,
+    SpiceLevel spice = SpiceLevel.none,
+  }) =>
+      CartLine(
+        menuId: id,
+        name: name,
+        menuType: type,
+        price: price,
+        quantity: 1,
+        imagePath: imagePath,
+        spiceLevel: spice,
+      );
 
   static List<YogijokboPost> _samples() => [
+        YogijokboPost(
+          id: 'demo_rose_chicken',
+          title: '로제엽떡과 허니콤보 치팅 조합',
+          body: '꾸덕한 로제소스에 바삭달콤한 허니콤보를 찍어 먹으면 '
+              '단짠매콤 밸런스가 완벽해요.\n'
+              '떡볶이에는 소시지랑 치즈를 넉넉히, 치킨은 소스 묻기 전에 한입 먹고 '
+              '찍먹하면 두 가지 맛을 다 즐길 수 있어요. 친구들이랑 먹기 좋은 조합!',
+          author: _demoAuthor,
+          createdAt: DateTime(2026, 8, 16, 12, 30),
+          imagePaths: const [
+            'assets/images/jokbo_demo_rose_tteokbokki_chicken.jpg',
+          ],
+          source: const PostSource(
+            platform: PostPlatform.instagram,
+            title: '꾸덕한 로제떡볶이와 허니치킨 먹방',
+            url: 'https://www.instagram.com/reel/demo-rose-chicken/',
+          ),
+          likeCount: 98,
+          mine: true,
+          stores: [
+            _demoStore(
+              id: 800,
+              name: '동대문엽기떡볶이 삼성점',
+              category: FoodCategory.snack,
+              area: '삼성동',
+              deliveryFee: 0,
+              imagePath: 'assets/images/jokbo_demo_rose_tteokbokki_chicken.jpg',
+              lines: [
+                _demoLine(
+                  id: 80004,
+                  name: '로제떡볶이',
+                  price: 16000,
+                  imagePath: 'assets/images/jokbo_demo_rose_tteokbokki_chicken.jpg',
+                  spice: SpiceLevel.medium,
+                ),
+              ],
+            ),
+            _demoStore(
+              id: 300,
+              name: '교촌치킨 신사점',
+              category: FoodCategory.chicken,
+              area: '신사동',
+              deliveryFee: 0,
+              imagePath: 'assets/images/jokbo_demo_rose_tteokbokki_chicken.jpg',
+              lines: [
+                _demoLine(
+                  id: 30003,
+                  name: '허니콤보',
+                  price: 23000,
+                  imagePath: 'assets/images/jokbo_demo_rose_tteokbokki_chicken.jpg',
+                ),
+              ],
+            ),
+          ],
+        ),
+        YogijokboPost(
+          id: 'demo_udon_tonkatsu',
+          title: '우삼겹 우동전골과 바삭 돈카츠',
+          body: '스키야키 영상 보고 우삼겹우동전골로 따라 먹어봤어요.\n'
+              '국물은 뜨끈하고 우삼겹은 부드러운데, 바삭한 돈카츠까지 곁들이니 '
+              '식감 조합이 딱이에요. 전골 먼저 먹고 남은 국물에 우동까지 싹 비우는 순서 추천!',
+          author: _demoAuthor,
+          createdAt: DateTime(2026, 8, 16, 11, 40),
+          imagePaths: const ['assets/images/jokbo_demo_udon_tonkatsu.jpg'],
+          source: const PostSource(
+            platform: PostPlatform.instagram,
+            title: '입에서 녹는 스키야키와 바삭한 돈카츠',
+            url: 'https://www.instagram.com/reel/demo-udon-tonkatsu/',
+          ),
+          likeCount: 84,
+          mine: true,
+          stores: [
+            _demoStore(
+              id: 902,
+              name: '미소야 선릉점',
+              category: FoodCategory.japanese,
+              area: '선릉동',
+              deliveryFee: 3000,
+              imagePath: 'assets/images/jokbo_demo_udon_tonkatsu.jpg',
+              lines: [
+                _demoLine(
+                  id: 90204,
+                  name: '우삼겹우동전골',
+                  price: 12000,
+                  imagePath: 'assets/images/jokbo_demo_udon_tonkatsu.jpg',
+                ),
+                _demoLine(
+                  id: 90202,
+                  name: '돈카츠 정식',
+                  price: 14500,
+                  imagePath: 'assets/images/jokbo_demo_udon_tonkatsu.jpg',
+                ),
+              ],
+            ),
+          ],
+        ),
+        YogijokboPost(
+          id: 'demo_tuna_porridge',
+          title: '참치야채죽으로 속 편한 한 끼',
+          body: '늦은 밤이라 자극적인 메뉴 대신 참치야채죽으로 골랐어요.\n'
+              '참치의 고소함과 잘게 썬 채소가 어울려 심심하지 않고, 김가루와 깨를 '
+              '섞으니 끝까지 맛있어요. 속 편한 야식이나 다음 날 아침 메뉴로 추천합니다.',
+          author: _demoAuthor,
+          createdAt: DateTime(2026, 8, 16, 10, 55),
+          imagePaths: const ['assets/images/jokbo_demo_tuna_porridge.jpg'],
+          source: const PostSource(
+            platform: PostPlatform.instagram,
+            title: '속 편하고 든든한 참치야채죽',
+            url: 'https://www.instagram.com/reel/demo-tuna-porridge/',
+          ),
+          likeCount: 71,
+          mine: true,
+          stores: [
+            _demoStore(
+              id: 1203,
+              name: '본죽 신사점',
+              category: FoodCategory.korean,
+              area: '신사동',
+              deliveryFee: 2000,
+              imagePath: 'assets/images/jokbo_demo_tuna_porridge.jpg',
+              lines: [
+                _demoLine(
+                  id: 120305,
+                  name: '참치야채죽',
+                  price: 13000,
+                  imagePath: 'assets/images/jokbo_demo_tuna_porridge.jpg',
+                ),
+              ],
+            ),
+          ],
+        ),
+        YogijokboPost(
+          id: 'demo_rose_tteokbokki',
+          title: '꾸덕한 로제떡볶이 치즈 필수',
+          body: '맵찔이도 부담 없이 먹기 좋은 크리미한 로제떡볶이예요.\n'
+              '쫀득한 떡에 소스가 잘 배고 치즈가 매운맛을 잡아줘서 계속 손이 갑니다. '
+              '소시지와 어묵까지 골라 먹는 재미가 있고, 남은 소스에는 주먹밥 비벼 먹는 걸 추천해요.',
+          author: _demoAuthor,
+          createdAt: DateTime(2026, 8, 16, 10, 10),
+          imagePaths: const ['assets/images/jokbo_demo_rose_tteokbokki.jpg'],
+          source: const PostSource(
+            platform: PostPlatform.instagram,
+            title: '치즈 듬뿍 꾸덕한 로제떡볶이 먹방',
+            url: 'https://www.instagram.com/reel/demo-rose-tteokbokki/',
+          ),
+          likeCount: 63,
+          mine: true,
+          stores: [
+            _demoStore(
+              id: 801,
+              name: '동대문엽기떡볶이 삼성점',
+              category: FoodCategory.snack,
+              area: '삼성동',
+              deliveryFee: 3000,
+              imagePath: 'assets/images/jokbo_demo_rose_tteokbokki.jpg',
+              lines: [
+                _demoLine(
+                  id: 80104,
+                  name: '로제떡볶이',
+                  price: 16000,
+                  imagePath: 'assets/images/jokbo_demo_rose_tteokbokki.jpg',
+                  spice: SpiceLevel.medium,
+                ),
+              ],
+            ),
+          ],
+        ),
         YogijokboPost(
           id: 'post_01H8X',
           title: '떵개 추천 두찜 로제 닭발',

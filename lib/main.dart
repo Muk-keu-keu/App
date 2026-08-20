@@ -94,6 +94,10 @@ class _RootScreenState extends State<RootScreen> {
   /// App Group 없이 URL 스킴만 쓰는 구조라 익스텐션 코드를 그대로 재사용한다.
   void _listenForIosShareExtension() {
     final links = AppLinks();
+    // 스트림과 초기 링크를 **둘 다** 듣는다. 앱이 꺼져 있다가 이 URL 로 켜지는
+    // 경우 SceneDelegate 가 뒤늦게 흘려 주는데, 그 시점이 `getInitialLink()`
+    // 앞뒤 어디든 될 수 있다. 두 경로가 같은 링크를 주면 뒤엣것이 앞엣것을
+    // 그대로 덮으므로 중복이 문제되지 않는다.
     _linkSub = links.uriLinkStream.listen(_handleIncomingUri, onError: (Object _) {});
     links.getInitialLink().then((uri) {
       if (uri != null) _handleIncomingUri(uri);
@@ -105,17 +109,24 @@ class _RootScreenState extends State<RootScreen> {
     if (uri.scheme != 'mukbang' || uri.host != 'analyze') return;
     final link = uri.queryParameters['u'];
     if (link == null || link.isEmpty) return;
-    context.read<AppFlow>().start(link);
+    // `t` 는 익스텐션이 함께 보낸 공유 원문이다. 인스타 캡션을 얻을 수 있는
+    // 유일한 창이라 링크와 같이 넘긴다 — AppFlow._pendingSharedText 참고.
+    context.read<AppFlow>().start(link, sharedText: uri.queryParameters['t'] ?? '');
   }
 
   void _handleSharedMedia(List<SharedMediaFile> files) {
     if (files.isEmpty || !mounted) return;
 
     // 텍스트/URL 공유는 path 에 원문이 담겨 온다. 그 안에서 첫 http 링크를 찾는다.
+    //
+    // **원문을 함께 넘긴다.** 링크만 뽑아 쓰면 같이 온 캡션을 버리게 되는데,
+    // 인스타는 로그인 없이 그 캡션을 다시 주지 않는다. URL 로 재요청해 봐야
+    // og 태그가 `Instagram / null` 뿐이라 추출이 0건이 되고, 그 자리를 서버 추측이
+    // 채워 영상에 없던 음식이 화면에 뜬다.
     for (final file in files) {
       final match = RegExp(r'https?://\S+').firstMatch(file.path);
       if (match != null) {
-        context.read<AppFlow>().start(match.group(0)!);
+        context.read<AppFlow>().start(match.group(0)!, sharedText: file.path);
         return;
       }
     }

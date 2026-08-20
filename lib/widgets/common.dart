@@ -248,7 +248,8 @@ class DeliveryTimeSlider extends StatelessWidget {
                   Container(
                     height: _track,
                     decoration: BoxDecoration(
-                      color: AppColors.gray300,
+                      // 시안의 트랙은 gray400(#D9D9D9) 이다 (1114:4870).
+                      color: AppColors.gray400,
                       borderRadius: BorderRadius.circular(_track / 2),
                     ),
                   ),
