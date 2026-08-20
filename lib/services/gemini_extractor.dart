@@ -28,7 +28,7 @@ typedef GeminiQuotaException = ExtractorQuotaException;
 class GeminiExtractor implements DishExtractor {
   const GeminiExtractor({
     required this.apiKey,
-    this.model = 'gemini-2.5-flash',
+    this.model = 'gemini-3.6-flash',
     this.client,
   });
 
