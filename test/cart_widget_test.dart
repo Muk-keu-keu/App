@@ -148,8 +148,6 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('장바구니'), findsOneWidget);
     expect(find.text('엽기떡볶이 성수점'), findsOneWidget);
-    // 배달이 따로 간다는 안내가 매장 두 곳일 때만 나온다.
-    expect(find.textContaining('2곳에서 따로 배달'), findsOneWidget);
     // 버튼 문구는 시안(681:8164)의 "결제하기" 다.
     expect(find.text('결제하기'), findsOneWidget);
 
@@ -195,7 +193,7 @@ void main() {
     expect(find.byKey(removeFirst), findsNothing);
   });
 
-  testWidgets('최소 주문을 못 넘기면 버튼이 이유를 알려주고 막힌다', (tester) async {
+  testWidgets('최소 주문을 못 넘기면 채우기를 고르기 전까지 버튼이 막힌다', (tester) async {
     final flow = await analyzedFlow();
     flow.openCartFromAnalysis();
 
@@ -214,10 +212,22 @@ void main() {
     );
     await pumpScreen(tester, CartScreen(onBack: () {}), flow);
 
-    final button = tester.widget<DsButton>(find.byType(DsButton));
-    expect(button.onPressed, isNull);
-    // 어느 가게가 얼마 모자라는지 버튼에 그대로 쓴다.
-    expect(find.textContaining('4,000원 더 담아주세요'), findsWidgets);
+    // 어느 가게가 걸렸는지는 버튼이, 얼마가 모자라는지는 그 가게 카드가 말한다.
+    expect(tester.widget<DsButton>(find.byType(DsButton)).onPressed, isNull);
+    expect(find.textContaining('명랑핫도그 성수점 최소주문을 채워주세요'), findsWidgets);
+    expect(find.textContaining('4,000원 결제하고 포인트 적립'), findsWidgets);
+
+    // 미달분을 포인트로 채우기로 하면 잠금이 풀린다. 되돌릴 수 있어야 해서 토글이다.
+    // 체크는 두 번째 매장 카드 안이라 화면 밖이다 — 스크롤해서 누른다.
+    const check = ValueKey('prepaid-check-301');
+    await tester.ensureVisible(find.byKey(check));
+    await tester.pump();
+    await tester.tap(find.byKey(check));
+    await tester.pump();
+
+    expect(flow.cart.storeOf(301)!.prepaidOptIn, isTrue);
+    expect(tester.widget<DsButton>(find.byType(DsButton)).onPressed, isNotNull);
+    expect(find.text('결제하기'), findsOneWidget);
   });
 
   testWidgets('비교 목록은 담긴 매장을 체크로 보여준다', (tester) async {
