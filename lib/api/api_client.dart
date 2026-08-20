@@ -251,8 +251,15 @@ class ApiClient {
         path,
       );
 
-  Future<Map<String, dynamic>> delete(String path) async =>
-      _send(() => _http.delete(_uri(path), headers: _headers()), path);
+  /// body 를 받는다. `DELETE v1/users/delete` 가 이메일·비밀번호를 본문으로 요구한다.
+  Future<Map<String, dynamic>> delete(String path, {Object? body}) async => _send(
+        () => _http.delete(
+          _uri(path),
+          headers: _headers(),
+          body: body == null ? null : jsonEncode(body),
+        ),
+        path,
+      );
 
   Future<Map<String, dynamic>> _send(
     Future<http.Response> Function() call,
