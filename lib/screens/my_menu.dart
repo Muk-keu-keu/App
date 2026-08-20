@@ -2,24 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../app_flow.dart';
-import '../widgets/overlays.dart';
 
-/// 하단 네비 "마이요기요" 에서 올라오는 시트.
+/// 하단 네비 "마이요기요".
 ///
-/// 마이요기요 화면은 시안에 없다. 그래도 로그아웃할 자리는 있어야 해서, 화면을
-/// 새로 지어내는 대신 이미 있는 액션시트로 로그아웃만 붙였다. 시안이 나오면
-/// 이 시트를 그 화면으로 대체하면 된다.
-///
-/// 로그아웃에 확인 대화상자를 두지 않았다. 되돌리는 방법이 다시 로그인하는 것뿐이고
-/// 잃는 것도 없어서, 시트의 취소만으로 충분하다.
-Future<void> showMyMenu(BuildContext context) async {
-  final flow = context.read<AppFlow>();
-
-  final picked = await AppActionSheet.show(
-    context,
-    items: const [AppActionSheetItem(label: '로그아웃', value: 'logout')],
-  );
-  if (picked != 'logout') return;
-
-  await flow.logout();
-}
+/// 예전에는 화면이 없어서 로그아웃만 담은 액션시트를 띄웠다. 이제 [MyPageScreen]
+/// 이 있어서 그리로 보낸다. 부르는 자리가 세 곳(홈·주문내역·요기족보)이라
+/// 함수는 남겨 두고 내용만 바꿨다 — 세 화면을 각각 고치면 하나를 빠뜨린다.
+Future<void> showMyMenu(BuildContext context) =>
+    context.read<AppFlow>().openMyPage();
