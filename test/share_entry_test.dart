@@ -54,6 +54,13 @@ class _OkAuth implements AuthRepository {
   @override
   Future<AuthUser> me() async =>
       const AuthUser(id: 1, email: 'a@b.c', role: 'USER');
+
+  @override
+  Future<AuthUser> updateNickName(String nickName) async =>
+      AuthUser(id: 1, email: 'a@b.c', role: 'USER', nickName: nickName);
+
+  @override
+  Future<void> deleteAccount({required String email, required String password}) async {}
 }
 
 /// 공유로 들어오면 **어느 화면에 있든, 앱이 꺼져 있었든** 조건 선택 화면으로 간다.
