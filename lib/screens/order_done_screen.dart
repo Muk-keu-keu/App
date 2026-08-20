@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 
 import '../app_flow.dart';
 import '../models/combo.dart';
+import '../models/order.dart';
 import '../theme.dart';
+import '../widgets/credit_widgets.dart';
 import '../widgets/ds.dart';
 
 /// 결제 완료 (시안 949:4470).
@@ -17,6 +19,18 @@ import '../widgets/ds.dart';
 /// 주문내역에서 드러난다.
 class OrderDoneScreen extends StatelessWidget {
   const OrderDoneScreen({super.key});
+
+  /// 가게가 한 곳이면 이름을 붙인다. 여러 곳이면 어디에 남았는지 한 줄로 못 쓴다.
+  static String _pointTitle(OrderReceipt receipt) {
+    if (receipt.pointDelta <= 0) {
+      return '포인트 ${wonFormat(receipt.pointDelta.abs())}원을 사용했어요';
+    }
+    final left = receipt.points.where((p) => p.balance > 0).toList();
+    final money = '${wonFormat(receipt.pointDelta)}P';
+    return left.length == 1
+        ? '${left.first.restaurantName}에 $money 남았어요'
+        : '$money 남았어요';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +67,22 @@ class OrderDoneScreen extends StatelessWidget {
                 itemsTotal: paid.itemsTotal,
                 deliveryFee: paid.deliveryFee,
                 total: paid.total,
+                pointDelta: paid.pointDelta,
+              ),
+            ],
+            // 포인트가 쌓였으면 그 액수보다 **그게 뭘 뜻하는지**가 본문이다.
+            // "7,000P 남았어요" 만으로는 다음에 뭘 할 수 있는지 알 수 없다.
+            if (receipt.touchedPoint) ...[
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: CreditNotice(
+                  type: CreditNoticeType.ok,
+                  title: _pointTitle(receipt),
+                  body: receipt.pointDelta > 0
+                      ? '다음 주문부터 이 가게는 최소주문금액 없이\n원하는 만큼만 담을 수 있어요.'
+                      : '음식값과 배달비를 포인트로 냈어요.',
+                ),
               ),
             ],
             const Spacer(),
@@ -79,11 +109,16 @@ class _AmountCard extends StatelessWidget {
     required this.itemsTotal,
     required this.deliveryFee,
     required this.total,
+    this.pointDelta = 0,
   });
 
   final int itemsTotal;
   final int deliveryFee;
   final int total;
+
+  /// 포인트 잔액 순변화. 양수면 채운 것, 음수면 쓴 것이다.
+  /// **화면은 이 순액 하나만 쓴다** — 사용액과 적립액을 따로 보여주면 혼란스럽다.
+  final int pointDelta;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -100,18 +135,33 @@ class _AmountCard extends StatelessWidget {
             _row('주문 금액', itemsTotal),
             const SizedBox(height: 12),
             _row('배달비', deliveryFee),
+            if (pointDelta != 0) ...[
+              const SizedBox(height: 12),
+              _row(
+                pointDelta > 0 ? '포인트 채움' : '포인트 사용',
+                pointDelta.abs(),
+                color: AppColors.primary500,
+                sign: pointDelta > 0 ? '+' : '−',
+              ),
+            ],
           ],
         ),
       );
 
-  Widget _row(String label, int amount, {Color color = AppColors.gray800}) => Row(
+  Widget _row(
+    String label,
+    int amount, {
+    Color color = AppColors.gray800,
+    String sign = '',
+  }) =>
+      Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           SizedBox(
-            width: 80,
+            width: 96,
             child: Text(label, style: AppText.body1(color: AppColors.gray600)),
           ),
-          Text('${wonFormat(amount)}원', style: AppText.sub2(color: color)),
+          Text('$sign${wonFormat(amount)}원', style: AppText.sub2(color: color)),
         ],
       );
 }
