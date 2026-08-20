@@ -61,8 +61,20 @@ class UserApi {
   /// 실질적인 로그아웃은 앱이 토큰을 지우는 것이고, 이 호출은 서버에 알리는 것뿐이다.
   Future<void> logout() => client.post(logoutPath);
 
-  /// `GET v1/users/me` — `{id, email, role}`.
+  /// `GET v1/users/me` — `{id, email, role, nickName, address}`.
   Future<AuthUser> me() async => AuthUser.fromJson(await client.get(mePath));
+
+  /// `PATCH v1/users/me` — 닉네임 변경. 응답 본문이 없어 성공하면 `me()` 로 다시 읽는다.
+  Future<void> updateNickName(String nickName) =>
+      client.patch(mePath, body: {'nickName': nickName});
+
+  /// `DELETE v1/users/delete` — 회원 탈퇴.
+  ///
+  /// **이메일과 비밀번호를 함께 보낸다.** 토큰만으로 지우지 않는 이유는 되돌릴 수
+  /// 없는 동작이기 때문이다. 그래서 화면도 확인 대화상자가 아니라 비밀번호를
+  /// 입력받는 시트여야 한다.
+  Future<void> deleteUser({required String email, required String password}) =>
+      client.delete(deletePath, body: {'email': email, 'password': password});
 
   /// 인증 없이 부르는 경로들. [ApiClient] 가 401 재발급 대상에서 빼는 데 쓴다.
   static const loginPath = 'v1/users/login';
@@ -70,4 +82,5 @@ class UserApi {
   static const reissuePath = 'v1/users/reissue-token';
   static const logoutPath = 'v1/users/logout';
   static const mePath = 'v1/users/me';
+  static const deletePath = 'v1/users/delete';
 }
