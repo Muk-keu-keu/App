@@ -136,8 +136,10 @@ void main() {
     await tester.tap(find.text('추가하기'));
     await tester.pump();
 
-    // 담고 나면 매장 메뉴로 돌아간다.
-    expect(flow.stage, AppStage.storeMenu);
+    // 담고 나면 **장바구니로 간다.** 예전에는 매장 메뉴로 되돌렸는데, 담은 것이
+    // 어디로 갔는지 보이지 않고 결제까지 가려면 뒤로 두 번 나가야 했다
+    // (피드백 2026-08-21).
+    expect(flow.stage, AppStage.cart);
 
     final line = flow.cart.storeOf(201)!.lines.single;
     expect(line.menuId, 201001);

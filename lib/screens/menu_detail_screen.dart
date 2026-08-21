@@ -132,7 +132,7 @@ class _MenuDetailScreenState extends State<MenuDetailScreen> {
                           menu,
                           chosen: _selection(menu),
                           spice: menu.spiceAdjustable ? _spice : null,
-                          thenClose: true,
+                          thenOpenCart: true,
                         ),
                   ),
                 ),

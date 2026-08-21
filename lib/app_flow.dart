@@ -1162,12 +1162,16 @@ class AppFlow extends ChangeNotifier {
   ///
   /// [chosen] 이 오면 상세 화면에서 고른 옵션이다. 담은 뒤 그 값으로 줄을 고친다 —
   /// `Menu.toCartLine` 은 미리 체크된 옵션만 담아서 사용자가 고른 것을 모른다.
-  /// [thenClose] 는 상세 화면에서 담은 경우다. 담고 그 화면을 닫는다.
+  ///
+  /// [thenOpenCart] 는 상세 화면에서 "추가하기" 를 누른 경우다. **담고 장바구니로
+  /// 간다.** 예전에는 가게 메뉴판으로 되돌렸는데, 담은 것이 어디로 갔는지 보이지
+  /// 않고 결제까지 가려면 뒤로 두 번 나가야 했다 (피드백 2026-08-21). 더 담으려면
+  /// 장바구니의 "메뉴 추가하기" 로 그 메뉴판에 다시 들어온다.
   void addMenuToCart(
     Menu menu, {
     List<MenuOption>? chosen,
     SpiceLevel? spice,
-    bool thenClose = false,
+    bool thenOpenCart = false,
   }) {
     final restaurant = storeMenuRestaurant ??
         (storeMenuRestaurantId == null
@@ -1192,8 +1196,9 @@ class AppFlow extends ChangeNotifier {
     // 추가된 것이 보이지 않는다 (디자이너 피드백 2026-08-13).
     _addToSuggestion(restaurant.restaurantId, menu, chosen: chosen, spice: spice);
 
-    if (thenClose) {
-      closeMenuDetail();
+    if (thenOpenCart) {
+      menuDetail = null;
+      openCart();
       return;
     }
     notifyListeners();
