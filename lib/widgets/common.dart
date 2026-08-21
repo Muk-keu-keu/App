@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/preference.dart';
+import '../assets.dart';
 import '../theme.dart';
 
 /// Figma 헤더 (node 480:1896). 좌측 뒤로가기, 중앙 타이틀, 우측 여백.
@@ -60,7 +61,7 @@ class RemoteOrAssetImage extends StatelessWidget {
   const RemoteOrAssetImage({
     super.key,
     required this.imageUrl,
-    required this.assetPath,
+    this.assetPath = AppImages.placeholder,
     required this.size,
     this.radius = 8,
   });

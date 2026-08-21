@@ -603,6 +603,14 @@ class AppFlow extends ChangeNotifier {
   /// 바꾸는 셈이다.
   Future<void> _hydrateStores(Cart target) async {
     for (final store in target.stores) {
+      // **채울 것이 있는 매장만 받아온다.**
+      //
+      // `hydrate` 는 매장을 통째로 갈아끼우므로, 이미 온전한 매장에 부르면 아는 값을
+      // 남의 값으로 덮어쓴다. 번들 시드 글이 그랬다 — 시드의 매장 id 가 실서버의
+      // 무관한 매장과 겹쳐서, 두찜 로제닭발 글이 "투썸플레이스 역삼점" 으로 바뀌고
+      // 최소주문·배달비도 그 가게 값이 됐다 (피드백 2026-08-21).
+      if (!store.restaurant.isPartial) continue;
+
       final menus = await _safeMenus(store.restaurantId);
       if (menus?.restaurant.restaurantId == store.restaurantId) {
         store.hydrate(menus!);
@@ -1533,6 +1541,7 @@ class AppFlow extends ChangeNotifier {
       final page = await _postRepository.list(sort: postSort);
       posts = page.items;
       postsNextCursor = page.nextCursor;
+      _postsStale = false;
     } on Object {
       // 서버·네트워크 문제. 여기서 던지면 로딩 표시가 영원히 남는다.
       posts = [];
@@ -1589,10 +1598,22 @@ class AppFlow extends ChangeNotifier {
     notifyListeners();
   }
 
-  void backToJokboHome() {
+  /// 목록을 다시 받아야 하는지.
+  ///
+  /// 처음에는 세워져 있다 — 아직 한 번도 받지 않았다는 뜻이다. 글을 쓰거나 고치면
+  /// 다시 세운다. **이게 없으면 목록이 빈 채로 남는다**: 주문내역에서 족보를 쓰고
+  /// 토스트의 "보러가기" 로 상세에 들어갔다가 뒤로 나오면, 목록을 한 번도 받지
+  /// 않은 상태로 요기족보 화면에 도착해 "아직 올라온 조합이 없어요" 가 뜬다.
+  /// 실시간 인기 배너는 로그인 때 받아 두므로 멀쩡히 보여서, 목록만 비어 보였다
+  /// (피드백 2026-08-21).
+  bool _postsStale = true;
+
+  /// 상세에서 뒤로. 목록이 오래됐으면 그 자리에서 다시 받는다.
+  Future<void> backToJokboHome() async {
     selectedPost = null;
     postComments = [];
     _setStage(AppStage.jokboHome);
+    if (_postsStale) await loadPosts();
   }
 
   Future<void> toggleLike() async {
@@ -1801,6 +1822,8 @@ class AppFlow extends ChangeNotifier {
     );
 
     await _orderRepository.markPosted(checkoutId);
+    // 새 글이 목록에 없다. 다음에 요기족보에 들어갈 때 다시 받게 한다.
+    _postsStale = true;
     composeCart = null;
     composeSource = null;
     composeCheckoutId = null;

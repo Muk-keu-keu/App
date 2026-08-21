@@ -92,7 +92,6 @@ class _VideoSection extends StatelessWidget {
         child: DsVideoSummary(
           thumbnail: RemoteOrAssetImage(
             imageUrl: cart.source!.thumbnailUrl,
-            assetPath: 'assets/images/store_dujjim.png',
             size: 100,
             radius: 0,
           ),

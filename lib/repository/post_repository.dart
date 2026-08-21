@@ -1,3 +1,4 @@
+import '../assets.dart';
 import '../api/api_client.dart';
 import '../api/mukbang_api.dart';
 import '../models/combo.dart';
@@ -687,7 +688,7 @@ class MockPostRepository implements PostRepository {
               '두 가게에서 시켜야 하는데 한 번에 결제되니까 편해요',
           author: _author2,
           createdAt: DateTime(2026, 7, 5),
-          imagePaths: const ['assets/images/store_dujjim.png'],
+          imagePaths: const [AppImages.placeholder],
           source: const PostSource(
             platform: PostPlatform.youtube,
             title: '겉바속촉 KFC 핫크리스피 치르르치킨에 까르보불닭볶음면 먹방! 소세지도 같이',
@@ -710,7 +711,7 @@ class MockPostRepository implements PostRepository {
                 deliveryFee: 2500,
                 minOrderPrice: 12000,
                 distanceKm: 8.4,
-                imagePath: 'assets/images/store_dujjim.png',
+                imagePath: AppImages.placeholder,
               ),
               lines: [
                 CartLine(
@@ -738,7 +739,7 @@ class MockPostRepository implements PostRepository {
                 deliveryFee: 2000,
                 minOrderPrice: 5000,
                 distanceKm: 1.2,
-                imagePath: 'assets/images/store_dujjim.png',
+                imagePath: AppImages.placeholder,
               ),
               lines: [
                 CartLine(

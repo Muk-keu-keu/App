@@ -157,8 +157,7 @@ class _OrderCard extends StatelessWidget {
               children: [
                 RemoteOrAssetImage(
                   imageUrl: order.thumbnailUrl,
-                  assetPath: 'assets/images/store_dujjim.png',
-                  size: 48,
+                        size: 48,
                 ),
                 const SizedBox(width: 13),
                 Expanded(

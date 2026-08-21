@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../assets.dart';
 import '../../app_flow.dart';
 import '../../models/combo.dart';
 import '../../models/post.dart';
@@ -157,7 +158,7 @@ class _VideoSection extends StatelessWidget {
       child: DsVideoSummary(
         thumbnail: RemoteOrAssetImage(
           imageUrl: source.thumbnailUrl ?? firstLine?.imageUrl,
-          assetPath: firstLine?.imagePath ?? 'assets/images/store_dujjim.png',
+          assetPath: firstLine?.imagePath ?? AppImages.placeholder,
           size: 100,
           radius: 0,
         ),

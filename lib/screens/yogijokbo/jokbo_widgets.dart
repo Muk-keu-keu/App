@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../assets.dart';
 import '../../models/post.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
@@ -247,7 +248,7 @@ class SourceVideoCard extends StatelessWidget {
     required this.title,
     required this.author,
     this.imageUrl,
-    this.imagePath = 'assets/images/store_dujjim.png',
+    this.imagePath = AppImages.placeholder,
   });
 
   final String title;

@@ -4,6 +4,7 @@
 /// 응답(`restaurant`)이 같은 모양을 쓴다. 필드를 고치면 `docs/api-spec.md` 도 고친다.
 library;
 
+import '../assets.dart';
 import 'enums.dart';
 
 class Restaurant {
@@ -19,7 +20,7 @@ class Restaurant {
     required this.distanceKm,
     this.imageUrl = '',
     this.reviewCount,
-    this.imagePath = 'assets/images/store_dujjim.png',
+    this.imagePath = AppImages.placeholder,
     this.heroImagePath = '',
     this.pickupMinutes = 0,
   });
@@ -123,6 +124,13 @@ class Restaurant {
   /// 평점·리뷰 수·거리·예상 시간·최소 주문 금액은 0이다. **결제까지 가는 화면은
   /// 그대로 쓰면 안 된다** — 최소 주문 금액이 0이면 미달 판정이 무력해진다.
   /// `AppFlow._hydrateStores` 가 GET menus 로 갈아끼운다.
+  /// [Restaurant.partial] 로 만들어진 값인지. 즉 GET menus 로 채워야 하는지.
+  ///
+  /// 주문 상세·게시글은 매장 정보를 세 개만 주므로 이 셋이 전부 빈 값이다.
+  /// 온전한 매장에 최소 주문 금액이 0인 경우는 있어도, 예상 시간과 평점까지
+  /// 함께 비어 있지는 않다.
+  bool get isPartial => minOrderPrice == 0 && etaMin == 0 && rating == null;
+
   factory Restaurant.partial({
     required int restaurantId,
     required String name,

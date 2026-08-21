@@ -249,7 +249,6 @@ class _CreditRow extends StatelessWidget {
         children: [
           RemoteOrAssetImage(
             imageUrl: credit.imageUrl,
-            assetPath: 'assets/images/store_dujjim.png',
             size: 36,
             radius: 8,
           ),

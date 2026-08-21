@@ -12,6 +12,7 @@
 /// 되돌린다 — 같은 파싱을 두 벌 두지 않는다.
 library;
 
+import '../assets.dart';
 import 'combo.dart';
 import 'order.dart';
 
@@ -252,8 +253,24 @@ class YogijokboPost {
       listThumbnailUrl ??
       source?.thumbnailUrl ??
       (imageUrls.isEmpty ? null : imageUrls.first);
-  String get thumbnailPath =>
-      imagePaths.isEmpty ? 'assets/images/store_dujjim.png' : imagePaths.first;
+  /// 원격 이미지가 없을 때 그릴 번들 이미지.
+  ///
+  /// 명세(api-yogijokbo.md 1번 비고)가 적어 둔 서버의 선택 순서 — 영상 썸네일 →
+  /// 사용자 사진 → **첫 메뉴 사진** — 을 앱도 그대로 따른다. 앞의 둘은
+  /// [thumbnailUrl] 이 맡으므로 여기서는 사용자 사진, 그다음 첫 메뉴 사진을 본다.
+  ///
+  /// 마지막 자리에 특정 매장 로고를 두면 안 된다. 두찜 간판이 이 몫이던 동안
+  /// 사진 없이 쓴 글과 대표 이미지 없는 서버 글이 전부 두찜으로 보였다
+  /// (피드백 2026-08-21).
+  String get thumbnailPath {
+    if (imagePaths.isNotEmpty) return imagePaths.first;
+    for (final store in stores) {
+      for (final line in store.lines) {
+        if (line.imagePath.isNotEmpty) return line.imagePath;
+      }
+    }
+    return AppImages.placeholder;
+  }
 
   /// 2026.07.07
   String get dateText =>
